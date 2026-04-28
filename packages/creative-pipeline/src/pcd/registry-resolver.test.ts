@@ -218,19 +218,19 @@ describe("resolvePcdRegistryContext — 3×3 effectiveTier = min cross-product",
     CREATOR_TIERS.map((cq) => ({
       pq,
       cq,
-      expected: Math.min(
-        PRODUCT_TIER_TO_IDENTITY[pq],
-        CREATOR_TIER_TO_IDENTITY[cq],
-      ) as 1 | 2 | 3,
+      expected: Math.min(PRODUCT_TIER_TO_IDENTITY[pq], CREATOR_TIER_TO_IDENTITY[cq]) as 1 | 2 | 3,
     })),
   );
 
-  it.each(rows)("product=$pq creator=$cq → effectiveTier=$expected", async ({ pq, cq, expected }) => {
-    const { stores } = makeFakes({ productQualityTier: pq, creatorQualityTier: cq });
-    const result = await resolvePcdRegistryContext(UNRESOLVED_JOB, stores);
-    expect(result.effectiveTier).toBe(expected);
-    expect(result.allowedOutputTier).toBe(expected);
-  });
+  it.each(rows)(
+    "product=$pq creator=$cq → effectiveTier=$expected",
+    async ({ pq, cq, expected }) => {
+      const { stores } = makeFakes({ productQualityTier: pq, creatorQualityTier: cq });
+      const result = await resolvePcdRegistryContext(UNRESOLVED_JOB, stores);
+      expect(result.effectiveTier).toBe(expected);
+      expect(result.allowedOutputTier).toBe(expected);
+    },
+  );
 
   it("named asymmetry case: canonical product + stock creator → tier 1", async () => {
     const { stores } = makeFakes({
