@@ -1,8 +1,4 @@
-import type {
-  AvatarQualityTier,
-  IdentityTier,
-  ProductQualityTier,
-} from "@creativeagent/schemas";
+import type { AvatarQualityTier, IdentityTier, ProductQualityTier } from "@creativeagent/schemas";
 import { PCD_SHOT_SPEC_VERSION } from "./shot-spec-version.js";
 
 export type PcdResolvableJob = {
@@ -85,6 +81,8 @@ function mapCreatorQualityTierToIdentityTier(t: AvatarQualityTier): IdentityTier
 }
 
 function computeEffectiveTier(p: IdentityTier, c: IdentityTier): IdentityTier {
+  // Cast accepted by design: TypeScript widens `1 | 2 | 3` to `number` through the
+  // ternary; result is always one of the inputs. See SP3 design Section 3.
   return (p <= c ? p : c) as IdentityTier;
 }
 

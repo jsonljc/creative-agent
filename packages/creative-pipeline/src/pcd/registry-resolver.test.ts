@@ -6,10 +6,10 @@ import {
   resolvePcdRegistryContext,
   type PcdResolvableJob,
   type RegistryResolverStores,
+  type ResolvedPcdContext,
 } from "./registry-resolver.js";
 import { PCD_SHOT_SPEC_VERSION } from "./shot-spec-version.js";
 import type { AvatarQualityTier, IdentityTier, ProductQualityTier } from "@creativeagent/schemas";
-import type { ResolvedPcdContext } from "./registry-resolver.js";
 
 function neverCalledStores(): RegistryResolverStores {
   return {
