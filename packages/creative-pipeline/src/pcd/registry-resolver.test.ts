@@ -11,26 +11,6 @@ import {
 import { PCD_SHOT_SPEC_VERSION } from "./shot-spec-version.js";
 import type { AvatarQualityTier, IdentityTier, ProductQualityTier } from "@creativeagent/schemas";
 
-function neverCalledStores(): RegistryResolverStores {
-  return {
-    productStore: {
-      findOrCreateForJob: async () => {
-        throw new Error("productStore.findOrCreateForJob should not be called");
-      },
-    },
-    creatorStore: {
-      findOrCreateStockForDeployment: async () => {
-        throw new Error("creatorStore.findOrCreateStockForDeployment should not be called");
-      },
-    },
-    jobStore: {
-      attachIdentityRefs: async () => {
-        throw new Error("jobStore.attachIdentityRefs should not be called");
-      },
-    },
-  };
-}
-
 const RESOLVED_JOB: PcdResolvableJob = {
   id: "job-1",
   organizationId: "org-1",
@@ -355,7 +335,7 @@ describe("resolvePcdRegistryContext — store-contract idempotency expectations"
     expect(log.attachIdentityRefsCalls).toBe(2);
   });
 
-  it("attachIdentityRefs payload always carries all five fields with current version", async () => {
+  it("attachIdentityRefs payload always carries all seven fields with current version", async () => {
     const { stores, log } = makeFakes({
       productQualityTier: "url_imported",
       creatorQualityTier: "stock",
@@ -368,6 +348,8 @@ describe("resolvePcdRegistryContext — store-contract idempotency expectations"
     expect([1, 2, 3]).toContain(refs.effectiveTier);
     expect([1, 2, 3]).toContain(refs.allowedOutputTier);
     expect(refs.shotSpecVersion).toBe(PCD_SHOT_SPEC_VERSION);
+    expect(refs.productTier).toBe(1);
+    expect(refs.creatorTier).toBe(1);
   });
 });
 
