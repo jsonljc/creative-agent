@@ -5,7 +5,7 @@ import {
   type RegistryResolverStores,
 } from "./registry-resolver.js";
 import { PCD_SHOT_SPEC_VERSION } from "./shot-spec-version.js";
-import type { AvatarQualityTier, ProductQualityTier } from "@creativeagent/schemas";
+import type { AvatarQualityTier, IdentityTier, ProductQualityTier } from "@creativeagent/schemas";
 import type { ResolvedPcdContext } from "./registry-resolver.js";
 
 function neverCalledStores(): RegistryResolverStores {
@@ -240,5 +240,41 @@ describe("resolvePcdRegistryContext — 3×3 effectiveTier = min cross-product",
     const result = await resolvePcdRegistryContext(UNRESOLVED_JOB, stores);
     expect(result.effectiveTier).toBe(1);
     expect(result.allowedOutputTier).toBe(1);
+  });
+});
+
+describe("resolvePcdRegistryContext — idempotency guard edge cases (full path)", () => {
+  const baseResolvedExceptVersion: PcdResolvableJob = {
+    ...RESOLVED_JOB,
+    shotSpecVersion: "shot-spec@0.9.0", // stale
+  };
+
+  const cases: Array<{ name: string; job: PcdResolvableJob }> = [
+    { name: "stale shotSpecVersion", job: baseResolvedExceptVersion },
+    { name: "missing productIdentityId", job: { ...RESOLVED_JOB, productIdentityId: null } },
+    { name: "missing creatorIdentityId", job: { ...RESOLVED_JOB, creatorIdentityId: null } },
+    { name: "missing effectiveTier", job: { ...RESOLVED_JOB, effectiveTier: null } },
+    { name: "missing allowedOutputTier", job: { ...RESOLVED_JOB, allowedOutputTier: null } },
+    { name: "missing shotSpecVersion", job: { ...RESOLVED_JOB, shotSpecVersion: null } },
+    {
+      name: "effectiveTier out of range (0)",
+      job: { ...RESOLVED_JOB, effectiveTier: 0 as unknown as IdentityTier },
+    },
+    {
+      name: "allowedOutputTier out of range (4)",
+      job: { ...RESOLVED_JOB, allowedOutputTier: 4 as unknown as IdentityTier },
+    },
+  ];
+
+  it.each(cases)("$name → full path runs and stamps current version", async ({ job }) => {
+    const { stores, log } = makeFakes({
+      productQualityTier: "verified",
+      creatorQualityTier: "anchored",
+    });
+    const result = await resolvePcdRegistryContext(job, stores);
+    expect(log.findOrCreateForJobCalls).toBe(1);
+    expect(log.findOrCreateStockForDeploymentCalls).toBe(1);
+    expect(log.attachIdentityRefsCalls).toBe(1);
+    expect(result.shotSpecVersion).toBe(PCD_SHOT_SPEC_VERSION);
   });
 });
