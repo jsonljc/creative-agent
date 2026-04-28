@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import {
   resolvePcdRegistryContext,
   type PcdResolvableJob,
@@ -352,5 +355,30 @@ describe("resolvePcdRegistryContext — store-contract idempotency expectations"
     expect([1, 2, 3]).toContain(refs.effectiveTier);
     expect([1, 2, 3]).toContain(refs.allowedOutputTier);
     expect(refs.shotSpecVersion).toBe(PCD_SHOT_SPEC_VERSION);
+  });
+});
+
+describe("registry-resolver — forbidden imports guard (Layer 2 purity)", () => {
+  it("registry-resolver.ts source contains no forbidden module references", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(join(here, "registry-resolver.ts"), "utf8");
+    const banned = [
+      "@creativeagent/db",
+      "@prisma/client",
+      "inngest",
+      'from "node:fs"',
+      "from 'node:fs'",
+      'from "http"',
+      "from 'http'",
+      'from "https"',
+      "from 'https'",
+      'from "./tier-policy.js"',
+      "from './tier-policy.js'",
+      'from "./registry-backfill.js"',
+      "from './registry-backfill.js'",
+    ];
+    for (const needle of banned) {
+      expect(source).not.toContain(needle);
+    }
   });
 });
