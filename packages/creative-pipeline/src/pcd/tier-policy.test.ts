@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PCD_TIER_POLICY_VERSION, decidePcdGenerationAccess } from "./tier-policy.js";
+import { PcdTierDecisionSchema } from "@creativeagent/schemas";
 import type { OutputIntent as OI, PcdShotType, PcdTierDecision } from "@creativeagent/schemas";
 
 describe("PCD_TIER_POLICY_VERSION", () => {
@@ -271,5 +272,100 @@ describe("PcdTierPolicy — full cross-product matrix (576 cases)", () => {
 
   it("matrix size is exactly 576", () => {
     expect(MATRIX_ROWS.length).toBe(576);
+  });
+});
+
+describe("PcdTierPolicy — contract & shape", () => {
+  it("determinism smoke: two calls with the same blocked input return deeply equal results", () => {
+    const input = {
+      avatarTier: 1,
+      productTier: 1,
+      shotType: "face_closeup",
+      outputIntent: "final_export",
+    } as const;
+    const a = decidePcdGenerationAccess(input);
+    const b = decidePcdGenerationAccess(input);
+    expect(a).toEqual(b);
+  });
+
+  it("determinism smoke: two calls with the same allowed input return deeply equal results", () => {
+    const input = {
+      avatarTier: 2,
+      productTier: 2,
+      shotType: "simple_ugc",
+      outputIntent: "preview",
+    } as const;
+    const a = decidePcdGenerationAccess(input);
+    const b = decidePcdGenerationAccess(input);
+    expect(a).toEqual(b);
+  });
+
+  it("allowed decision shape is minimal: only allowed + effectiveTier", () => {
+    const d = decidePcdGenerationAccess({
+      avatarTier: 2,
+      productTier: 2,
+      shotType: "simple_ugc",
+      outputIntent: "preview",
+    });
+    expect(Object.keys(d).sort()).toEqual(["allowed", "effectiveTier"]);
+  });
+
+  it("blocked decision: requiredActions are deduplicated and in canonical order", () => {
+    const d = decidePcdGenerationAccess({
+      avatarTier: 1,
+      productTier: 1,
+      shotType: "face_closeup",
+      outputIntent: "final_export",
+    });
+    expect(d.allowed).toBe(false);
+    expect(d.requiredActions).toEqual([
+      "upgrade_avatar_identity",
+      "upgrade_product_identity",
+      "use_lower_output_intent",
+    ]);
+  });
+
+  describe("reason-string rule", () => {
+    it("both tiers above 1 required", () => {
+      const d = decidePcdGenerationAccess({
+        avatarTier: 1,
+        productTier: 1,
+        shotType: "face_closeup",
+        outputIntent: "final_export",
+      });
+      expect(d.reason).toBe("generation requires avatarTier>=3 and productTier>=2");
+    });
+
+    it("only avatar required above 1", () => {
+      const d = decidePcdGenerationAccess({
+        avatarTier: 1,
+        productTier: 3,
+        shotType: "face_closeup",
+        outputIntent: "preview",
+      });
+      expect(d.reason).toBe("generation requires avatarTier>=3");
+    });
+
+    it("only product required above 1", () => {
+      const d = decidePcdGenerationAccess({
+        avatarTier: 3,
+        productTier: 1,
+        shotType: "label_closeup",
+        outputIntent: "preview",
+      });
+      expect(d.reason).toBe("generation requires productTier>=3");
+    });
+  });
+
+  it("schema round-trip: every matrix output passes PcdTierDecisionSchema.parse", () => {
+    for (const row of MATRIX_ROWS) {
+      const actual = decidePcdGenerationAccess({
+        avatarTier: row.a,
+        productTier: row.p,
+        shotType: row.s,
+        outputIntent: row.i,
+      });
+      expect(() => PcdTierDecisionSchema.parse(actual)).not.toThrow();
+    }
   });
 });
