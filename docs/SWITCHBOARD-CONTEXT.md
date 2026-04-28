@@ -61,6 +61,8 @@ Nothing to stub — entire SP2 lives in `packages/creative-pipeline/src/pcd/tier
 - Capability descriptors
 
 **Stub strategy:** local `ProviderProfile` type with the minimum fields the router reads. Mark any Switchboard-only fields as `// MERGE-BACK: replace with Switchboard ProviderProfile`.
+- **CampaignTakeStore is an SP4-declared orchestration dependency; production implementation is reserved for SP6 ApprovalLifecycle/campaign-take ownership at merge-back.**
+- **`PcdIdentitySnapshotStore.createForShot` (creative-pipeline) vs `PrismaPcdIdentitySnapshotStore.create` (db): method names diverge intentionally for semantic clarity. At merge-back, wire via a thin adapter `{ createForShot: (i) => prismaStore.create(i) }` rather than renaming either side.**
 
 ### SP5 (QC gate)
 
