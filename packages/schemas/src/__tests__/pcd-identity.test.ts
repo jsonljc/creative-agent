@@ -191,6 +191,9 @@ describe("PcdIdentitySnapshotSchema", () => {
       providerModelSnapshot: "gen4.5-2026-04-01",
       seedOrNoSeed: "2147483648",
       rewrittenPromptText: null,
+      shotSpecVersion: null,
+      routerVersion: null,
+      routingDecisionReason: null,
       createdAt: new Date(),
     });
     expect(snap.productTierAtGeneration).toBe(3);
