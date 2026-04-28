@@ -62,6 +62,32 @@ function isResolvedPcdJob(j: PcdResolvableJob): j is ResolvedPcdResolvableJob {
   );
 }
 
+function mapProductQualityTierToIdentityTier(t: ProductQualityTier): IdentityTier {
+  switch (t) {
+    case "url_imported":
+      return 1;
+    case "verified":
+      return 2;
+    case "canonical":
+      return 3;
+  }
+}
+
+function mapCreatorQualityTierToIdentityTier(t: AvatarQualityTier): IdentityTier {
+  switch (t) {
+    case "stock":
+      return 1;
+    case "anchored":
+      return 2;
+    case "soul_id":
+      return 3;
+  }
+}
+
+function computeEffectiveTier(p: IdentityTier, c: IdentityTier): IdentityTier {
+  return (p <= c ? p : c) as IdentityTier;
+}
+
 export async function resolvePcdRegistryContext(
   job: PcdResolvableJob,
   stores: RegistryResolverStores,
@@ -76,7 +102,22 @@ export async function resolvePcdRegistryContext(
     };
   }
 
-  // Full attach path wired in Task 3.
-  void stores;
-  throw new Error("registry-resolver: full attach path not yet implemented (Task 3)");
+  const product = await stores.productStore.findOrCreateForJob(job);
+  const creator = await stores.creatorStore.findOrCreateStockForDeployment(job.deploymentId);
+
+  const productTier = mapProductQualityTierToIdentityTier(product.qualityTier);
+  const creatorTier = mapCreatorQualityTierToIdentityTier(creator.qualityTier);
+  const effectiveTier = computeEffectiveTier(productTier, creatorTier);
+
+  const resolved: ResolvedPcdContext = {
+    productIdentityId: product.id,
+    creatorIdentityId: creator.id,
+    effectiveTier,
+    allowedOutputTier: effectiveTier,
+    shotSpecVersion: PCD_SHOT_SPEC_VERSION,
+  };
+
+  await stores.jobStore.attachIdentityRefs(job.id, resolved);
+
+  return resolved;
 }
