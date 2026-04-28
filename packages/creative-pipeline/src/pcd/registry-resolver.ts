@@ -17,6 +17,8 @@ export type PcdResolvableJob = {
 export type ResolvedPcdContext = {
   productIdentityId: string;
   creatorIdentityId: string;
+  productTier: IdentityTier; // SP4 addition
+  creatorTier: IdentityTier; // SP4 addition
   effectiveTier: IdentityTier;
   allowedOutputTier: IdentityTier;
   shotSpecVersion: string;
@@ -90,26 +92,39 @@ export async function resolvePcdRegistryContext(
   job: PcdResolvableJob,
   stores: RegistryResolverStores,
 ): Promise<ResolvedPcdContext> {
+  // Always read current registry component tiers. On the no-op path we still
+  // skip attachIdentityRefs (no write), but we need productTier and creatorTier
+  // to satisfy the SP4-revised ResolvedPcdContext contract. Registry is the
+  // source of truth for component tiers; CreativeJob does not shadow them.
+  const product = await stores.productStore.findOrCreateForJob(job);
+  const creator = await stores.creatorStore.findOrCreateStockForDeployment(job.deploymentId);
+  const productTier = mapProductQualityTierToIdentityTier(product.qualityTier);
+  const creatorTier = mapCreatorQualityTierToIdentityTier(creator.qualityTier);
+
   if (isResolvedPcdJob(job)) {
+    // No-op path: effectiveTier and allowedOutputTier reflect ORIGINAL
+    // resolution time (preserved from job stamp). productTier and creatorTier
+    // reflect CURRENT registry state. They may diverge if registry rows were
+    // re-tiered after job stamping. Downstream consumers must treat
+    // effectiveTier as authoritative for gating.
     return {
       productIdentityId: job.productIdentityId,
       creatorIdentityId: job.creatorIdentityId,
+      productTier,
+      creatorTier,
       effectiveTier: job.effectiveTier,
       allowedOutputTier: job.allowedOutputTier,
       shotSpecVersion: job.shotSpecVersion,
     };
   }
 
-  const product = await stores.productStore.findOrCreateForJob(job);
-  const creator = await stores.creatorStore.findOrCreateStockForDeployment(job.deploymentId);
-
-  const productTier = mapProductQualityTierToIdentityTier(product.qualityTier);
-  const creatorTier = mapCreatorQualityTierToIdentityTier(creator.qualityTier);
   const effectiveTier = computeEffectiveTier(productTier, creatorTier);
 
   const resolved: ResolvedPcdContext = {
     productIdentityId: product.id,
     creatorIdentityId: creator.id,
+    productTier,
+    creatorTier,
     effectiveTier,
     allowedOutputTier: effectiveTier,
     shotSpecVersion: PCD_SHOT_SPEC_VERSION,
