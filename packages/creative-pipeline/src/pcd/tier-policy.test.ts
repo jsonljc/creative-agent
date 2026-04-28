@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PCD_TIER_POLICY_VERSION, decidePcdGenerationAccess } from "./tier-policy.js";
-import type { PcdShotType, PcdTierDecision } from "@creativeagent/schemas";
+import type { OutputIntent as OI, PcdShotType, PcdTierDecision } from "@creativeagent/schemas";
 
 describe("PCD_TIER_POLICY_VERSION", () => {
   it("is locked to tier-policy@1.0.0 (SP4 snapshot writer pins this value)", () => {
@@ -153,5 +153,123 @@ describe("PcdTierPolicy — spec-required acceptance assertions", () => {
         }
       }
     }
+  });
+});
+
+type AvatarTierInput = 1 | 2 | 3 | undefined;
+type ProductTierInput = 1 | 2 | 3 | undefined;
+
+const ALL_OUTPUT_INTENTS: OI[] = ["draft", "preview", "final_export", "meta_draft"];
+
+// Test-local rule tables. DO NOT import from tier-policy.ts.
+const SHOT_TYPE_REQ: Record<PcdShotType, { avatar?: 2 | 3; product?: 2 | 3 }> = {
+  script_only: {},
+  storyboard: {},
+  simple_ugc: {},
+  talking_head: {},
+  product_demo: {},
+  product_in_hand: {},
+  face_closeup: { avatar: 3 },
+  label_closeup: { product: 3 },
+  object_insert: { product: 3 },
+};
+
+const INTENT_REQ: Record<OI, { effective?: 2 } | "draft_shortcut"> = {
+  draft: "draft_shortcut",
+  preview: {},
+  final_export: { effective: 2 },
+  meta_draft: { effective: 2 },
+};
+
+function expectedDecision(
+  avatarTier: AvatarTierInput,
+  productTier: ProductTierInput,
+  shotType: PcdShotType,
+  outputIntent: OI,
+): PcdTierDecision {
+  const a = (avatarTier ?? 1) as 1 | 2 | 3;
+  const p = (productTier ?? 1) as 1 | 2 | 3;
+  const effectiveTier = (a <= p ? a : p) as 1 | 2 | 3;
+
+  if (INTENT_REQ[outputIntent] === "draft_shortcut") {
+    return { allowed: true, effectiveTier };
+  }
+
+  const shot = SHOT_TYPE_REQ[shotType];
+  const intent = INTENT_REQ[outputIntent] as { effective?: 2 };
+
+  let reqA: 1 | 2 | 3 = 1;
+  let reqP: 1 | 2 | 3 = 1;
+  if (shot.avatar) reqA = shot.avatar;
+  if (shot.product) reqP = shot.product;
+  if (intent.effective === 2) {
+    if (reqA < 2) reqA = 2;
+    if (reqP < 2) reqP = 2;
+  }
+
+  const actions: string[] = [];
+  if (a < reqA) actions.push("upgrade_avatar_identity");
+  if (p < reqP) actions.push("upgrade_product_identity");
+  if (
+    (outputIntent === "final_export" || outputIntent === "meta_draft") &&
+    effectiveTier < 2
+  ) {
+    actions.push("use_lower_output_intent");
+  }
+
+  if (actions.length === 0) return { allowed: true, effectiveTier };
+
+  const reason =
+    reqA > 1 && reqP > 1
+      ? `generation requires avatarTier>=${reqA} and productTier>=${reqP}`
+      : reqA > 1
+        ? `generation requires avatarTier>=${reqA}`
+        : `generation requires productTier>=${reqP}`;
+
+  return {
+    allowed: false,
+    effectiveTier,
+    requiredAvatarTier: reqA,
+    requiredProductTier: reqP,
+    reason,
+    requiredActions: actions as PcdTierDecision["requiredActions"],
+  };
+}
+
+const TIER_INPUTS: AvatarTierInput[] = [undefined, 1, 2, 3];
+
+const MATRIX_ROWS: Array<{
+  a: AvatarTierInput;
+  p: ProductTierInput;
+  s: PcdShotType;
+  i: OI;
+  expected: PcdTierDecision;
+}> = [];
+for (const a of TIER_INPUTS) {
+  for (const p of TIER_INPUTS) {
+    for (const s of ALL_SHOT_TYPES) {
+      for (const i of ALL_OUTPUT_INTENTS) {
+        MATRIX_ROWS.push({ a, p, s, i, expected: expectedDecision(a, p, s, i) });
+      }
+    }
+  }
+}
+
+describe("PcdTierPolicy — full cross-product matrix (576 cases)", () => {
+  it.each(MATRIX_ROWS)(
+    "a=$a p=$p shot=$s intent=$i",
+    ({ a, p, s, i, expected }) => {
+      const actual = decidePcdGenerationAccess({
+        avatarTier: a,
+        productTier: p,
+        shotType: s,
+        outputIntent: i,
+      });
+      expect(actual).toEqual(expected);
+    },
+  );
+
+  it("matrix size is exactly 576", () => {
+    expect(MATRIX_ROWS.length).toBe(576);
   });
 });
