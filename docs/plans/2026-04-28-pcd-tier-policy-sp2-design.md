@@ -19,7 +19,7 @@ This design document captures the four design decisions made during brainstormin
 
 - One pure function: `decidePcdGenerationAccess(input) → PcdTierDecision`.
 - One exported constant: `PCD_TIER_POLICY_VERSION = "tier-policy@1.0.0"`.
-- Three new Zod schemas in `@creativeagent/schemas`:
+- Four new Zod schemas in `@creativeagent/schemas`:
   `PcdShotTypeSchema`, `OutputIntentSchema`, `PcdRequiredActionSchema`, `PcdTierDecisionSchema` with inferred TypeScript types.
 - Reuse existing `IdentityTier` from `pcd-identity.ts` (SP1).
 - Exhaustive matrix tests plus 8 named acceptance tests.
