@@ -259,6 +259,11 @@ model PcdIdentitySnapshot {
   seedOrNoSeed                String
   rewrittenPromptText         String?
 
+  // SP4 additions — nullable for historical compatibility.
+  shotSpecVersion             String?
+  routerVersion               String?
+  routingDecisionReason       Json?
+
   createdAt                   DateTime        @default(now())
 
   @@index([productIdentityId])

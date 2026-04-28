@@ -1,5 +1,10 @@
+import { Prisma } from "@prisma/client";
 import type { PrismaDbClient } from "../prisma-db.js";
-import type { IdentityTier, PcdIdentitySnapshot } from "@creativeagent/schemas";
+import type {
+  IdentityTier,
+  PcdIdentitySnapshot,
+  PcdRoutingDecisionReason,
+} from "@creativeagent/schemas";
 
 export interface CreatePcdIdentitySnapshotInput {
   assetRecordId: string;
@@ -19,14 +24,24 @@ export interface CreatePcdIdentitySnapshotInput {
   providerModelSnapshot: string;
   seedOrNoSeed: string;
   rewrittenPromptText: string | null;
+  // SP4 additions
+  shotSpecVersion: string | null;
+  routerVersion: string | null;
+  routingDecisionReason: PcdRoutingDecisionReason | null;
 }
 
 export class PrismaPcdIdentitySnapshotStore {
   constructor(private prisma: PrismaDbClient) {}
 
   async create(input: CreatePcdIdentitySnapshotInput): Promise<PcdIdentitySnapshot> {
+    const { routingDecisionReason, ...rest } = input;
     return this.prisma.pcdIdentitySnapshot.create({
-      data: input,
+      data: {
+        ...rest,
+        routingDecisionReason: routingDecisionReason
+          ? (routingDecisionReason as object)
+          : Prisma.JsonNull,
+      },
     }) as unknown as PcdIdentitySnapshot;
   }
 
