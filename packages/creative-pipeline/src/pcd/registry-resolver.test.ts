@@ -278,3 +278,79 @@ describe("resolvePcdRegistryContext — idempotency guard edge cases (full path)
     expect(result.shotSpecVersion).toBe(PCD_SHOT_SPEC_VERSION);
   });
 });
+
+describe("PCD_SHOT_SPEC_VERSION constant", () => {
+  it("is locked to shot-spec@1.0.0 (SP4 snapshot writer pins this value)", () => {
+    expect(PCD_SHOT_SPEC_VERSION).toBe("shot-spec@1.0.0");
+  });
+});
+
+describe("resolvePcdRegistryContext — output shape & determinism", () => {
+  it("ResolvedPcdContext has exactly the five expected keys", async () => {
+    const { stores } = makeFakes();
+    const result = await resolvePcdRegistryContext(UNRESOLVED_JOB, stores);
+    expect(Object.keys(result).sort()).toEqual(
+      [
+        "allowedOutputTier",
+        "creatorIdentityId",
+        "effectiveTier",
+        "productIdentityId",
+        "shotSpecVersion",
+      ].sort(),
+    );
+  });
+
+  it("two calls with identical inputs and fakes return deeply equal contexts", async () => {
+    const fakes1 = makeFakes({
+      productQualityTier: "verified",
+      creatorQualityTier: "anchored",
+      productId: "p1",
+      creatorId: "c1",
+    });
+    const fakes2 = makeFakes({
+      productQualityTier: "verified",
+      creatorQualityTier: "anchored",
+      productId: "p1",
+      creatorId: "c1",
+    });
+    const a = await resolvePcdRegistryContext(UNRESOLVED_JOB, fakes1.stores);
+    const b = await resolvePcdRegistryContext(UNRESOLVED_JOB, fakes2.stores);
+    expect(a).toEqual(b);
+  });
+});
+
+describe("resolvePcdRegistryContext — store-contract idempotency expectations", () => {
+  it("repeat call on same stale-version job does not duplicate identity rows", async () => {
+    const { stores, log } = makeFakes({
+      productQualityTier: "verified",
+      creatorQualityTier: "anchored",
+    });
+    const staleJob: PcdResolvableJob = { ...RESOLVED_JOB, shotSpecVersion: "shot-spec@0.9.0" };
+
+    await resolvePcdRegistryContext(staleJob, stores);
+    await resolvePcdRegistryContext(staleJob, stores);
+
+    // Both finders called twice (once per resolve), but only one row created
+    // for product (keyed by job.id) and one for creator (keyed by deploymentId).
+    expect(log.findOrCreateForJobCalls).toBe(2);
+    expect(log.findOrCreateStockForDeploymentCalls).toBe(2);
+    expect(log.productCreateCount).toBe(1);
+    expect(log.creatorCreateCount).toBe(1);
+    expect(log.attachIdentityRefsCalls).toBe(2);
+  });
+
+  it("attachIdentityRefs payload always carries all five fields with current version", async () => {
+    const { stores, log } = makeFakes({
+      productQualityTier: "url_imported",
+      creatorQualityTier: "stock",
+    });
+    await resolvePcdRegistryContext(UNRESOLVED_JOB, stores);
+    expect(log.attachIdentityRefsArgs).toHaveLength(1);
+    const refs = log.attachIdentityRefsArgs[0]!.refs;
+    expect(typeof refs.productIdentityId).toBe("string");
+    expect(typeof refs.creatorIdentityId).toBe("string");
+    expect([1, 2, 3]).toContain(refs.effectiveTier);
+    expect([1, 2, 3]).toContain(refs.allowedOutputTier);
+    expect(refs.shotSpecVersion).toBe(PCD_SHOT_SPEC_VERSION);
+  });
+});
