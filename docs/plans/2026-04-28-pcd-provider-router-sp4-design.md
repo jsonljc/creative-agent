@@ -1,0 +1,789 @@
+---
+date: 2026-04-28
+tags: [pcd, sp4, provider-router, capability-matrix, identity-snapshot, design]
+status: approved
+---
+
+# PCD SP4 — `ProviderRouter` + Capability Matrix + `PcdIdentitySnapshot` Writer Design
+
+**Slice:** SP4 of the PCD vertical. SP1 (`05bc4655` in Switchboard, extracted as `creativeagent` `10a5ce0`), SP2 (`creativeagent` `cb7a378`, PR #1), and SP3 (`creativeagent` `715e325`, PR #2) have shipped.
+**Goal:** Ship one coherent vertical that (a) introduces a declarative `PcdProviderCapabilityMatrix` plus `PCD_PROVIDER_CAPABILITY_VERSION`, (b) adds a tier-aware, store-injected `routePcdShot` that selects providers by matrix lookup and enforces three Tier 3 mandatory rules, and (c) adds a pure store-injected `writePcdIdentitySnapshot` that pins four version constants and validates Tier 3 invariants as a second line of defense.
+**Source-of-truth spec:** `docs/plans/2026-04-27-pcd-identity-registry-design.md` — sections "Architecture", "Provider routing by tier", "Tier 3 mandatory routing rules", "Provider capability matrix (declarative)", "Identity snapshot".
+**Upstream slices consumed:** SP2 design (`docs/plans/2026-04-28-pcd-tier-policy-sp2-design.md`) — the deterministic gate SP4 invokes per shot. SP3 design (`docs/plans/2026-04-28-pcd-registry-resolver-sp3-design.md`) — the per-job context SP4 consumes (with one additive contract revision in this slice).
+
+This design document captures the design decisions made during brainstorming and the implementation contract for SP4. It is binding: SP4 ships exactly what is described here. Anything not described here is out of scope for SP4.
+
+## Section 1 — Scope & non-goals
+
+### In scope (SP4)
+
+**Schemas (`packages/schemas/src/pcd-identity.ts`):**
+- New `PcdRoutingDecisionReasonSchema` (Zod) defining the structured shape of the routing decision reason JSON.
+- New `PcdSp4IdentitySnapshotInputSchema` defining the writer's input shape (where the three new fields are required, non-nullable). The writer accepts `PcdSp4IdentitySnapshotInputSchema`-shaped input only.
+- Extended `PcdIdentitySnapshotSchema` with three new **nullable** fields: `shotSpecVersion`, `routerVersion`, `routingDecisionReason`. Nullable so the schema parses both pre-SP4 rows (NULL) and SP4-and-later rows (non-NULL).
+
+**Migration (`packages/db/prisma/migrations/<timestamp>_pcd_snapshot_sp4_versions/migration.sql`):**
+- One Prisma migration adding three nullable columns to `PcdIdentitySnapshot`: `shotSpecVersion TEXT`, `routerVersion TEXT`, `routingDecisionReason JSONB`. No defaults. Migration SQL has a comment explaining historical-compatibility nullability.
+
+**Module files (`packages/creative-pipeline/src/pcd/`):**
+- `provider-capability-matrix.ts` — declarative `PCD_PROVIDER_CAPABILITY_MATRIX` table + `PCD_PROVIDER_CAPABILITY_VERSION` const + `PcdProviderCapability` type. No logic.
+- `tier3-routing-rules.ts` — predicate functions for the three Tier 3 rules + `assertTier3RoutingDecisionCompliant` + `Tier3RoutingViolationError` + `CampaignTakeStore` contract. Used by both router and writer.
+- `provider-router.ts` — `routePcdShot(input, stores)` + `PCD_PROVIDER_ROUTER_VERSION` const + decision-shape types. Calls `decidePcdGenerationAccess` (SP2), looks up matrix, applies Tier 3 predicates, returns `PcdRoutingDecision`.
+- `pcd-identity-snapshot-writer.ts` — `writePcdIdentitySnapshot(input, stores)`. Pins four version constants (three from imports, one from input), calls `assertTier3RoutingDecisionCompliant` against the input, persists via injected `PcdIdentitySnapshotStore`.
+- Co-located `*.test.ts` for each module.
+
+**SP3 resolver contract revision (additive):**
+- `ResolvedPcdContext` (in `packages/creative-pipeline/src/pcd/registry-resolver.ts`) gains two component-tier fields: `productTier: IdentityTier`, `creatorTier: IdentityTier`. The five-field idempotency guard is unchanged; the no-op path now performs two registry-store reads to derive component tiers from the current `qualityTier` (no `attachIdentityRefs` write).
+
+**Store widening (`packages/db/src/stores/prisma-pcd-identity-snapshot-store.ts`):**
+- `CreatePcdIdentitySnapshotInput` widened with the three new nullable fields. The existing `create()` method's `data: input` spread already passes them through; no method-body change.
+
+**Re-exports (`packages/creative-pipeline/src/index.ts`):**
+- All four new public functions/constants/types added.
+
+**Switchboard merge-back doc (`docs/SWITCHBOARD-CONTEXT.md`):**
+- One line under SP4's section reserving `CampaignTakeStore` ownership for SP6 ApprovalLifecycle/campaign-take at merge-back.
+
+### Out of scope (do not touch in SP4)
+
+- `apps/api` wiring (does not exist in this repo; concrete store implementations land at merge-back).
+- `decidePcdGenerationAccess` body changes (SP2; SP4 calls it, does not modify it).
+- New `CreativeJob` schema fields (rejected during brainstorming — registry owns tier truth).
+- New provider integrations (no Sora/Veo/Runway/Kling/HeyGen client work).
+- Retry / fallback / circuit-breaker orchestration.
+- UI / dashboard / chat integration.
+- Performance optimizations.
+- Async-job refactor; Inngest functions.
+- QC scoring (SP5).
+- Approval / Meta draft / consent revocation behavior (SP6).
+- Backfill of legacy `PcdIdentitySnapshot` rows; null-→non-null follow-up migration.
+- Identity adapter (Path 1) routing preference logic; adapter slot stays untouched.
+- `registry-backfill.ts` / `tier-policy.ts` body modifications.
+- `registry-resolver.ts` body changes beyond the additive contract revision listed above.
+- Any concrete production implementer of `CampaignTakeStore`. Only test fakes ship in-tree; production implementer reserved for SP6 / merge-back.
+
+### Layer rules (binding)
+
+- All four new `creative-pipeline/src/pcd/*.ts` modules are pure orchestration.
+- **Allowed imports:** `@creativeagent/schemas`, sibling files in `./pcd/`.
+- **Forbidden imports** (forbidden-imports test in every new test file): `@creativeagent/db`, `@prisma/client`, `inngest`, `node:fs`, `from "http"`, `from "https"`. The writer test file additionally forbids `./shot-spec-version.js`.
+- Schema changes happen in `@creativeagent/schemas` (`pcd-identity.ts`).
+- The Prisma migration plus the narrow snapshot-store input-type widening are the only edits inside `packages/db/`.
+- Capability matrix is data, not logic. Router contains zero hardcoded provider names in conditionals — selection is matrix lookup keyed by `(shotType, effectiveTier, outputIntent)` filtered through Tier 3 predicates.
+
+### Merge-back ownership note
+
+SP4 owns the Tier 3 routing predicate and the injected `CampaignTakeStore` contract. SP4 does **not** own the production `CampaignTakeStore` implementation. The production implementation should be provided at merge-back through Switchboard's campaign / take / approval surface. Long-term ownership belongs under SP6 ApprovalLifecycle / campaign-take persistence, not `creative-pipeline` orchestration. Only the test fake exists in-tree.
+
+`docs/SWITCHBOARD-CONTEXT.md` is updated with one line under SP4's section: "CampaignTakeStore is an SP4-declared orchestration dependency; production implementation is reserved for SP6 ApprovalLifecycle/campaign-take ownership at merge-back."
+
+## Section 2 — File layout & exports
+
+### `packages/schemas/src/pcd-identity.ts` (extended)
+
+New exports:
+
+```ts
+export const PcdRoutingDecisionReasonSchema = z.object({
+  capabilityRefIndex: z.number().int().nonnegative(),
+  matchedShotType: PcdShotTypeSchema,
+  matchedTier: IdentityTierSchema,
+  matchedOutputIntent: OutputIntentSchema,
+  tier3RulesApplied: z.array(
+    z.enum(["first_last_frame_anchor", "performance_transfer", "edit_over_regenerate"]),
+  ),
+  candidatesEvaluated: z.number().int().nonnegative(),
+  candidatesAfterTier3Filter: z.number().int().nonnegative(),
+  selectionRationale: z.string().max(200),
+});
+export type PcdRoutingDecisionReason = z.infer<typeof PcdRoutingDecisionReasonSchema>;
+```
+
+Modified `PcdIdentitySnapshotSchema` — three new nullable fields appended:
+
+```ts
+shotSpecVersion: z.string().nullable(),
+routerVersion: z.string().nullable(),
+routingDecisionReason: PcdRoutingDecisionReasonSchema.nullable(),
+```
+
+New writer-input schema (separate, narrower):
+
+```ts
+export const PcdSp4IdentitySnapshotInputSchema = z.object({
+  // Identity-side (required)
+  assetRecordId: z.string(),
+  productIdentityId: z.string(),
+  productTierAtGeneration: IdentityTierSchema,
+  productImageAssetIds: z.array(z.string()),
+  productCanonicalTextHash: z.string(),
+  productLogoAssetId: z.string().nullable(),
+  creatorIdentityId: z.string(),
+  avatarTierAtGeneration: IdentityTierSchema,
+  avatarReferenceAssetIds: z.array(z.string()),
+  voiceAssetId: z.string().nullable(),
+  consentRecordId: z.string().nullable(),
+
+  // Provider-side (filled from provider response)
+  selectedProvider: z.string(),
+  providerModelSnapshot: z.string(),
+  seedOrNoSeed: z.string(),
+  rewrittenPromptText: z.string().nullable(),
+
+  // SP4-required forensic fields (REQUIRED for new writes)
+  shotSpecVersion: z.string(),
+  routerVersion: z.string(),
+  routingDecisionReason: PcdRoutingDecisionReasonSchema,
+
+  // Note: policyVersion + providerCapabilityVersion are pinned by the writer
+  // from imports; not in this input. Caller cannot override.
+});
+export type PcdSp4IdentitySnapshotInput = z.infer<typeof PcdSp4IdentitySnapshotInputSchema>;
+```
+
+### `packages/db/prisma/schema.prisma` (PcdIdentitySnapshot model — three new fields)
+
+```prisma
+model PcdIdentitySnapshot {
+  // ... existing fields unchanged ...
+
+  // SP4 additions (nullable for historical compatibility)
+  shotSpecVersion         String?
+  routerVersion           String?
+  routingDecisionReason   Json?
+
+  // ... indexes unchanged; no new index on these ...
+}
+```
+
+### `packages/db/prisma/migrations/<timestamp>_pcd_snapshot_sp4_versions/migration.sql`
+
+```sql
+-- SP4: add forensic version-pinning columns to PcdIdentitySnapshot.
+-- Columns are nullable for historical compatibility (pre-SP4 / merge-back-time
+-- Switchboard rows that predate this slice). SP4 writer treats them as
+-- mandatory for any newly written snapshot. A future cleanup migration may
+-- flip to NOT NULL once legacy rows are backfilled or archived.
+
+ALTER TABLE "PcdIdentitySnapshot"
+  ADD COLUMN "shotSpecVersion"        TEXT,
+  ADD COLUMN "routerVersion"          TEXT,
+  ADD COLUMN "routingDecisionReason"  JSONB;
+```
+
+### `packages/db/src/stores/prisma-pcd-identity-snapshot-store.ts` (narrow widening)
+
+```ts
+export interface CreatePcdIdentitySnapshotInput {
+  // ... existing fields unchanged ...
+  shotSpecVersion: string | null;
+  routerVersion: string | null;
+  routingDecisionReason: PcdRoutingDecisionReason | null;
+}
+```
+
+The existing `create()` method's `data: input` spread already passes the new fields through to Prisma. No method-body change.
+
+### `packages/creative-pipeline/src/pcd/registry-resolver.ts` (additive contract revision)
+
+`ResolvedPcdContext` gains two component-tier fields:
+
+```ts
+export type ResolvedPcdContext = {
+  productIdentityId: string;
+  creatorIdentityId: string;
+  productTier: IdentityTier;          // SP4 addition
+  creatorTier: IdentityTier;          // SP4 addition
+  effectiveTier: IdentityTier;
+  allowedOutputTier: IdentityTier;
+  shotSpecVersion: string;
+};
+```
+
+Full-attach path: assigns `productTier` and `creatorTier` from already-computed values. Two new lines.
+
+No-op path body change: when `isResolvedPcdJob(job)` returns true, the resolver still skips `attachIdentityRefs`, but performs two registry-store reads (`findOrCreateForJob`, `findOrCreateStockForDeployment`) to derive current `productTier` and `creatorTier` from the registry's current `qualityTier`. The five-field guard is unchanged.
+
+Documented semantic: on the no-op path, `effectiveTier` and `allowedOutputTier` reflect the original resolution time; `productTier` and `creatorTier` reflect current registry state. They may diverge if registry rows have been re-tiered after job stamping. Downstream consumers must treat `effectiveTier` as authoritative for gating decisions.
+
+Rationale for not adding `productTier` / `creatorTier` columns to `CreativeJob`: registry owns identity-tier truth. `CreativeJob` should not become a shadow cache of derived registry fields. Two extra reads on a non-hot path is the cleaner trade.
+
+### `packages/creative-pipeline/src/pcd/provider-capability-matrix.ts` (new)
+
+```ts
+import type { IdentityTier, OutputIntent, PcdShotType } from "@creativeagent/schemas";
+
+export const PCD_PROVIDER_CAPABILITY_VERSION = "provider-capability@1.0.0";
+
+export type PcdProviderCapability = {
+  provider: string;
+  tiers: ReadonlyArray<IdentityTier>;
+  shotTypes: ReadonlyArray<PcdShotType>;
+  outputIntents: ReadonlyArray<OutputIntent>;
+  supportsFirstLastFrame: boolean;
+  supportsEditExtend: boolean;
+  supportsPerformanceTransfer: boolean;
+};
+
+export const PCD_PROVIDER_CAPABILITY_MATRIX: ReadonlyArray<PcdProviderCapability> = [
+  // Declarative rows. Author such that the matrix coverage tests in
+  // provider-capability-matrix.test.ts pass against SP2's allowed-set.
+  // Order is policy: routePcdShot picks first-match.
+] as const;
+```
+
+Pure data + version const + type. No functions.
+
+### `packages/creative-pipeline/src/pcd/tier3-routing-rules.ts` (new)
+
+```ts
+import type {
+  IdentityTier, OutputIntent, PcdShotType,
+} from "@creativeagent/schemas";
+import type { PcdProviderCapability } from "./provider-capability-matrix.js";
+
+export type CampaignTakeStore = {
+  hasApprovedTier3TakeForCampaign(input: {
+    organizationId: string;
+    campaignId: string;
+  }): Promise<boolean>;
+};
+
+export type Tier3RoutingRuleStores = {
+  campaignTakeStore: CampaignTakeStore;
+};
+
+export class Tier3RoutingViolationError extends Error {
+  constructor(public readonly rule: "first_last_frame_anchor" | "performance_transfer" | "edit_over_regenerate", public readonly provider: string) {
+    super(`Tier 3 routing rule violated: ${rule} required but provider "${provider}" does not support it`);
+    this.name = "Tier3RoutingViolationError";
+  }
+}
+
+export function requiresFirstLastFrameAnchor(input: {
+  effectiveTier: IdentityTier;
+  shotType: PcdShotType;
+  outputIntent: OutputIntent;
+}): boolean;
+
+export function requiresPerformanceTransfer(input: {
+  effectiveTier: IdentityTier;
+  shotType: PcdShotType;
+}): boolean;
+
+export async function requiresEditOverRegenerate(
+  input: {
+    effectiveTier: IdentityTier;
+    organizationId: string;
+    campaignId: string;
+  },
+  stores: Tier3RoutingRuleStores,
+): Promise<boolean>;
+
+export function assertTier3RoutingDecisionCompliant(input: {
+  effectiveTier: IdentityTier;
+  shotType: PcdShotType;
+  outputIntent: OutputIntent;
+  selectedCapability: PcdProviderCapability;
+  tier3RulesApplied: ReadonlyArray<
+    "first_last_frame_anchor" | "performance_transfer" | "edit_over_regenerate"
+  >;
+  editOverRegenerateRequired: boolean;
+}): void;
+```
+
+The async/sync split: rule 3 is the only rule needing I/O. The router calls `requiresEditOverRegenerate` once before matrix filtering and threads the boolean result through to the writer via `routingDecisionReason.tier3RulesApplied` plus the assertion's `editOverRegenerateRequired` parameter. The writer never re-queries the store.
+
+### `packages/creative-pipeline/src/pcd/provider-router.ts` (new)
+
+```ts
+import type {
+  OutputIntent, PcdShotType, PcdTierDecision,
+} from "@creativeagent/schemas";
+import type { ResolvedPcdContext } from "./registry-resolver.js";
+import { decidePcdGenerationAccess } from "./tier-policy.js";
+import {
+  PCD_PROVIDER_CAPABILITY_MATRIX, PCD_PROVIDER_CAPABILITY_VERSION,
+  type PcdProviderCapability,
+} from "./provider-capability-matrix.js";
+import {
+  requiresFirstLastFrameAnchor, requiresPerformanceTransfer,
+  requiresEditOverRegenerate, type CampaignTakeStore,
+} from "./tier3-routing-rules.js";
+
+export const PCD_PROVIDER_ROUTER_VERSION = "provider-router@1.0.0";
+
+export type ProviderRouterStores = {
+  campaignTakeStore: CampaignTakeStore;
+};
+
+export type RoutePcdShotInput = {
+  resolvedContext: ResolvedPcdContext;
+  shotType: PcdShotType;
+  outputIntent: OutputIntent;
+  organizationId: string;
+  campaignId: string;
+};
+
+export type PcdRoutingDecision =
+  | {
+      allowed: false;
+      denialKind: "ACCESS_POLICY";
+      accessDecision: PcdTierDecision;
+    }
+  | {
+      allowed: false;
+      denialKind: "NO_PROVIDER_CAPABILITY";
+      accessDecision: PcdTierDecision;             // unmutated; .allowed === true
+      reason: "no provider satisfies tier3 routing rules for this shot";
+      requiredActions: ReadonlyArray<"choose_safer_shot_type">;
+      candidatesEvaluated: number;
+      candidatesAfterTier3Filter: 0;
+    }
+  | {
+      allowed: true;
+      accessDecision: PcdTierDecision;
+      selectedCapability: PcdProviderCapability;
+      selectedProvider: string;
+      providerCapabilityVersion: typeof PCD_PROVIDER_CAPABILITY_VERSION;
+      routerVersion: typeof PCD_PROVIDER_ROUTER_VERSION;
+      decisionReason: PcdRoutingDecisionReason;
+    };
+
+export async function routePcdShot(
+  input: RoutePcdShotInput,
+  stores: ProviderRouterStores,
+): Promise<PcdRoutingDecision>;
+```
+
+### `packages/creative-pipeline/src/pcd/pcd-identity-snapshot-writer.ts` (new)
+
+```ts
+import type {
+  IdentityTier, OutputIntent, PcdIdentitySnapshot, PcdShotType,
+  PcdSp4IdentitySnapshotInput,
+} from "@creativeagent/schemas";
+import { PcdSp4IdentitySnapshotInputSchema } from "@creativeagent/schemas";
+import { PCD_TIER_POLICY_VERSION } from "./tier-policy.js";
+import { PCD_PROVIDER_CAPABILITY_VERSION, type PcdProviderCapability } from "./provider-capability-matrix.js";
+import { PCD_PROVIDER_ROUTER_VERSION } from "./provider-router.js";
+import { assertTier3RoutingDecisionCompliant } from "./tier3-routing-rules.js";
+
+// Note: no import of PCD_SHOT_SPEC_VERSION — the writer must NOT re-pin the
+// current shot-spec version. shotSpecVersion is carried through from input
+// (SP3-stamped on the job).
+
+export type PcdIdentitySnapshotStore = {
+  createForShot(input: {
+    // ... CreatePcdIdentitySnapshotInput shape, including the SP4 widening ...
+  }): Promise<PcdIdentitySnapshot>;
+};
+
+export type WritePcdIdentitySnapshotInput = PcdSp4IdentitySnapshotInput & {
+  effectiveTier: IdentityTier;
+  shotType: PcdShotType;
+  outputIntent: OutputIntent;
+  selectedCapability: PcdProviderCapability;
+  editOverRegenerateRequired: boolean;
+};
+
+export type PcdIdentitySnapshotWriterStores = {
+  pcdIdentitySnapshotStore: PcdIdentitySnapshotStore;
+};
+
+export async function writePcdIdentitySnapshot(
+  input: WritePcdIdentitySnapshotInput,
+  stores: PcdIdentitySnapshotWriterStores,
+): Promise<PcdIdentitySnapshot>;
+```
+
+### `packages/creative-pipeline/src/index.ts` (re-exports added)
+
+```ts
+// SP4: provider routing + identity snapshot writer
+export {
+  PCD_PROVIDER_CAPABILITY_VERSION,
+  PCD_PROVIDER_CAPABILITY_MATRIX,
+  type PcdProviderCapability,
+} from "./pcd/provider-capability-matrix.js";
+
+export {
+  PCD_PROVIDER_ROUTER_VERSION,
+  routePcdShot,
+  type RoutePcdShotInput,
+  type PcdRoutingDecision,
+  type ProviderRouterStores,
+} from "./pcd/provider-router.js";
+
+export {
+  writePcdIdentitySnapshot,
+  type WritePcdIdentitySnapshotInput,
+  type PcdIdentitySnapshotStore,
+  type PcdIdentitySnapshotWriterStores,
+} from "./pcd/pcd-identity-snapshot-writer.js";
+
+export {
+  requiresFirstLastFrameAnchor,
+  requiresPerformanceTransfer,
+  requiresEditOverRegenerate,
+  assertTier3RoutingDecisionCompliant,
+  Tier3RoutingViolationError,
+  type CampaignTakeStore,
+  type Tier3RoutingRuleStores,
+} from "./pcd/tier3-routing-rules.js";
+```
+
+## Section 3 — Decision logic & invariants
+
+### `routePcdShot` algorithm
+
+```
+Input: { resolvedContext, shotType, outputIntent, organizationId, campaignId }
+Stores: { campaignTakeStore }
+
+Step 1 — Tier policy gate.
+  accessDecision = decidePcdGenerationAccess({
+    avatarTier:  resolvedContext.creatorTier,
+    productTier: resolvedContext.productTier,
+    shotType,
+    outputIntent,
+  })
+  if (!accessDecision.allowed) {
+    return { allowed: false, denialKind: "ACCESS_POLICY", accessDecision }
+  }
+
+Step 2 — Matrix candidate set.
+  candidates = PCD_PROVIDER_CAPABILITY_MATRIX.filter(c =>
+    c.tiers.includes(resolvedContext.effectiveTier)
+    && c.shotTypes.includes(shotType)
+    && c.outputIntents.includes(outputIntent)
+  )
+  candidatesEvaluated = candidates.length
+
+Step 3 — Tier 3 rule application (only when effectiveTier === 3).
+  tier3RulesApplied = []
+  if (resolvedContext.effectiveTier === 3) {
+    if (requiresFirstLastFrameAnchor({ effectiveTier, shotType, outputIntent })) {
+      candidates = candidates.filter(c => c.supportsFirstLastFrame)
+      tier3RulesApplied.push("first_last_frame_anchor")
+    }
+    if (requiresPerformanceTransfer({ effectiveTier, shotType })) {
+      candidates = candidates.filter(c => c.supportsPerformanceTransfer)
+      tier3RulesApplied.push("performance_transfer")
+    }
+    editOverRegenerateRequired = await requiresEditOverRegenerate(
+      { effectiveTier, organizationId, campaignId }, stores)
+    if (editOverRegenerateRequired) {
+      candidates = candidates.filter(c => c.supportsEditExtend)
+      tier3RulesApplied.push("edit_over_regenerate")
+    }
+  }
+  candidatesAfterTier3Filter = candidates.length
+
+Step 4 — Selection or empty-candidates denial.
+  if (candidates.length === 0) {
+    return {
+      allowed: false,
+      denialKind: "NO_PROVIDER_CAPABILITY",
+      accessDecision,                           // unmutated
+      reason: "no provider satisfies tier3 routing rules for this shot",
+      requiredActions: ["choose_safer_shot_type"],
+      candidatesEvaluated,
+      candidatesAfterTier3Filter: 0,
+    }
+  }
+  selected = candidates[0]                      // first-match deterministic order; matrix order is policy
+
+Step 5 — Build decision.
+  return {
+    allowed: true,
+    accessDecision,
+    selectedCapability: selected,
+    selectedProvider: selected.provider,
+    providerCapabilityVersion: PCD_PROVIDER_CAPABILITY_VERSION,
+    routerVersion: PCD_PROVIDER_ROUTER_VERSION,
+    decisionReason: {
+      capabilityRefIndex: PCD_PROVIDER_CAPABILITY_MATRIX.indexOf(selected),
+      matchedShotType: shotType,
+      matchedTier: resolvedContext.effectiveTier,
+      matchedOutputIntent: outputIntent,
+      tier3RulesApplied,
+      candidatesEvaluated,
+      candidatesAfterTier3Filter,
+      selectionRationale: buildRationale(...),  // pure helper, deterministic short string
+    },
+  }
+```
+
+**Invariants:**
+
+| Property | Guarantee |
+|---|---|
+| **Purity / I/O surface** | All I/O via injected `stores` (only `campaignTakeStore` for rule 3). No DB, no network, no time, no randomness. |
+| **Determinism** | Same `(resolvedContext, shotType, outputIntent, campaignTakeStore-result)` → identical decision. Matrix iteration order is policy. |
+| **No hardcoded provider names** | Router code references `selected.provider`, never string literals. Source-grep test enforces. |
+| **No bypass** | Step 1's `decidePcdGenerationAccess` is unconditional. Step 4's empty-candidates branch is unconditional. |
+| **Tier 3 closure** | All three rules applied for `effectiveTier === 3`. Rules 1 and 2 are pure; rule 3 reads `campaignTakeStore` exactly once. |
+| **Distinguished denial** | Two denial kinds — `ACCESS_POLICY` (SP2 refused) and `NO_PROVIDER_CAPABILITY` (SP2 allowed but no provider survives Tier 3 filter). `accessDecision` unmutated in the second case. |
+
+### `writePcdIdentitySnapshot` algorithm
+
+```
+Input: WritePcdIdentitySnapshotInput  (PcdSp4IdentitySnapshotInput plus Tier 3 fields)
+Stores: { pcdIdentitySnapshotStore }
+
+Step 1 — Validate input shape.
+  PcdSp4IdentitySnapshotInputSchema.parse(input)   // throws ZodError on bad input
+
+Step 2 — Tier 3 second line of defense.
+  if (input.effectiveTier === 3) {
+    assertTier3RoutingDecisionCompliant({
+      effectiveTier:               input.effectiveTier,
+      shotType:                    input.shotType,
+      outputIntent:                input.outputIntent,
+      selectedCapability:          input.selectedCapability,
+      tier3RulesApplied:           input.routingDecisionReason.tier3RulesApplied,
+      editOverRegenerateRequired:  input.editOverRegenerateRequired,
+    })   // throws Tier3RoutingViolationError on violation
+  }
+
+Step 3 — Pin version constants from imports (NOT from input).
+  payload = {
+    ...persistableInputFields(input),
+    policyVersion:             PCD_TIER_POLICY_VERSION,            // import-pinned
+    providerCapabilityVersion: PCD_PROVIDER_CAPABILITY_VERSION,    // import-pinned
+    routerVersion:             PCD_PROVIDER_ROUTER_VERSION,        // import-pinned
+    shotSpecVersion:           input.shotSpecVersion,              // SP3-stamped, carried forward
+  }
+
+Step 4 — Persist.
+  return stores.pcdIdentitySnapshotStore.createForShot(payload)
+```
+
+**Invariants:**
+
+| Property | Guarantee |
+|---|---|
+| **Tier 3 governance** | Writer rejects `effectiveTier === 3` writes that violate the rule predicates. Two lines of defense (router + writer) using the same predicate module. |
+| **Version pinning — three from imports** | `policyVersion`, `providerCapabilityVersion`, `routerVersion` come from imports; caller cannot override. |
+| **Version pinning — one from input** | `shotSpecVersion` comes from input (SP3-stamped value carried forward). The writer must not re-import `PCD_SHOT_SPEC_VERSION` — re-importing would forensically misrepresent the spec version the job was actually planned under. Forbidden-imports test enforces. |
+| **Input validation** | Zod parse rejects malformed input deterministically. |
+| **Idempotency boundary** | Owned by the store (`createForShot` semantics; one snapshot per shot enforced store-side). Writer makes a single store call per invocation; retries are caller's concern. |
+
+### Error semantics
+
+| Failure | Where | Behavior |
+|---|---|---|
+| Bad input shape | Writer Step 1 | `ZodError` propagates. |
+| Tier 3 violation | Writer Step 2 | `Tier3RoutingViolationError` (from `tier3-routing-rules.ts`) propagates. |
+| Empty matrix candidates after Tier 3 filter | Router Step 4 | Return `{ allowed: false, denialKind: "NO_PROVIDER_CAPABILITY", accessDecision }` with `accessDecision` unmutated; **does not throw**. Distinguished from `ACCESS_POLICY` denial. |
+| Tier-policy denial | Router Step 1 | Return `{ allowed: false, denialKind: "ACCESS_POLICY", accessDecision }`. Caller does not call provider; does not call writer. |
+| `campaignTakeStore` throws | Router Step 3 | Propagates. Treat as transient infrastructure error — caller's retry policy. |
+| `pcdIdentitySnapshotStore.createForShot` throws | Writer Step 4 | Propagates. Caller's retry policy decides. |
+
+## Section 4 — Test plan
+
+Vitest, in-memory fakes, no DB, no network. Co-located tests for every new module.
+
+### `provider-capability-matrix.test.ts`
+
+- **Constant pinning:** `expect(PCD_PROVIDER_CAPABILITY_VERSION).toBe("provider-capability@1.0.0")`. Locks the value snapshots will pin.
+- **Matrix shape:** every row passes a per-row Zod parse.
+- **Matrix coverage (against SP2's allowed-set):** for every `(IdentityTier, PcdShotType, OutputIntent)` triple where `decidePcdGenerationAccess` returns `allowed: true`, assert at least one matrix row matches `(tiers ∋ T, shotTypes ∋ S, outputIntents ∋ O)`. Test imports `decidePcdGenerationAccess` (upstream contract — allowed). Test does NOT import any logic from `provider-capability-matrix.ts` other than the matrix data.
+- **Tier 3 capability sufficiency (rule combinations, not per-rule):** for every `(shotType, outputIntent)` allowed at Tier 3 by SP2's policy, assert capability availability for **the union of required rule predicates** on a single matrix row:
+  - Non-talking-head Tier 3 video shot: at least one row with `tiers ∋ 3, shotTypes ∋ S, outputIntents ∋ O, supportsFirstLastFrame === true`.
+  - Tier 3 talking-head: at least one row with `supportsFirstLastFrame === true AND supportsPerformanceTransfer === true` on the same row.
+  - Tier 3 video shot with rule 3 active: at least one row with `supportsFirstLastFrame === true AND supportsEditExtend === true` on the same row. For Tier 3 talking-head with rule 3 active: `supportsFirstLastFrame === true AND supportsPerformanceTransfer === true AND supportsEditExtend === true` on the same row.
+- **No string-literal hardcoded providers in test source.**
+- **Forbidden-imports check.**
+
+### `tier3-routing-rules.test.ts`
+
+- **`requiresFirstLastFrameAnchor` truth table** over `(effectiveTier ∈ {1,2,3}, shotType ∈ all 9 values, outputIntent ∈ all 4 values)`. Hand-listed expected truth set in the test file — NOT imported from `tier3-routing-rules.ts` — to prevent the "test imports same wrong table" failure mode.
+- **`requiresPerformanceTransfer` truth table** over `(effectiveTier, shotType)`. `true` only for `(effectiveTier === 3, shotType === "talking_head")`.
+- **`requiresEditOverRegenerate` (async):** stub `campaignTakeStore` returns `true`/`false`; assert predicate honors store result only when `effectiveTier === 3`. At Tier 1/2 the predicate short-circuits; store is not consulted.
+- **`assertTier3RoutingDecisionCompliant`:**
+  - Tier 1/2 input → returns void.
+  - Tier 3 + each rule applied + capability supports it → returns void.
+  - Tier 3 + each rule required + capability missing the support flag → throws `Tier3RoutingViolationError` (matrix of three rules).
+- **`Tier3RoutingViolationError` shape:** `name === "Tier3RoutingViolationError"`; `rule` and `provider` fields populated; `message` includes both.
+- **Forbidden-imports check.**
+
+### `provider-router.test.ts`
+
+In-memory `campaignTakeStore` fake. No real matrix mutation; tests use the live `PCD_PROVIDER_CAPABILITY_MATRIX` import except in Part C and Part F, which use `vi.doMock`.
+
+**Part A — Step 1 access-policy gate.**
+1. Tier-1 + non-restricted shot + `outputIntent: "final_export"` → `{ allowed: false, denialKind: "ACCESS_POLICY" }`. `accessDecision.allowed === false`.
+2. Tier-1 + `outputIntent: "draft"` → `{ allowed: true, … }` (assuming matrix has a Tier-1 draft provider).
+3. **Component-tier passthrough:** resolver supplies `(productTier=3, creatorTier=1)`; assert router passes `(avatarTier=1, productTier=3)` to `decidePcdGenerationAccess` and SP2's denial reflects the asymmetry.
+
+**Part B — Step 2/3 matrix filter.**
+4. Tier-2 + `simple_ugc` + `final_export` → first matching row selected.
+5. Tier-3 + `face_closeup` + `final_export` → only rows with `supportsFirstLastFrame === true` survive (rule 1).
+6. Tier-3 + `talking_head` + `preview` → only rows with `supportsPerformanceTransfer === true` survive (rule 2).
+7. Tier-3 + `simple_ugc` + `final_export`, `campaignTakeStore → true` → only rows with `supportsEditExtend === true` survive (rule 3).
+8. Tier-3 + `simple_ugc` + `final_export`, `campaignTakeStore → false` → rule 3 not applied; rule 1 still applies.
+
+**Part C — Step 4 empty candidates.** Wrapped in `describe`/`beforeEach`/`afterEach` calling `vi.resetModules()` and `vi.restoreAllMocks()`.
+9. `vi.doMock("./provider-capability-matrix.js", …)` to provide a synthetic matrix where the rule-1-required Tier 3 face_closeup rows do not have `supportsFirstLastFrame`. Assert `{ allowed: false, denialKind: "NO_PROVIDER_CAPABILITY", accessDecision.allowed: true, candidatesAfterTier3Filter: 0 }`. Verifies `accessDecision` is unmutated (tier policy *did* allow the shot).
+
+**Part D — Decision reason shape.**
+10. Allowed Tier-2 case: `decisionReason.tier3RulesApplied === []`; `decisionReason.candidatesEvaluated >= 1`; `decisionReason.matchedTier === 2`; `decisionReason.capabilityRefIndex` indexes back to the selected row in the live matrix.
+11. Allowed Tier-3 case: `tier3RulesApplied` contains exactly the rules the test setup triggered.
+12. `selectionRationale` is a non-empty string ≤200 chars.
+
+**Part E — Determinism.**
+13. Two consecutive calls with identical inputs and identical store responses → deep-equal decisions.
+
+**Part F — First-match-is-policy.** Wrapped in module-mock isolation block.
+14. `vi.doMock` with rows reordered: assert selected provider changes to match new first-match.
+
+**Part G — Forbidden imports.** Same regex set plus `./shot-spec-version.js`.
+
+### `pcd-identity-snapshot-writer.test.ts`
+
+In-memory `pcdIdentitySnapshotStore` fake recording every `createForShot` call.
+
+**Part A — Version pinning (the slice's heart).**
+1. Caller passes input with extra `policyVersion: "tier-policy@bogus"` key (cast as `unknown`); assert `createForShot` payload's `policyVersion === PCD_TIER_POLICY_VERSION`.
+2. Same for `providerCapabilityVersion`.
+3. Same for `routerVersion`.
+4. `shotSpecVersion` mirrors `input.shotSpecVersion` exactly. Caller-controlled (for SP3-stamped passthrough), not import-controlled.
+
+**Part B — Tier 3 second-line-of-defense.**
+5. Tier-1 input → no Tier 3 assertion call. Snapshot persists.
+6. Tier-3 input with compliant `selectedCapability` and matching `tier3RulesApplied` → snapshot persists.
+7. Tier-3 input with rule 1 violation (`supportsFirstLastFrame === false` but rule 1 in `tier3RulesApplied`) → throws `Tier3RoutingViolationError`. **`createForShot` never called** — assert via fake's call recorder.
+8. Same for rule 2.
+9. Same for rule 3.
+
+**Part C — Input validation.**
+10. Malformed input (missing `routingDecisionReason`) → `ZodError`. `createForShot` not called.
+11. `routingDecisionReason` with bad sub-shape (`selectionRationale > 200 chars`) → `ZodError`.
+
+**Part D — Persistence shape.**
+12. Happy path: `createForShot` called exactly once with payload containing all SP4 forensic fields non-NULL. Per-field assertions.
+13. Returned `PcdIdentitySnapshot` is the fake's response (writer doesn't transform).
+
+**Part E — Forbidden imports.** Includes `./shot-spec-version.js`.
+
+### `registry-resolver.test.ts` (additive deltas)
+
+New `describe("SP4 additive contract deltas", ...)` block:
+
+14. Returns `productTier` and `creatorTier` in the full-attach path (derived from registry `qualityTier` mapping).
+15. No-op path performs two registry reads but zero `attachIdentityRefs` writes (revises Part A's existing assertion).
+16. No-op path returns current registry component tiers with originally-stamped `effectiveTier` (verifies the documented divergence semantic).
+
+## Section 5 — Hard guardrails for implementation
+
+- No new provider integrations. Matrix is data only.
+- No UI, no dashboard, no API route changes.
+- No retry / fallback / circuit-breaker logic.
+- No async-job refactor; SP4 ships zero Inngest functions.
+- No QC scoring. No approval / Meta draft / consent revocation behavior.
+- No backfill of legacy `PcdIdentitySnapshot` rows. No follow-up null-→non-null migration.
+- No identity adapter (Path 1) routing preference logic.
+- No edits to `registry-backfill.ts` body or `tier-policy.ts` body.
+- No edits to `registry-resolver.ts` body except the locked SP3 deltas (additive type fields + no-op-path two-read body change).
+- No edits to any `packages/db/src/stores/*` file other than `prisma-pcd-identity-snapshot-store.ts` (input-type widening + data-spread additions only).
+- No new index on the three new snapshot columns.
+- No re-imports of `PCD_SHOT_SPEC_VERSION` inside the writer module (forbidden-imports test enforces).
+- No hardcoded provider names in `provider-router.ts` conditionals.
+- No mutation of `PCD_PROVIDER_CAPABILITY_MATRIX` or `accessDecision` at runtime.
+- All Tier 3 rule logic lives in `tier3-routing-rules.ts`. Router and writer call into it; neither re-implements.
+- All four new modules live in `packages/creative-pipeline/src/pcd/` with co-located `*.test.ts`.
+
+## Section 6 — Acceptance criteria
+
+The six locked acceptance conditions, expanded:
+
+1. **Every PCD shot calls `decidePcdGenerationAccess` before provider selection.** Asserted by router Part A and Part B.
+2. **`ProviderRouter` selects from `PCD_PROVIDER_CAPABILITY_MATRIX`, not hardcoded conditionals.** Asserted by router source-code grep test (no provider string literals in conditionals) and by Part F (matrix-reorder changes selection).
+3. **Tier 3 mandatory rules cannot be bypassed by caller input.** Asserted by writer Part B — caller cannot construct a routing-decision-shaped object that bypasses rules 1, 2, or 3 because the writer revalidates.
+4. **Snapshot writer persists `selectedProvider` plus all four pinned versions** (`policyVersion`, `providerCapabilityVersion`, `routerVersion`, `shotSpecVersion`). Asserted by writer Part A and Part D.
+5. **Historical snapshots remain interpretable after matrix/router/access versions change.** Each version is its own column; `routingDecisionReason.capabilityRefIndex` indexes into the matrix at decision time.
+6. **Tests prove:** Tier 3 mandatory route (Part B), non-Tier-3 allowed route (Part B), denied access path (Part A `ACCESS_POLICY`), unsupported provider capability path (Part C `NO_PROVIDER_CAPABILITY`), snapshot pins versions at write time (Part A version pinning).
+
+Plus the additive SP3 contract revisions:
+
+7. **`ResolvedPcdContext` carries component tiers** (`productTier`, `creatorTier`). Asserted by SP3 resolver-test deltas.
+8. **No new schema migration beyond the three nullable snapshot columns.** No `CreativeJob` schema change. Verified by: only one new migration directory exists in `packages/db/prisma/migrations/`.
+9. **Build / typecheck / lint green** across all packages: `pnpm install && pnpm db:generate && pnpm typecheck && pnpm test && pnpm lint`. Lint warnings count unchanged from `main`.
+
+## Section 7 — Module file inventory (delta from `main`)
+
+```
+NEW:
+  packages/creative-pipeline/src/pcd/provider-capability-matrix.ts
+  packages/creative-pipeline/src/pcd/provider-capability-matrix.test.ts
+  packages/creative-pipeline/src/pcd/tier3-routing-rules.ts
+  packages/creative-pipeline/src/pcd/tier3-routing-rules.test.ts
+  packages/creative-pipeline/src/pcd/provider-router.ts
+  packages/creative-pipeline/src/pcd/provider-router.test.ts
+  packages/creative-pipeline/src/pcd/pcd-identity-snapshot-writer.ts
+  packages/creative-pipeline/src/pcd/pcd-identity-snapshot-writer.test.ts
+  packages/db/prisma/migrations/<timestamp>_pcd_snapshot_sp4_versions/migration.sql
+
+MODIFIED:
+  packages/schemas/src/pcd-identity.ts
+    + PcdRoutingDecisionReasonSchema
+    + PcdSp4IdentitySnapshotInputSchema
+    + 3 nullable fields on PcdIdentitySnapshotSchema (shotSpecVersion, routerVersion, routingDecisionReason)
+
+  packages/db/prisma/schema.prisma
+    + 3 nullable fields on PcdIdentitySnapshot model
+
+  packages/db/src/stores/prisma-pcd-identity-snapshot-store.ts
+    + 3 fields on CreatePcdIdentitySnapshotInput (data-spread already passthrough)
+
+  packages/creative-pipeline/src/pcd/registry-resolver.ts
+    + 2 fields on ResolvedPcdContext (productTier, creatorTier)
+    + No-op path body change: two registry reads, zero attachIdentityRefs writes
+
+  packages/creative-pipeline/src/pcd/registry-resolver.test.ts
+    + Part A delta (no-op path now expects two finder reads, zero attach calls)
+    + 3 SP4-additive tests
+
+  packages/creative-pipeline/src/index.ts
+    + SP4 re-exports
+
+  docs/SWITCHBOARD-CONTEXT.md
+    + 1 line on CampaignTakeStore merge-back ownership
+```
+
+## Design questions resolved during brainstorming
+
+| Q | Answer | Rationale |
+|---|---|---|
+| Q1: Slice composition — one PR or split? | **A — one slice** (matrix + router + snapshot writer in one PR). | Auditability requires routing and persistence to land together. Splitting creates fake milestones — matrix without router is inert; router without snapshot writer makes non-durable decisions; without version pinning, historical behavior is uninterpretable. |
+| Q2: Snapshot writer placement — pure function or Inngest step? | **A — pure async function with injected store.** | Defines the production invariant before choosing the runner. SP3 set the discipline. Writer can later be wrapped in `step.run` by any caller. Snapshot row's store-side uniqueness boundary handles idempotency, not Inngest retries. |
+| Q3: Tier 3 rule enforcement — router-only, duplicated, or shared module? | **C — shared `tier3-routing-rules.ts`, used by both router and writer.** | Acceptance condition #3 requires writer-side enforcement. C avoids B's drift risk via single-source predicates. |
+| Q3.1: Rule 3 implementation — real store, stub, or defer? | **C1 — real injected `CampaignTakeStore` contract** (in-tree test fakes only) **+ merge-back ownership note.** | C2 stub-always-false is fake compliance. C3 deferral creates a semantic mismatch with the design's "three Tier 3 rules" language. Production implementer reserved for SP6 ApprovalLifecycle ownership at merge-back. |
+| Q4: Snapshot row schema — reuse SP1 columns or add fields? | **B + B1 — add three nullable columns** (`shotSpecVersion`, `routerVersion`, `routingDecisionReason`). | Acceptance condition #5 (historical snapshots remain interpretable) is the design justification for the migration. Three independent constants → three independent columns; no fusion. Nullable for historical compatibility (no DEFAULT fabrications). |
+| Q5: Layer composition — one fused entry point or two modules? | **A — two separately-callable modules** (`routePcdShot`, `writePcdIdentitySnapshot`). No fused entry point. | Pre-provider routing and post-provider snapshot writing are distinct lifecycle phases; the provider call sits between them and is owned by `apps/api` / merge-back integration, not by `creative-pipeline`. |
+| Q-extension: Component tier passthrough — extend ResolvedPcdContext, push to caller, or new store? | **(a) Extend `ResolvedPcdContext`** with `productTier` + `creatorTier`. | SP3 already computes both. Avoids second registry-read surface in SP4 and avoids pushing registry knowledge back into the orchestration caller. |
+| Q-extension-1: Add `productTier` / `creatorTier` columns to `CreativeJob`? | **No.** Choose (a-ii) variant 3 — keep migration scoped to snapshot columns; no-op path re-fetches component tiers from registry stores. | Registry owns identity-tier truth. `CreativeJob` should not become a shadow cache of registry-derived fields. Two extra reads on a non-hot path is the cleaner trade. |
+| Section 3.1: Empty matrix candidates — fake tier-policy denial or distinguished? | **Distinguished.** Two `denialKind`s — `ACCESS_POLICY` and `NO_PROVIDER_CAPABILITY`. `accessDecision` unmutated in the second case. | Tier policy *allowed* the shot; provider routing failed because no provider satisfies required capability constraints. Different failure modes; do not collapse. |
+| Section 3.3: `shotSpecVersion` — re-import current or carry from input? | **Carry from input** (SP3-stamped). Writer must not import `PCD_SHOT_SPEC_VERSION`. | Snapshot must record the spec version the job was planned under, not the current value at write time. Re-importing creates forensic drift. Forbidden-imports test enforces. |
+
+## Architectural context
+
+This SP4 module set sits at the **routing + snapshot persistence** position in the broader PCD orchestration:
+
+```
+PCD job submitted
+  → PcdRegistryResolver        (SP3; ResolvedPcdContext now carries productTier + creatorTier — SP4 contract revision)
+  → ShotSpecPlanner            (later)
+  → PcdTierPolicy              (SP2; called by SP4 router per shot)
+  → ProviderRouter             ◀── SP4 (this slice)
+  → execution / provider call  (apps/api at merge-back)
+  → PcdIdentitySnapshot writer ◀── SP4 (this slice)
+  → QC                         (SP5)
+  → Approval / export          (SP6)
+```
+
+The deliberate design choice: **routing is governed and persistence is forensically self-contained.** The router answers "given this resolved context, this shot, this output intent, and current campaign approval state — which provider may run this generation?" The writer answers "what was the exact provider, identity, and version state at the moment of generation?" Both share Tier 3 invariants via a single predicate module so router and writer cannot drift.
+
+Every other concern — the actual provider call, retries, QC, consent, approval, export gating — lives downstream and consumes SP4's outputs.
