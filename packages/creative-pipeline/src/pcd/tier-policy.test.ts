@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { dirname, join } from "node:path";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { PCD_TIER_POLICY_VERSION, decidePcdGenerationAccess } from "./tier-policy.js";
 import { PcdTierDecisionSchema } from "@creativeagent/schemas";
 import type { OutputIntent as OI, PcdShotType, PcdTierDecision } from "@creativeagent/schemas";
@@ -366,6 +369,27 @@ describe("PcdTierPolicy — contract & shape", () => {
         outputIntent: row.i,
       });
       expect(() => PcdTierDecisionSchema.parse(actual)).not.toThrow();
+    }
+  });
+});
+
+describe("PcdTierPolicy — forbidden imports guard (Layer 2 purity)", () => {
+  it("tier-policy.ts source contains no forbidden module references", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(join(here, "tier-policy.ts"), "utf8");
+    const banned = [
+      "@creativeagent/db",
+      "@prisma/client",
+      "inngest",
+      'from "node:fs"',
+      "from 'node:fs'",
+      'from "http"',
+      "from 'http'",
+      'from "https"',
+      "from 'https'",
+    ];
+    for (const needle of banned) {
+      expect(source).not.toContain(needle);
     }
   });
 });
