@@ -6,6 +6,13 @@ export type Tier3Rule =
   | "performance_transfer"
   | "edit_over_regenerate";
 
+// MERGE-BACK: production implementer of CampaignTakeStore is owned by SP6
+// ApprovalLifecycle / campaign-take persistence (Switchboard side). This SP4
+// slice ships the contract only; in-tree consumers must inject either the
+// SP6 production store at merge-back OR a local test fake. No in-tree
+// production implementer is provided (deliberate — fake compliance was
+// rejected during SP4 brainstorming). See docs/SWITCHBOARD-CONTEXT.md
+// "SP4 (tier-based routing)" for the merge-back ownership note.
 export type CampaignTakeStore = {
   hasApprovedTier3TakeForCampaign(input: {
     organizationId: string;
