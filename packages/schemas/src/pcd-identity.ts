@@ -109,23 +109,29 @@ export const ProductQcResultSchema = z.object({
 });
 export type ProductQcResult = z.infer<typeof ProductQcResultSchema>;
 
-// SP4: routing-decision reason — inlines shot-type and output-intent enums to
-// avoid a circular dependency (pcd-tier-policy.ts already imports from this file).
+export const PcdShotTypeSchema = z.enum([
+  "script_only",
+  "storyboard",
+  "simple_ugc",
+  "talking_head",
+  "product_demo",
+  "product_in_hand",
+  "face_closeup",
+  "label_closeup",
+  "object_insert",
+]);
+export type PcdShotType = z.infer<typeof PcdShotTypeSchema>;
+
+export const OutputIntentSchema = z.enum(["draft", "preview", "final_export", "meta_draft"]);
+export type OutputIntent = z.infer<typeof OutputIntentSchema>;
+
+// SP4: routing-decision reason — references PcdShotTypeSchema and OutputIntentSchema
+// defined above (single source of truth; pcd-tier-policy.ts imports them from here).
 export const PcdRoutingDecisionReasonSchema = z.object({
   capabilityRefIndex: z.number().int().nonnegative(),
-  matchedShotType: z.enum([
-    "script_only",
-    "storyboard",
-    "simple_ugc",
-    "talking_head",
-    "product_demo",
-    "product_in_hand",
-    "face_closeup",
-    "label_closeup",
-    "object_insert",
-  ]),
+  matchedShotType: PcdShotTypeSchema,
   matchedEffectiveTier: IdentityTierSchema,
-  matchedOutputIntent: z.enum(["draft", "preview", "final_export", "meta_draft"]),
+  matchedOutputIntent: OutputIntentSchema,
   tier3RulesApplied: z.array(
     z.enum(["first_last_frame_anchor", "performance_transfer", "edit_over_regenerate"]),
   ),
