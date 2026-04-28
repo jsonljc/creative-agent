@@ -176,3 +176,69 @@ describe("resolvePcdRegistryContext — full attach flow (happy path)", () => {
     expect(log.attachStartedAt!).toBeGreaterThan(log.creatorResolvedAt!);
   });
 });
+
+const PRODUCT_TIERS: ProductQualityTier[] = ["url_imported", "verified", "canonical"];
+const CREATOR_TIERS: AvatarQualityTier[] = ["stock", "anchored", "soul_id"];
+
+const PRODUCT_TIER_TO_IDENTITY: Record<ProductQualityTier, 1 | 2 | 3> = {
+  url_imported: 1,
+  verified: 2,
+  canonical: 3,
+};
+const CREATOR_TIER_TO_IDENTITY: Record<AvatarQualityTier, 1 | 2 | 3> = {
+  stock: 1,
+  anchored: 2,
+  soul_id: 3,
+};
+
+describe("resolvePcdRegistryContext — product qualityTier mapping", () => {
+  it.each(PRODUCT_TIERS)("product %s maps correctly", async (productQualityTier) => {
+    const { stores } = makeFakes({ productQualityTier, creatorQualityTier: "soul_id" });
+    const result = await resolvePcdRegistryContext(UNRESOLVED_JOB, stores);
+    const expectedProductTier = PRODUCT_TIER_TO_IDENTITY[productQualityTier];
+    // creator is soul_id → 3, so effectiveTier = product mapping.
+    expect(result.effectiveTier).toBe(expectedProductTier);
+    expect(result.allowedOutputTier).toBe(expectedProductTier);
+  });
+});
+
+describe("resolvePcdRegistryContext — creator qualityTier mapping", () => {
+  it.each(CREATOR_TIERS)("creator %s maps correctly", async (creatorQualityTier) => {
+    const { stores } = makeFakes({ productQualityTier: "canonical", creatorQualityTier });
+    const result = await resolvePcdRegistryContext(UNRESOLVED_JOB, stores);
+    const expectedCreatorTier = CREATOR_TIER_TO_IDENTITY[creatorQualityTier];
+    // product is canonical → 3, so effectiveTier = creator mapping.
+    expect(result.effectiveTier).toBe(expectedCreatorTier);
+    expect(result.allowedOutputTier).toBe(expectedCreatorTier);
+  });
+});
+
+describe("resolvePcdRegistryContext — 3×3 effectiveTier = min cross-product", () => {
+  const rows = PRODUCT_TIERS.flatMap((pq) =>
+    CREATOR_TIERS.map((cq) => ({
+      pq,
+      cq,
+      expected: Math.min(
+        PRODUCT_TIER_TO_IDENTITY[pq],
+        CREATOR_TIER_TO_IDENTITY[cq],
+      ) as 1 | 2 | 3,
+    })),
+  );
+
+  it.each(rows)("product=$pq creator=$cq → effectiveTier=$expected", async ({ pq, cq, expected }) => {
+    const { stores } = makeFakes({ productQualityTier: pq, creatorQualityTier: cq });
+    const result = await resolvePcdRegistryContext(UNRESOLVED_JOB, stores);
+    expect(result.effectiveTier).toBe(expected);
+    expect(result.allowedOutputTier).toBe(expected);
+  });
+
+  it("named asymmetry case: canonical product + stock creator → tier 1", async () => {
+    const { stores } = makeFakes({
+      productQualityTier: "canonical",
+      creatorQualityTier: "stock",
+    });
+    const result = await resolvePcdRegistryContext(UNRESOLVED_JOB, stores);
+    expect(result.effectiveTier).toBe(1);
+    expect(result.allowedOutputTier).toBe(1);
+  });
+});
