@@ -87,7 +87,7 @@ New exports:
 export const PcdRoutingDecisionReasonSchema = z.object({
   capabilityRefIndex: z.number().int().nonnegative(),
   matchedShotType: PcdShotTypeSchema,
-  matchedTier: IdentityTierSchema,
+  matchedEffectiveTier: IdentityTierSchema,        // explicitly the effectiveTier
   matchedOutputIntent: OutputIntentSchema,
   tier3RulesApplied: z.array(
     z.enum(["first_last_frame_anchor", "performance_transfer", "edit_over_regenerate"]),
@@ -260,6 +260,16 @@ export class Tier3RoutingViolationError extends Error {
   }
 }
 
+export class Tier3RoutingMetadataMismatchError extends Error {
+  constructor(
+    public readonly expected: ReadonlyArray<"first_last_frame_anchor" | "performance_transfer" | "edit_over_regenerate">,
+    public readonly actual:   ReadonlyArray<"first_last_frame_anchor" | "performance_transfer" | "edit_over_regenerate">,
+  ) {
+    super(`Tier 3 routing metadata mismatch: expected rules [${expected.join(",")}] but routingDecisionReason.tier3RulesApplied was [${actual.join(",")}]`);
+    this.name = "Tier3RoutingMetadataMismatchError";
+  }
+}
+
 export function requiresFirstLastFrameAnchor(input: {
   effectiveTier: IdentityTier;
   shotType: PcdShotType;
@@ -280,6 +290,16 @@ export async function requiresEditOverRegenerate(
   stores: Tier3RoutingRuleStores,
 ): Promise<boolean>;
 
+// Enforcement is derived from authoritative sources, not from forensic
+// metadata. The function recomputes rule 1 / rule 2 from pure predicates
+// and consumes the explicit editOverRegenerateRequired boolean for rule 3.
+// tier3RulesApplied (forensic metadata from the routing decision) is
+// validated for *consistency* but is never the enforcement input.
+//
+// Throws Tier3RoutingViolationError if any required rule's support flag is
+// missing on selectedCapability. Throws Tier3RoutingMetadataMismatchError
+// if tier3RulesApplied does not exactly equal the recomputed required-rule
+// set.
 export function assertTier3RoutingDecisionCompliant(input: {
   effectiveTier: IdentityTier;
   shotType: PcdShotType;
@@ -292,7 +312,17 @@ export function assertTier3RoutingDecisionCompliant(input: {
 }): void;
 ```
 
-The async/sync split: rule 3 is the only rule needing I/O. The router calls `requiresEditOverRegenerate` once before matrix filtering and threads the boolean result through to the writer via `routingDecisionReason.tier3RulesApplied` plus the assertion's `editOverRegenerateRequired` parameter. The writer never re-queries the store.
+The async/sync split: rule 3 is the only rule needing I/O. The router calls `requiresEditOverRegenerate` once before matrix filtering, stamps the result onto the routing decision as `editOverRegenerateRequired`, and lists the rule in `tier3RulesApplied` only if it fired. The writer never re-queries the store.
+
+**Enforcement vs. forensic separation (binding):**
+
+- `assertTier3RoutingDecisionCompliant` derives the **required-rule set** from authoritative sources, not from `tier3RulesApplied`:
+  - Rule 1 required ↔ `requiresFirstLastFrameAnchor({effectiveTier, shotType, outputIntent})` returns true (pure recompute).
+  - Rule 2 required ↔ `requiresPerformanceTransfer({effectiveTier, shotType})` returns true (pure recompute).
+  - Rule 3 required ↔ `editOverRegenerateRequired === true` (explicit boolean from input).
+- For each required rule, assert `selectedCapability` has the matching support flag; throw `Tier3RoutingViolationError` on miss.
+- Then assert `tier3RulesApplied` (forensic) **exactly equals** the recomputed required-rule set (set equality, order-independent); throw `Tier3RoutingMetadataMismatchError` on divergence.
+- This closes the bypass where a caller passes `editOverRegenerateRequired: true, tier3RulesApplied: [], supportsEditExtend: false`: the recompute path identifies rule 3 as required, finds the capability missing the flag, and throws.
 
 ### `packages/creative-pipeline/src/pcd/provider-router.ts` (new)
 
@@ -317,12 +347,20 @@ export type ProviderRouterStores = {
   campaignTakeStore: CampaignTakeStore;
 };
 
+// Approved campaign context — explicit union so non-campaign generation
+// paths (drafts, internal previews, future test harnesses) do not need to
+// fabricate a fake campaignId. Rule 3 (edit-over-regenerate) only activates
+// under { kind: "campaign" }; the "none" branch short-circuits rule 3 to
+// false without consulting campaignTakeStore.
+export type ApprovedCampaignContext =
+  | { kind: "campaign"; organizationId: string; campaignId: string }
+  | { kind: "none" };
+
 export type RoutePcdShotInput = {
   resolvedContext: ResolvedPcdContext;
   shotType: PcdShotType;
   outputIntent: OutputIntent;
-  organizationId: string;
-  campaignId: string;
+  approvedCampaignContext: ApprovedCampaignContext;
 };
 
 export type PcdRoutingDecision =
@@ -338,7 +376,7 @@ export type PcdRoutingDecision =
       reason: "no provider satisfies tier3 routing rules for this shot";
       requiredActions: ReadonlyArray<"choose_safer_shot_type">;
       candidatesEvaluated: number;
-      candidatesAfterTier3Filter: 0;
+      candidatesAfterTier3Filter: number;          // always 0 in this branch; tested, not literal-typed
     }
   | {
       allowed: true;
@@ -428,9 +466,14 @@ export {
   requiresEditOverRegenerate,
   assertTier3RoutingDecisionCompliant,
   Tier3RoutingViolationError,
+  Tier3RoutingMetadataMismatchError,
   type CampaignTakeStore,
   type Tier3RoutingRuleStores,
 } from "./pcd/tier3-routing-rules.js";
+
+export type {
+  ApprovedCampaignContext,
+} from "./pcd/provider-router.js";
 ```
 
 ## Section 3 — Decision logic & invariants
@@ -462,6 +505,7 @@ Step 2 — Matrix candidate set.
 
 Step 3 — Tier 3 rule application (only when effectiveTier === 3).
   tier3RulesApplied = []
+  editOverRegenerateRequired = false                       // default for { kind: "none" }
   if (resolvedContext.effectiveTier === 3) {
     if (requiresFirstLastFrameAnchor({ effectiveTier, shotType, outputIntent })) {
       candidates = candidates.filter(c => c.supportsFirstLastFrame)
@@ -471,11 +515,21 @@ Step 3 — Tier 3 rule application (only when effectiveTier === 3).
       candidates = candidates.filter(c => c.supportsPerformanceTransfer)
       tier3RulesApplied.push("performance_transfer")
     }
-    editOverRegenerateRequired = await requiresEditOverRegenerate(
-      { effectiveTier, organizationId, campaignId }, stores)
-    if (editOverRegenerateRequired) {
-      candidates = candidates.filter(c => c.supportsEditExtend)
-      tier3RulesApplied.push("edit_over_regenerate")
+    // Rule 3 only consults campaignTakeStore under { kind: "campaign" }.
+    // Under { kind: "none" }, rule 3 short-circuits to false; no store call.
+    if (approvedCampaignContext.kind === "campaign") {
+      editOverRegenerateRequired = await requiresEditOverRegenerate(
+        {
+          effectiveTier,
+          organizationId: approvedCampaignContext.organizationId,
+          campaignId: approvedCampaignContext.campaignId,
+        },
+        stores,
+      )
+      if (editOverRegenerateRequired) {
+        candidates = candidates.filter(c => c.supportsEditExtend)
+        tier3RulesApplied.push("edit_over_regenerate")
+      }
     }
   }
   candidatesAfterTier3Filter = candidates.length
@@ -505,7 +559,7 @@ Step 5 — Build decision.
     decisionReason: {
       capabilityRefIndex: PCD_PROVIDER_CAPABILITY_MATRIX.indexOf(selected),
       matchedShotType: shotType,
-      matchedTier: resolvedContext.effectiveTier,
+      matchedEffectiveTier: resolvedContext.effectiveTier,
       matchedOutputIntent: outputIntent,
       tier3RulesApplied,
       candidatesEvaluated,
@@ -523,7 +577,8 @@ Step 5 — Build decision.
 | **Determinism** | Same `(resolvedContext, shotType, outputIntent, campaignTakeStore-result)` → identical decision. Matrix iteration order is policy. |
 | **No hardcoded provider names** | Router code references `selected.provider`, never string literals. Source-grep test enforces. |
 | **No bypass** | Step 1's `decidePcdGenerationAccess` is unconditional. Step 4's empty-candidates branch is unconditional. |
-| **Tier 3 closure** | All three rules applied for `effectiveTier === 3`. Rules 1 and 2 are pure; rule 3 reads `campaignTakeStore` exactly once. |
+| **Tier 3 closure** | All three rules applied for `effectiveTier === 3`. Rules 1 and 2 are pure recomputes. Rule 3 reads `campaignTakeStore` exactly once and only under `approvedCampaignContext.kind === "campaign"`. |
+| **Campaign context boundary** | Under `kind: "none"`, rule 3 does not fire and `campaignTakeStore` is not consulted. Non-campaign generation paths do not need to fabricate a `campaignId`. |
 | **Distinguished denial** | Two denial kinds — `ACCESS_POLICY` (SP2 refused) and `NO_PROVIDER_CAPABILITY` (SP2 allowed but no provider survives Tier 3 filter). `accessDecision` unmutated in the second case. |
 
 ### `writePcdIdentitySnapshot` algorithm
@@ -544,7 +599,14 @@ Step 2 — Tier 3 second line of defense.
       selectedCapability:          input.selectedCapability,
       tier3RulesApplied:           input.routingDecisionReason.tier3RulesApplied,
       editOverRegenerateRequired:  input.editOverRegenerateRequired,
-    })   // throws Tier3RoutingViolationError on violation
+    })
+    // Throws Tier3RoutingViolationError when selectedCapability lacks a flag
+    // for a recomputed-required rule.
+    // Throws Tier3RoutingMetadataMismatchError when tier3RulesApplied
+    // (forensic) does not exactly equal the recomputed required-rule set.
+    // Required-rule recompute uses pure predicates (rules 1, 2) plus the
+    // explicit editOverRegenerateRequired boolean (rule 3). It does NOT
+    // read tier3RulesApplied as enforcement input.
   }
 
 Step 3 — Pin version constants from imports (NOT from input).
@@ -564,7 +626,8 @@ Step 4 — Persist.
 
 | Property | Guarantee |
 |---|---|
-| **Tier 3 governance** | Writer rejects `effectiveTier === 3` writes that violate the rule predicates. Two lines of defense (router + writer) using the same predicate module. |
+| **Tier 3 governance** | Writer rejects `effectiveTier === 3` writes that violate the recomputed rule predicates. Two lines of defense (router + writer) using the same predicate module. |
+| **Forensic-vs-enforcement separation** | Writer derives required-rule set from pure recomputes + explicit `editOverRegenerateRequired` boolean. `tier3RulesApplied` is validated for exact-match consistency (set equality) but never used as enforcement input. Caller cannot suppress a violation by lying in `tier3RulesApplied`. |
 | **Version pinning — three from imports** | `policyVersion`, `providerCapabilityVersion`, `routerVersion` come from imports; caller cannot override. |
 | **Version pinning — one from input** | `shotSpecVersion` comes from input (SP3-stamped value carried forward). The writer must not re-import `PCD_SHOT_SPEC_VERSION` — re-importing would forensically misrepresent the spec version the job was actually planned under. Forbidden-imports test enforces. |
 | **Input validation** | Zod parse rejects malformed input deterministically. |
@@ -575,7 +638,8 @@ Step 4 — Persist.
 | Failure | Where | Behavior |
 |---|---|---|
 | Bad input shape | Writer Step 1 | `ZodError` propagates. |
-| Tier 3 violation | Writer Step 2 | `Tier3RoutingViolationError` (from `tier3-routing-rules.ts`) propagates. |
+| Tier 3 capability violation | Writer Step 2 | `Tier3RoutingViolationError` (from `tier3-routing-rules.ts`) propagates — selectedCapability missing a recomputed-required support flag. |
+| Tier 3 metadata mismatch | Writer Step 2 | `Tier3RoutingMetadataMismatchError` propagates — `tier3RulesApplied` does not equal the recomputed required-rule set. |
 | Empty matrix candidates after Tier 3 filter | Router Step 4 | Return `{ allowed: false, denialKind: "NO_PROVIDER_CAPABILITY", accessDecision }` with `accessDecision` unmutated; **does not throw**. Distinguished from `ACCESS_POLICY` denial. |
 | Tier-policy denial | Router Step 1 | Return `{ allowed: false, denialKind: "ACCESS_POLICY", accessDecision }`. Caller does not call provider; does not call writer. |
 | `campaignTakeStore` throws | Router Step 3 | Propagates. Treat as transient infrastructure error — caller's retry policy. |
@@ -602,11 +666,17 @@ Vitest, in-memory fakes, no DB, no network. Co-located tests for every new modul
 - **`requiresFirstLastFrameAnchor` truth table** over `(effectiveTier ∈ {1,2,3}, shotType ∈ all 9 values, outputIntent ∈ all 4 values)`. Hand-listed expected truth set in the test file — NOT imported from `tier3-routing-rules.ts` — to prevent the "test imports same wrong table" failure mode.
 - **`requiresPerformanceTransfer` truth table** over `(effectiveTier, shotType)`. `true` only for `(effectiveTier === 3, shotType === "talking_head")`.
 - **`requiresEditOverRegenerate` (async):** stub `campaignTakeStore` returns `true`/`false`; assert predicate honors store result only when `effectiveTier === 3`. At Tier 1/2 the predicate short-circuits; store is not consulted.
-- **`assertTier3RoutingDecisionCompliant`:**
+- **`assertTier3RoutingDecisionCompliant` — capability checks:**
   - Tier 1/2 input → returns void.
-  - Tier 3 + each rule applied + capability supports it → returns void.
-  - Tier 3 + each rule required + capability missing the support flag → throws `Tier3RoutingViolationError` (matrix of three rules).
+  - Tier 3 + each rule recomputed-required + capability supports it + `tier3RulesApplied` matches recompute → returns void.
+  - Tier 3 + each rule recomputed-required + capability missing the support flag → throws `Tier3RoutingViolationError` (matrix of three rules).
+- **`assertTier3RoutingDecisionCompliant` — forensic-vs-enforcement separation (the bypass closure):**
+  - Tier 3 + `editOverRegenerateRequired: true` + `tier3RulesApplied: []` (caller lies) + `supportsEditExtend: false` → throws `Tier3RoutingViolationError` (recompute identifies rule 3, finds support missing). Bypass via metadata-suppression is closed.
+  - Tier 3 + rule 1 recomputed-required + `tier3RulesApplied: []` + capability supports rule 1 → throws `Tier3RoutingMetadataMismatchError` (capability is fine but forensic record is wrong).
+  - Tier 3 + rule 1 NOT recomputed-required + `tier3RulesApplied: ["first_last_frame_anchor"]` → throws `Tier3RoutingMetadataMismatchError` (forensic claims a rule fired that was not required).
+  - `tier3RulesApplied` order-independence: `["first_last_frame_anchor", "performance_transfer"]` and `["performance_transfer", "first_last_frame_anchor"]` are both accepted when both rules are required.
 - **`Tier3RoutingViolationError` shape:** `name === "Tier3RoutingViolationError"`; `rule` and `provider` fields populated; `message` includes both.
+- **`Tier3RoutingMetadataMismatchError` shape:** `name === "Tier3RoutingMetadataMismatchError"`; `expected` and `actual` rule-set fields populated.
 - **Forbidden-imports check.**
 
 ### `provider-router.test.ts`
@@ -619,17 +689,18 @@ In-memory `campaignTakeStore` fake. No real matrix mutation; tests use the live 
 3. **Component-tier passthrough:** resolver supplies `(productTier=3, creatorTier=1)`; assert router passes `(avatarTier=1, productTier=3)` to `decidePcdGenerationAccess` and SP2's denial reflects the asymmetry.
 
 **Part B — Step 2/3 matrix filter.**
-4. Tier-2 + `simple_ugc` + `final_export` → first matching row selected.
-5. Tier-3 + `face_closeup` + `final_export` → only rows with `supportsFirstLastFrame === true` survive (rule 1).
-6. Tier-3 + `talking_head` + `preview` → only rows with `supportsPerformanceTransfer === true` survive (rule 2).
-7. Tier-3 + `simple_ugc` + `final_export`, `campaignTakeStore → true` → only rows with `supportsEditExtend === true` survive (rule 3).
-8. Tier-3 + `simple_ugc` + `final_export`, `campaignTakeStore → false` → rule 3 not applied; rule 1 still applies.
+4. Tier-2 + `simple_ugc` + `final_export` + `approvedCampaignContext: { kind: "none" }` → first matching row selected.
+5. Tier-3 + `face_closeup` + `final_export` + `{ kind: "none" }` → only rows with `supportsFirstLastFrame === true` survive (rule 1). `campaignTakeStore` not consulted.
+6. Tier-3 + `talking_head` + `preview` + `{ kind: "none" }` → only rows with `supportsPerformanceTransfer === true` survive (rule 2). `campaignTakeStore` not consulted.
+7. Tier-3 + `simple_ugc` + `final_export` + `{ kind: "campaign", … }`, `campaignTakeStore → true` → only rows with `supportsEditExtend === true` survive (rule 3). Asserts `campaignTakeStore.hasApprovedTier3TakeForCampaign` called exactly once.
+8. Tier-3 + `simple_ugc` + `final_export` + `{ kind: "campaign", … }`, `campaignTakeStore → false` → rule 3 not applied; rule 1 still applies.
+8a. Tier-3 + `simple_ugc` + `final_export` + `{ kind: "none" }` → rule 3 not applied; `campaignTakeStore` never called (asserted via fake recorder); rule 1 still applies.
 
 **Part C — Step 4 empty candidates.** Wrapped in `describe`/`beforeEach`/`afterEach` calling `vi.resetModules()` and `vi.restoreAllMocks()`.
 9. `vi.doMock("./provider-capability-matrix.js", …)` to provide a synthetic matrix where the rule-1-required Tier 3 face_closeup rows do not have `supportsFirstLastFrame`. Assert `{ allowed: false, denialKind: "NO_PROVIDER_CAPABILITY", accessDecision.allowed: true, candidatesAfterTier3Filter: 0 }`. Verifies `accessDecision` is unmutated (tier policy *did* allow the shot).
 
 **Part D — Decision reason shape.**
-10. Allowed Tier-2 case: `decisionReason.tier3RulesApplied === []`; `decisionReason.candidatesEvaluated >= 1`; `decisionReason.matchedTier === 2`; `decisionReason.capabilityRefIndex` indexes back to the selected row in the live matrix.
+10. Allowed Tier-2 case: `decisionReason.tier3RulesApplied === []`; `decisionReason.candidatesEvaluated >= 1`; `decisionReason.matchedEffectiveTier === 2`; `decisionReason.capabilityRefIndex` indexes back to the selected row in the live matrix.
 11. Allowed Tier-3 case: `tier3RulesApplied` contains exactly the rules the test setup triggered.
 12. `selectionRationale` is a non-empty string ≤200 chars.
 
@@ -639,7 +710,13 @@ In-memory `campaignTakeStore` fake. No real matrix mutation; tests use the live 
 **Part F — First-match-is-policy.** Wrapped in module-mock isolation block.
 14. `vi.doMock` with rows reordered: assert selected provider changes to match new first-match.
 
-**Part G — Forbidden imports.** Same regex set plus `./shot-spec-version.js`.
+**Part G — End-to-end matrix sufficiency (router + matrix agree).**
+For every `(shotType, outputIntent)` triple allowed at Tier 3 by SP2's policy:
+15. With `approvedCampaignContext: { kind: "none" }`: `routePcdShot` returns `{ allowed: true }` (rules 1 and 2 are satisfiable on the live matrix). Asserts router and matrix agree end-to-end on rule 1/2 sufficiency.
+16. With `approvedCampaignContext: { kind: "campaign", … }` and `campaignTakeStore → true`: `routePcdShot` returns `{ allowed: true }` (rule 1, optionally rule 2 for talking-head, AND rule 3 are simultaneously satisfiable on a single matrix row). Asserts the router can route every Tier-3-allowed shot under the most restrictive rule combination.
+17. With `approvedCampaignContext: { kind: "campaign", … }` and `campaignTakeStore → false`: `routePcdShot` returns `{ allowed: true }` (only rules 1/2 active; rule 3 not required).
+
+**Part H — Forbidden imports.** Same regex set plus `./shot-spec-version.js`.
 
 ### `pcd-identity-snapshot-writer.test.ts`
 
@@ -653,18 +730,20 @@ In-memory `pcdIdentitySnapshotStore` fake recording every `createForShot` call.
 
 **Part B — Tier 3 second-line-of-defense.**
 5. Tier-1 input → no Tier 3 assertion call. Snapshot persists.
-6. Tier-3 input with compliant `selectedCapability` and matching `tier3RulesApplied` → snapshot persists.
-7. Tier-3 input with rule 1 violation (`supportsFirstLastFrame === false` but rule 1 in `tier3RulesApplied`) → throws `Tier3RoutingViolationError`. **`createForShot` never called** — assert via fake's call recorder.
+6. Tier-3 input with compliant `selectedCapability` and `tier3RulesApplied` matching the recompute → snapshot persists.
+7. Tier-3 input with rule 1 recomputed-required + `supportsFirstLastFrame === false` → throws `Tier3RoutingViolationError`. **`createForShot` never called** — assert via fake's call recorder.
 8. Same for rule 2.
 9. Same for rule 3.
+10. **Bypass closure (the slice's strongest test):** Tier-3 input with `editOverRegenerateRequired: true`, `tier3RulesApplied: []` (caller suppresses forensic record), `selectedCapability.supportsEditExtend: false` → throws `Tier3RoutingViolationError`. The recompute path identifies rule 3, finds capability missing the flag, throws regardless of forensic claim.
+11. **Forensic mismatch:** Tier-3 input where `tier3RulesApplied` claims a rule that recompute did not require (or omits a rule recompute did require), but capability flags are otherwise consistent → throws `Tier3RoutingMetadataMismatchError`. `createForShot` never called.
 
 **Part C — Input validation.**
-10. Malformed input (missing `routingDecisionReason`) → `ZodError`. `createForShot` not called.
-11. `routingDecisionReason` with bad sub-shape (`selectionRationale > 200 chars`) → `ZodError`.
+12. Malformed input (missing `routingDecisionReason`) → `ZodError`. `createForShot` not called.
+13. `routingDecisionReason` with bad sub-shape (`selectionRationale > 200 chars`) → `ZodError`.
 
 **Part D — Persistence shape.**
-12. Happy path: `createForShot` called exactly once with payload containing all SP4 forensic fields non-NULL. Per-field assertions.
-13. Returned `PcdIdentitySnapshot` is the fake's response (writer doesn't transform).
+14. Happy path: `createForShot` called exactly once with payload containing all SP4 forensic fields non-NULL. Per-field assertions.
+15. Returned `PcdIdentitySnapshot` is the fake's response (writer doesn't transform).
 
 **Part E — Forbidden imports.** Includes `./shot-spec-version.js`.
 
@@ -672,9 +751,9 @@ In-memory `pcdIdentitySnapshotStore` fake recording every `createForShot` call.
 
 New `describe("SP4 additive contract deltas", ...)` block:
 
-14. Returns `productTier` and `creatorTier` in the full-attach path (derived from registry `qualityTier` mapping).
-15. No-op path performs two registry reads but zero `attachIdentityRefs` writes (revises Part A's existing assertion).
-16. No-op path returns current registry component tiers with originally-stamped `effectiveTier` (verifies the documented divergence semantic).
+16. Returns `productTier` and `creatorTier` in the full-attach path (derived from registry `qualityTier` mapping).
+17. No-op path performs two registry reads but zero `attachIdentityRefs` writes (revises Part A's existing assertion).
+18. No-op path returns current registry component tiers with originally-stamped `effectiveTier` (verifies the documented divergence semantic).
 
 ## Section 5 — Hard guardrails for implementation
 
@@ -767,6 +846,11 @@ MODIFIED:
 | Q-extension-1: Add `productTier` / `creatorTier` columns to `CreativeJob`? | **No.** Choose (a-ii) variant 3 — keep migration scoped to snapshot columns; no-op path re-fetches component tiers from registry stores. | Registry owns identity-tier truth. `CreativeJob` should not become a shadow cache of registry-derived fields. Two extra reads on a non-hot path is the cleaner trade. |
 | Section 3.1: Empty matrix candidates — fake tier-policy denial or distinguished? | **Distinguished.** Two `denialKind`s — `ACCESS_POLICY` and `NO_PROVIDER_CAPABILITY`. `accessDecision` unmutated in the second case. | Tier policy *allowed* the shot; provider routing failed because no provider satisfies required capability constraints. Different failure modes; do not collapse. |
 | Section 3.3: `shotSpecVersion` — re-import current or carry from input? | **Carry from input** (SP3-stamped). Writer must not import `PCD_SHOT_SPEC_VERSION`. | Snapshot must record the spec version the job was planned under, not the current value at write time. Re-importing creates forensic drift. Forbidden-imports test enforces. |
+| Review redline 1: should the writer enforce Tier 3 rules from `tier3RulesApplied`? | **No.** Enforcement derives required-rule set from pure recomputes (rules 1, 2) plus the explicit `editOverRegenerateRequired` boolean (rule 3). `tier3RulesApplied` is forensic metadata, validated for set equality only via `Tier3RoutingMetadataMismatchError`. | Forensic metadata is caller-controlled and can be falsified. Letting it drive enforcement creates a bypass. Recompute + explicit boolean closes the bypass; metadata mismatch is its own distinct error so forensic-record bugs don't masquerade as capability violations. |
+| Review redline 2: name `matchedTier`. | **Renamed to `matchedEffectiveTier`.** | SP4 carries three tier concepts (`productTier`, `creatorTier`, `effectiveTier`); matrix lookup is keyed by `effectiveTier`. The decision-reason field name should say so. |
+| Review redline 3: is `campaignId` always real? | **No.** Replaced flat `organizationId` + `campaignId` fields with explicit `ApprovedCampaignContext` discriminated union (`{ kind: "campaign", … } \| { kind: "none" }`). | Future non-campaign generation paths (drafts, internal previews, test harnesses) must not need to fabricate a `campaignId`. Under `kind: "none"`, rule 3 short-circuits to false and `campaignTakeStore` is not consulted. Semantically clean for "edit-over-regenerate within an approved-campaign context." |
+| Review redline 4: matrix coverage tests. | **Added Part G end-to-end matrix-router agreement tests.** | Independent matrix sufficiency tests proved each rule has a provider; the new tests prove the router actually returns `allowed: true` for every Tier-3-allowed triple under the most restrictive rule combination. Closes the gap where independent rules each have a provider but no single provider satisfies the union. |
+| Review redline 5: `candidatesAfterTier3Filter: 0` literal type. | **Widened to `number`.** | Literal numeric types compose poorly with helpers. The denial-branch invariant is preserved as a runtime test assertion (`expect(candidatesAfterTier3Filter).toBe(0)`), not a type-level constraint. |
 
 ## Architectural context
 
