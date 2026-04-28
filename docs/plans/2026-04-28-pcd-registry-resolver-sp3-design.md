@@ -444,8 +444,8 @@ This SP3 module sits at the **identity context resolver** position in the broade
 ```
 PCD job submitted
   → PcdRegistryResolver        ◀── SP3 (this slice)
+  → ShotSpecPlanner            (SP4; creates concrete shot/output)
   → PcdTierPolicy              (SP2; called downstream per shot/output)
-  → ShotSpecPlanner            (SP4)
   → ProviderRouter             (SP4)
   → execution → snapshot       (SP4)
   → QC                         (SP5)
