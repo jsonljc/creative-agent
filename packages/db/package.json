@@ -1,0 +1,33 @@
+{
+  "name": "@creativeagent/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    }
+  },
+  "scripts": {
+    "build": "pnpm run generate && tsc",
+    "typecheck": "tsc --noEmit",
+    "generate": "prisma generate",
+    "migrate": "prisma migrate dev",
+    "lint": "eslint src --ext .ts",
+    "test": "vitest run",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.3.0",
+    "@creativeagent/schemas": "workspace:*"
+  },
+  "devDependencies": {
+    "prisma": "^6.3.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}

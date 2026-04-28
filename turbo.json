@@ -1,0 +1,15 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalEnv": ["NODE_ENV", "DATABASE_URL"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"],
+      "env": ["DATABASE_URL"]
+    },
+    "lint": { "dependsOn": ["^build"] },
+    "test": { "dependsOn": ["^build"], "env": ["DATABASE_URL"] },
+    "typecheck": { "dependsOn": ["^build"] },
+    "clean": { "cache": false }
+  }
+}

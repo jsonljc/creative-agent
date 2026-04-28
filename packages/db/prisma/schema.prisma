@@ -1,0 +1,267 @@
+// CreativeAgent — PCD Identity Registry schema
+// Extracted from Switchboard SP1 (commit 05bc4655). When merging back, these
+// models reconcile against the corresponding Switchboard models. Field shapes
+// are preserved verbatim so the SP1 migrations apply without alteration.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Creative job (PCD-relevant subset of Switchboard's CreativeJob) ──
+model CreativeJob {
+  id              String   @id @default(cuid())
+  taskId          String   @unique
+  organizationId  String
+  deploymentId    String
+
+  productDescription  String
+  targetAudience      String
+  platforms           String[]
+  brandVoice          String?
+  productImages       String[]   @default([])
+  references          String[]   @default([])
+  pastPerformance     Json?
+  generateReferenceImages  Boolean  @default(false)
+
+  currentStage    String   @default("trends")
+  stageOutputs    Json     @default("{}")
+  stoppedAt       String?
+  productionTier  String?
+
+  // PCD identity registry (SP1)
+  productIdentityId           String?
+  productIdentity             ProductIdentity? @relation(fields: [productIdentityId], references: [id])
+  creatorIdentityId           String?
+  effectiveTier               Int?
+  allowedOutputTier           Int?
+  shotSpecVersion             String?
+  registryBackfilled          Boolean  @default(false)
+  fidelityTierAtGeneration    Int?
+
+  mode                    String   @default("polished")
+
+  ugcPhase                String?
+  ugcPhaseOutputs         Json?
+  ugcPhaseOutputsVersion  String?  @default("v1")
+  ugcConfig               Json?
+  ugcFailure              Json?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  assets AssetRecord[]
+
+  @@index([organizationId])
+  @@index([deploymentId])
+  @@index([mode])
+  @@index([productIdentityId])
+  @@index([creatorIdentityId])
+  @@index([registryBackfilled])
+}
+
+model CreatorIdentity {
+  id                  String   @id @default(cuid())
+  deploymentId        String
+  name                String
+
+  identityRefIds      String[]
+  heroImageAssetId    String
+  identityDescription String
+
+  identityObjects     Json?
+
+  voice               Json
+  personality         Json
+  appearanceRules     Json
+
+  environmentSet      String[]
+
+  approved            Boolean  @default(false)
+  isActive            Boolean  @default(true)
+  bibleVersion        String   @default("1.0")
+  previousVersionId   String?
+
+  qualityTier         String?
+  consentRecordId     String?
+  consentRecord       ConsentRecord? @relation(fields: [consentRecordId], references: [id])
+  identityAdapter     Json?
+
+  identitySnapshots   PcdIdentitySnapshot[]
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  assets              AssetRecord[]
+
+  @@index([deploymentId])
+  @@index([qualityTier])
+  @@index([consentRecordId])
+}
+
+model AssetRecord {
+  id                  String   @id @default(cuid())
+  jobId               String
+  job                 CreativeJob @relation(fields: [jobId], references: [id])
+  specId              String
+  creatorId           String?
+  creator             CreatorIdentity? @relation(fields: [creatorId], references: [id])
+
+  provider            String
+  modelId             String
+  modelVersion        String?
+  seed                Int?
+
+  inputHashes         Json
+  outputs             Json
+
+  qaMetrics           Json?
+  qaHistory           Json?
+
+  identityDriftScore  Float?
+  baselineAssetId     String?
+
+  latencyMs           Int?
+  costEstimate        Float?
+  attemptNumber       Int?
+
+  approvalState       String   @default("pending")
+  lockedDerivativeOf  String?
+
+  createdAt           DateTime @default(now())
+
+  identitySnapshot    PcdIdentitySnapshot?
+
+  @@unique([specId, attemptNumber, provider])
+  @@index([jobId])
+  @@index([specId])
+  @@index([creatorId])
+  @@index([approvalState])
+}
+
+// ── PCD Identity Registry (SP1) ──
+
+model ConsentRecord {
+  id            String    @id @default(cuid())
+  orgId         String
+  personName    String
+  scopeOfUse    String[]
+  territory     String[]
+  mediaTypes    String[]
+  revocable     Boolean   @default(true)
+  revoked       Boolean   @default(false)
+  recordingUri  String?
+  effectiveAt   DateTime
+  expiresAt     DateTime?
+  revokedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  creatorIdentities CreatorIdentity[]
+
+  @@index([orgId])
+  @@index([revoked])
+}
+
+model ProductIdentity {
+  id                    String   @id @default(cuid())
+  orgId                 String
+  sourceUrl             String?
+  title                 String
+  description           String?
+  brandName             String?
+  sku                   String?
+  packageType           String?
+  canonicalPackageText  String?
+  dimensionsMm          Json?
+  colorSpec             Json?
+  logoAssetId           String?
+  qualityTier           String   @default("url_imported")
+  lockStatus            String   @default("draft")
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  images                ProductImage[]
+  qcResults             ProductQcResult[]
+  creativeJobs          CreativeJob[]
+  identitySnapshots     PcdIdentitySnapshot[]
+
+  @@unique([orgId, title])
+  @@index([orgId])
+  @@index([qualityTier])
+  @@index([lockStatus])
+}
+
+model ProductImage {
+  id                     String          @id @default(cuid())
+  productIdentityId      String
+  productIdentity        ProductIdentity @relation(fields: [productIdentityId], references: [id], onDelete: Cascade)
+  viewType               String
+  uri                    String
+  resolution             Json?
+  hasReadableLabel       Boolean?
+  ocrText                String?
+  backgroundType         String?
+  approvedForGeneration  Boolean         @default(false)
+  createdAt              DateTime        @default(now())
+
+  @@index([productIdentityId])
+  @@index([viewType])
+}
+
+model ProductQcResult {
+  id                    String          @id @default(cuid())
+  productIdentityId     String
+  productIdentity       ProductIdentity @relation(fields: [productIdentityId], references: [id], onDelete: Cascade)
+  assetRecordId         String
+  logoSimilarityScore   Float?
+  packageOcrMatchScore  Float?
+  colorDeltaScore       Float?
+  geometryMatchScore    Float?
+  scaleConfidence       Float?
+  passFail              String
+  warnings              String[]
+  createdAt             DateTime        @default(now())
+
+  @@index([productIdentityId])
+  @@index([assetRecordId])
+  @@index([passFail])
+}
+
+model PcdIdentitySnapshot {
+  id                          String          @id @default(cuid())
+  assetRecordId               String          @unique
+  assetRecord                 AssetRecord     @relation(fields: [assetRecordId], references: [id], onDelete: Cascade)
+
+  productIdentityId           String
+  productIdentity             ProductIdentity @relation(fields: [productIdentityId], references: [id])
+  productTierAtGeneration     Int
+  productImageAssetIds        String[]
+  productCanonicalTextHash    String
+  productLogoAssetId          String?
+
+  creatorIdentityId           String
+  creatorIdentity             CreatorIdentity @relation(fields: [creatorIdentityId], references: [id])
+  avatarTierAtGeneration      Int
+  avatarReferenceAssetIds     String[]
+  voiceAssetId                String?
+  consentRecordId             String?
+
+  policyVersion               String
+  providerCapabilityVersion   String
+  selectedProvider            String
+  providerModelSnapshot       String
+  seedOrNoSeed                String
+  rewrittenPromptText         String?
+
+  createdAt                   DateTime        @default(now())
+
+  @@index([productIdentityId])
+  @@index([creatorIdentityId])
+  @@index([selectedProvider])
+}

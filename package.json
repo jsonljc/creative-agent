@@ -1,0 +1,21 @@
+{
+  "name": "creativeagent",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "typecheck": "turbo typecheck",
+    "clean": "turbo clean",
+    "db:generate": "pnpm --filter @creativeagent/db generate",
+    "db:migrate": "pnpm --filter @creativeagent/db migrate"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "prettier": "^3.3.0",
+    "turbo": "^2.3.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}
