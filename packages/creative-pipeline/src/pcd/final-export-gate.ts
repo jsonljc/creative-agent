@@ -135,6 +135,9 @@ export async function decidePcdFinalExportGate(
     refusalReasons.push("export_gate_closed");
   }
 
+  // MERGE-BACK: emit WorkTrace here. Applies to every decision return in this
+  // function (the asset_not_found early return at the top, and the collect-all
+  // return below). Wrap the call site at merge-back rather than duplicating.
   return {
     allowed: refusalReasons.length === 0,
     assetRecordId,

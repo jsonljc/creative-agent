@@ -68,9 +68,17 @@ export async function propagateConsentRevocation(
 
   const assetIds =
     await stores.consentRevocationStore.findAssetIdsByRevokedConsent(consentRecordId);
+  // MERGE-BACK: emit WorkTrace per asset flagged here. Iterate
+  // partition.newlyFlagged and emit one WorkTrace entry per id; do NOT emit
+  // for partition.alreadyFlagged (idempotent re-runs must not produce
+  // duplicate audit entries).
   const partition =
     await stores.consentRevocationStore.markAssetsConsentRevokedAfterGeneration(assetIds);
 
+  // MERGE-BACK: notification fan-out — Switchboard's three-channel notification
+  // system fires per affected campaign owner, derived from the AssetRecord
+  // rows in partition.newlyFlagged. Wire the dispatch here, after WorkTrace
+  // emission and before returning.
   return {
     consentRecordId,
     assetIdsFlagged: partition.newlyFlagged,

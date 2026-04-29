@@ -90,6 +90,10 @@ export async function decidePcdApprovalAdvancement(
   }
 
   // pass
+  // MERGE-BACK: emit WorkTrace here. Applies to every decision return in this
+  // function (asset_not_found, qc_result_not_found, qc_failed, qc_not_conclusive,
+  // and the pass-through below). Wrap the call site at merge-back rather than
+  // duplicating per-branch.
   return {
     allowed: true,
     assetRecordId,
