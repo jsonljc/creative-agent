@@ -203,3 +203,50 @@ export const PcdSp4IdentitySnapshotInputSchema = z.object({
   // pins them from imports; caller cannot override.
 });
 export type PcdSp4IdentitySnapshotInput = z.infer<typeof PcdSp4IdentitySnapshotInputSchema>;
+
+// SP5: QC gate schemas — gate keys, statuses, modes, verdicts, applicability
+
+export const PcdQcGateKeySchema = z.enum([
+  "face_similarity",
+  "logo_similarity",
+  "ocr_package_text",
+  "geometry_scale",
+]);
+export type PcdQcGateKey = z.infer<typeof PcdQcGateKeySchema>;
+
+export const PcdQcGateStatusSchema = z.enum(["pass", "warn", "fail", "skipped"]);
+export type PcdQcGateStatus = z.infer<typeof PcdQcGateStatusSchema>;
+
+export const PcdQcAggregateStatusSchema = z.enum(["pass", "warn", "fail"]);
+export type PcdQcAggregateStatus = z.infer<typeof PcdQcAggregateStatusSchema>;
+
+export const PcdQcGateModeSchema = z.enum(["block", "warn_only"]);
+export type PcdQcGateMode = z.infer<typeof PcdQcGateModeSchema>;
+
+export const PcdQcGateVerdictSchema = z.object({
+  gate: PcdQcGateKeySchema,
+  status: PcdQcGateStatusSchema,
+  score: z.number().optional(),
+  threshold: z.number().optional(),
+  reason: z.string().min(1),
+  // evidence is a small, non-PII, non-binary diagnostic bag. See design doc
+  // "Evidence bounds (binding)" — no raw OCR text, no embeddings, no image
+  // payloads, ≤2 KB JSON soft limit.
+  evidence: z.record(z.unknown()).optional(),
+});
+export type PcdQcGateVerdict = z.infer<typeof PcdQcGateVerdictSchema>;
+
+export const PcdQcGateVerdictsSchema = z.object({
+  gates: z.array(PcdQcGateVerdictSchema),
+  aggregateStatus: PcdQcAggregateStatusSchema,
+});
+export type PcdQcGateVerdicts = z.infer<typeof PcdQcGateVerdictsSchema>;
+
+export const PcdQcGateApplicabilitySchema = z.object({
+  shotType: PcdShotTypeSchema,
+  effectiveTier: IdentityTierSchema,
+  gate: PcdQcGateKeySchema,
+  mode: PcdQcGateModeSchema,
+  rationale: z.string().max(200).optional(),
+});
+export type PcdQcGateApplicability = z.infer<typeof PcdQcGateApplicabilitySchema>;
