@@ -137,6 +137,10 @@ model AssetRecord {
 
   approvalState       String   @default("pending")
   lockedDerivativeOf  String?
+  // SP6: flagged true by propagateConsentRevocation when ConsentRecord linked
+  // via PcdIdentitySnapshot.consentRecordId is revoked. Non-null with default
+  // false; historical rows are well-defined without backfill.
+  consentRevokedAfterGeneration  Boolean  @default(false)
 
   createdAt           DateTime @default(now())
 
