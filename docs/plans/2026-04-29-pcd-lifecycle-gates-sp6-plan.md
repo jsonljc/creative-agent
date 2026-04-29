@@ -4194,7 +4194,7 @@ Return the PR URL.
 gh pr view --json url,title,number
 ```
 
-Expected: PR #5 (numbering sequential after SP1–SP5 PRs #1–#4) with the title above.
+Expected: PR created successfully with the SP6 title. **Record the actual PR number and URL from `gh pr view`** — GitHub PR numbering is not a design invariant; do not assume a specific number.
 
 ---
 
