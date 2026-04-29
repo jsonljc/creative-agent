@@ -296,12 +296,9 @@ export const PcdSp5QcLedgerInputSchema = z
     passFail: z.enum(["pass", "fail", "warn"]),
     warnings: z.array(z.string()),
   })
-  .refine(
-    (v) => !v.gatesRan.includes("face_similarity") || v.creatorIdentityId !== null,
-    {
-      message: "creatorIdentityId required when face_similarity gate ran",
-    },
-  )
+  .refine((v) => !v.gatesRan.includes("face_similarity") || v.creatorIdentityId !== null, {
+    message: "creatorIdentityId required when face_similarity gate ran",
+  })
   .refine(
     (v) =>
       v.gatesRan.length === v.gateVerdicts.gates.length &&

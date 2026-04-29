@@ -485,10 +485,7 @@ describe("evaluatePcdQcResult — determinism", () => {
 });
 
 describe("evaluatePcdQcResult — anti-pattern grep", () => {
-  const src = readFileSync(
-    new URL("./qc-evaluator.ts", import.meta.url).pathname,
-    "utf-8",
-  );
+  const src = readFileSync(new URL("./qc-evaluator.ts", import.meta.url).pathname, "utf-8");
   // Strip comment lines so grep tests only see live code.
   const codeOnly = src
     .split("\n")
@@ -524,10 +521,7 @@ describe("evaluatePcdQcResult — anti-pattern grep", () => {
 
 describe("evaluatePcdQcResult — no SP6 leakage", () => {
   it("evaluator source does not reference SP6 consent / revocation concepts", () => {
-    const src = readFileSync(
-      new URL("./qc-evaluator.ts", import.meta.url).pathname,
-      "utf-8",
-    );
+    const src = readFileSync(new URL("./qc-evaluator.ts", import.meta.url).pathname, "utf-8");
     expect(src).not.toMatch(/consent/i);
     expect(src).not.toMatch(/revoc/i);
     expect(src).not.toMatch(/meta_draft/i);
@@ -536,10 +530,7 @@ describe("evaluatePcdQcResult — no SP6 leakage", () => {
 
 describe("evaluatePcdQcResult — forbidden imports", () => {
   it("evaluator does not import from outside the PCD scope (no Switchboard-only modules)", () => {
-    const src = readFileSync(
-      new URL("./qc-evaluator.ts", import.meta.url).pathname,
-      "utf-8",
-    );
+    const src = readFileSync(new URL("./qc-evaluator.ts", import.meta.url).pathname, "utf-8");
     // No imports from workspace packages other than @creativeagent/schemas and
     // relative ./  imports inside creative-pipeline.
     expect(src).not.toMatch(/@creativeagent\/db/);
