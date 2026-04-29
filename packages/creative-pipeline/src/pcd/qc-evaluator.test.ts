@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import type {
   PcdIdentitySnapshot,
@@ -245,5 +246,305 @@ describe("evaluatePcdQcResult — provider-error obeys mode", () => {
     expect(calls[0].faceSimilarityScore).toBeNull();
     expect(calls[0].gateVerdicts.gates[0]?.status).toBe("warn");
     expect(calls[0].gateVerdicts.gates[0]?.reason).toMatch(/provider error.*boom/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T15 — Hard-block invariant, persistence shape, determinism, anti-pattern
+//        grep, no-SP6 leakage, forbidden imports.
+// ---------------------------------------------------------------------------
+
+describe("evaluatePcdQcResult — hard-block invariant", () => {
+  it("block mode + fail → row.passFail is fail (hard-block is enforced)", async () => {
+    const { providers, scoreFaceSimilarity } = makeProviders();
+    // Score below threshold triggers fail; face_closeup+tier3 is mode:block
+    scoreFaceSimilarity.mockResolvedValue({ score: 0.3 });
+    const { store, calls } = makeStore();
+
+    const row = await evaluatePcdQcResult(
+      {
+        assetRecordId: "asset_1",
+        shotType: "face_closeup",
+        effectiveTier: 3 as const,
+        identitySnapshot: makeSnapshot(),
+        productLogoAssetId: null,
+        productCanonicalText: null,
+        productDimensionsMm: null,
+      },
+      providers,
+      { qcLedgerStore: store },
+    );
+
+    expect(calls[0].passFail).toBe("fail");
+    expect(row.passFail).toBe("fail");
+  });
+
+  it("block mode + pass → row.passFail is pass (block mode does not affect passing scores)", async () => {
+    const { providers } = makeProviders(); // default score: 0.9, above threshold 0.78
+    const { store, calls } = makeStore();
+
+    const row = await evaluatePcdQcResult(
+      {
+        assetRecordId: "asset_1",
+        shotType: "face_closeup",
+        effectiveTier: 3 as const,
+        identitySnapshot: makeSnapshot(),
+        productLogoAssetId: null,
+        productCanonicalText: null,
+        productDimensionsMm: null,
+      },
+      providers,
+      { qcLedgerStore: store },
+    );
+
+    expect(calls[0].passFail).toBe("pass");
+    expect(row.passFail).toBe("pass");
+  });
+});
+
+describe("evaluatePcdQcResult — persistence shape", () => {
+  it("createForAsset is called exactly once per evaluation", async () => {
+    const { providers } = makeProviders();
+    const { store, calls } = makeStore();
+
+    await evaluatePcdQcResult(
+      {
+        assetRecordId: "asset_1",
+        shotType: "face_closeup",
+        effectiveTier: 3 as const,
+        identitySnapshot: makeSnapshot(),
+        productLogoAssetId: null,
+        productCanonicalText: null,
+        productDimensionsMm: null,
+      },
+      providers,
+      { qcLedgerStore: store },
+    );
+
+    expect(calls.length).toBe(1);
+  });
+
+  it("pcdIdentitySnapshotId matches snapshot.id", async () => {
+    const { providers } = makeProviders();
+    const { store, calls } = makeStore();
+    const snap = makeSnapshot({ id: "snap_xyz" });
+
+    await evaluatePcdQcResult(
+      {
+        assetRecordId: "asset_1",
+        shotType: "face_closeup",
+        effectiveTier: 3 as const,
+        identitySnapshot: snap,
+        productLogoAssetId: null,
+        productCanonicalText: null,
+        productDimensionsMm: null,
+      },
+      providers,
+      { qcLedgerStore: store },
+    );
+
+    expect(calls[0].pcdIdentitySnapshotId).toBe("snap_xyz");
+  });
+
+  it("version pins match imported constants", async () => {
+    const { providers } = makeProviders();
+    const { store, calls } = makeStore();
+
+    await evaluatePcdQcResult(
+      {
+        assetRecordId: "asset_1",
+        shotType: "face_closeup",
+        effectiveTier: 3 as const,
+        identitySnapshot: makeSnapshot(),
+        productLogoAssetId: null,
+        productCanonicalText: null,
+        productDimensionsMm: null,
+      },
+      providers,
+      { qcLedgerStore: store },
+    );
+
+    expect(calls[0].qcEvaluationVersion).toBe("pcd-qc-evaluation@1.0.0");
+    expect(calls[0].qcGateMatrixVersion).toBe("pcd-qc-gate-matrix@1.0.0");
+  });
+
+  it("passFail is derived from gateVerdicts.aggregateStatus", async () => {
+    const { providers } = makeProviders(); // pass verdict
+    const { store, calls } = makeStore();
+
+    await evaluatePcdQcResult(
+      {
+        assetRecordId: "asset_1",
+        shotType: "face_closeup",
+        effectiveTier: 3 as const,
+        identitySnapshot: makeSnapshot(),
+        productLogoAssetId: null,
+        productCanonicalText: null,
+        productDimensionsMm: null,
+      },
+      providers,
+      { qcLedgerStore: store },
+    );
+
+    expect(calls[0].passFail).toBe(calls[0].gateVerdicts.aggregateStatus);
+  });
+
+  it("gatesRan equals gateVerdicts.gates[*].gate in the same order", async () => {
+    const { providers } = makeProviders();
+    const { store, calls } = makeStore();
+
+    await evaluatePcdQcResult(
+      {
+        assetRecordId: "asset_1",
+        shotType: "face_closeup",
+        effectiveTier: 3 as const,
+        identitySnapshot: makeSnapshot(),
+        productLogoAssetId: null,
+        productCanonicalText: null,
+        productDimensionsMm: null,
+      },
+      providers,
+      { qcLedgerStore: store },
+    );
+
+    const { gatesRan, gateVerdicts } = calls[0];
+    expect(gatesRan).toEqual(gateVerdicts.gates.map((g) => g.gate));
+  });
+
+  it("creatorIdentityId is null when face gate did not run", async () => {
+    const { providers } = makeProviders();
+    const { store, calls } = makeStore();
+
+    // Tier 1: no gates run at all
+    await evaluatePcdQcResult(
+      {
+        assetRecordId: "asset_1",
+        shotType: "simple_ugc",
+        effectiveTier: 1 as const,
+        identitySnapshot: makeSnapshot(),
+        productLogoAssetId: null,
+        productCanonicalText: null,
+        productDimensionsMm: null,
+      },
+      providers,
+      { qcLedgerStore: store },
+    );
+
+    expect(calls[0].creatorIdentityId).toBeNull();
+  });
+
+  it("returned row is the store's response (fakeRow shape round-trips)", async () => {
+    const { providers } = makeProviders();
+    const { store } = makeStore();
+
+    const row = await evaluatePcdQcResult(
+      {
+        assetRecordId: "asset_1",
+        shotType: "face_closeup",
+        effectiveTier: 3 as const,
+        identitySnapshot: makeSnapshot(),
+        productLogoAssetId: null,
+        productCanonicalText: null,
+        productDimensionsMm: null,
+      },
+      providers,
+      { qcLedgerStore: store },
+    );
+
+    // fakeRow always sets id to "qc_row_1"
+    expect(row.id).toBe("qc_row_1");
+    expect(row.passFail).toBeDefined();
+  });
+});
+
+describe("evaluatePcdQcResult — determinism", () => {
+  it("two calls with identical inputs produce deep-equal payloads to the store", async () => {
+    const { providers: p1 } = makeProviders();
+    const { providers: p2 } = makeProviders();
+    const { store: s1, calls: c1 } = makeStore();
+    const { store: s2, calls: c2 } = makeStore();
+
+    const inputA = {
+      assetRecordId: "asset_det",
+      shotType: "face_closeup" as const,
+      effectiveTier: 3 as const,
+      identitySnapshot: makeSnapshot({ id: "snap_det" }),
+      productLogoAssetId: null,
+      productCanonicalText: null,
+      productDimensionsMm: null,
+    };
+    const inputB = { ...inputA };
+
+    await evaluatePcdQcResult(inputA, p1, { qcLedgerStore: s1 });
+    await evaluatePcdQcResult(inputB, p2, { qcLedgerStore: s2 });
+
+    // Strip createdAt from the compared payload (it's set by fakeRow, not evaluator)
+    const strip = (ledger: PcdSp5QcLedgerInput) => ledger;
+    expect(strip(c1[0])).toEqual(strip(c2[0]));
+  });
+});
+
+describe("evaluatePcdQcResult — anti-pattern grep", () => {
+  const src = readFileSync(
+    new URL("./qc-evaluator.ts", import.meta.url).pathname,
+    "utf-8",
+  );
+  // Strip comment lines so grep tests only see live code.
+  const codeOnly = src
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("//"))
+    .join("\n");
+
+  it("zero `if (row.gate ===` outside the switch (gate dispatch uses switch, not if-chains)", () => {
+    // The switch(row.gate) in runGate is the single allowed dispatch; no
+    // if-chain fallback should exist.
+    expect(codeOnly).not.toMatch(/if\s*\(\s*row\.gate\s*===/);
+  });
+
+  it("zero `if (gate ===` — gate key dispatch must go through switch or verdictByGate", () => {
+    expect(codeOnly).not.toMatch(/if\s*\(\s*gate\s*===/);
+  });
+
+  it("zero `if (input.shotType ===` — shotType dispatch is owned by the matrix, not the evaluator", () => {
+    expect(codeOnly).not.toMatch(/if\s*\(\s*input\.shotType\s*===/);
+  });
+
+  it("zero `if (input.effectiveTier ===` — tier dispatch is owned by the matrix, not the evaluator", () => {
+    expect(codeOnly).not.toMatch(/if\s*\(\s*input\.effectiveTier\s*===/);
+  });
+
+  it("zero `if (effectiveTier ===` — destructured form also forbidden in evaluator", () => {
+    expect(codeOnly).not.toMatch(/if\s*\(\s*effectiveTier\s*===/);
+  });
+
+  it("zero `if (shotType ===` — destructured form also forbidden in evaluator", () => {
+    expect(codeOnly).not.toMatch(/if\s*\(\s*shotType\s*===/);
+  });
+});
+
+describe("evaluatePcdQcResult — no SP6 leakage", () => {
+  it("evaluator source does not reference SP6 consent / revocation concepts", () => {
+    const src = readFileSync(
+      new URL("./qc-evaluator.ts", import.meta.url).pathname,
+      "utf-8",
+    );
+    expect(src).not.toMatch(/consent/i);
+    expect(src).not.toMatch(/revoc/i);
+    expect(src).not.toMatch(/meta_draft/i);
+  });
+});
+
+describe("evaluatePcdQcResult — forbidden imports", () => {
+  it("evaluator does not import from outside the PCD scope (no Switchboard-only modules)", () => {
+    const src = readFileSync(
+      new URL("./qc-evaluator.ts", import.meta.url).pathname,
+      "utf-8",
+    );
+    // No imports from workspace packages other than @creativeagent/schemas and
+    // relative ./  imports inside creative-pipeline.
+    expect(src).not.toMatch(/@creativeagent\/db/);
+    expect(src).not.toMatch(/@switchboard\//);
+    expect(src).not.toMatch(/WorkTrace/);
+    expect(src).not.toMatch(/PlatformIngress/);
   });
 });
