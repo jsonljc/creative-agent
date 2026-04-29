@@ -267,3 +267,47 @@ export const PcdQcGateApplicabilitySchema = z.object({
   rationale: z.string().max(200).optional(),
 });
 export type PcdQcGateApplicability = z.infer<typeof PcdQcGateApplicabilitySchema>;
+
+export const PcdSp5QcLedgerInputSchema = z
+  .object({
+    // Identity-side (required)
+    assetRecordId: z.string(),
+    productIdentityId: z.string(),
+    pcdIdentitySnapshotId: z.string(),
+    creatorIdentityId: z.string().nullable(),
+
+    // Forensic version pins (REQUIRED, evaluator-pinned from imports)
+    qcEvaluationVersion: z.string(),
+    qcGateMatrixVersion: z.string(),
+
+    // Gate result fields (REQUIRED)
+    gateVerdicts: PcdQcGateVerdictsSchema,
+    gatesRan: z.array(PcdQcGateKeySchema),
+
+    // Per-gate scalar scores (nullable when gate skipped or not run)
+    faceSimilarityScore: z.number().min(0).max(1).nullable(),
+    logoSimilarityScore: z.number().min(0).max(1).nullable(),
+    packageOcrMatchScore: z.number().min(0).max(1).nullable(),
+    geometryMatchScore: z.number().min(0).max(1).nullable(),
+    scaleConfidence: z.number().min(0).max(1).nullable(),
+    colorDeltaScore: z.number().min(0).nullable(),
+
+    // Aggregate (derived from gateVerdicts.aggregateStatus)
+    passFail: z.enum(["pass", "fail", "warn"]),
+    warnings: z.array(z.string()),
+  })
+  .refine(
+    (v) =>
+      !v.gatesRan.includes("face_similarity") ||
+      (v.creatorIdentityId !== null && v.faceSimilarityScore !== null),
+    {
+      message: "creatorIdentityId and faceSimilarityScore required when face_similarity gate ran",
+    },
+  )
+  .refine(
+    (v) =>
+      v.gatesRan.length === v.gateVerdicts.gates.length &&
+      v.gatesRan.every((g, i) => g === v.gateVerdicts.gates[i]!.gate),
+    { message: "gatesRan must equal gateVerdicts.gates[*].gate (same order)" },
+  );
+export type PcdSp5QcLedgerInput = z.infer<typeof PcdSp5QcLedgerInputSchema>;

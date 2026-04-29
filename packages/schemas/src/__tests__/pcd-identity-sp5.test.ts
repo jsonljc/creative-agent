@@ -8,6 +8,7 @@ import {
   PcdQcGateVerdictsSchema,
   PcdQcGateApplicabilitySchema,
   ProductQcResultSchema,
+  PcdSp5QcLedgerInputSchema,
 } from "../pcd-identity.js";
 
 describe("SP5 enum schemas", () => {
@@ -213,5 +214,153 @@ describe("SP5 ProductQcResultSchema widening", () => {
     expect(row.faceSimilarityScore).toBe(0.91);
     expect(row.gatesRan).toEqual(["face_similarity"]);
     expect(row.qcGateMatrixVersion).toBe("pcd-qc-gate-matrix@1.0.0");
+  });
+});
+
+describe("PcdSp5QcLedgerInputSchema", () => {
+  const happy = () => ({
+    assetRecordId: "asset_1",
+    productIdentityId: "prod_1",
+    pcdIdentitySnapshotId: "snap_1",
+    creatorIdentityId: null,
+    qcEvaluationVersion: "pcd-qc-evaluation@1.0.0",
+    qcGateMatrixVersion: "pcd-qc-gate-matrix@1.0.0",
+    gateVerdicts: { gates: [], aggregateStatus: "warn" as const },
+    gatesRan: [] as (
+      | "face_similarity"
+      | "logo_similarity"
+      | "ocr_package_text"
+      | "geometry_scale"
+    )[],
+    faceSimilarityScore: null,
+    logoSimilarityScore: null,
+    packageOcrMatchScore: null,
+    geometryMatchScore: null,
+    scaleConfidence: null,
+    colorDeltaScore: null,
+    passFail: "warn" as const,
+    warnings: [] as string[],
+  });
+
+  it("accepts happy-path input", () => {
+    expect(() => PcdSp5QcLedgerInputSchema.parse(happy())).not.toThrow();
+  });
+
+  it("rejects missing pcdIdentitySnapshotId", () => {
+    const bad: any = happy();
+    delete bad.pcdIdentitySnapshotId;
+    expect(() => PcdSp5QcLedgerInputSchema.parse(bad)).toThrow();
+  });
+
+  it("rejects missing qcEvaluationVersion", () => {
+    const bad: any = happy();
+    delete bad.qcEvaluationVersion;
+    expect(() => PcdSp5QcLedgerInputSchema.parse(bad)).toThrow();
+  });
+
+  it("rejects missing qcGateMatrixVersion", () => {
+    const bad: any = happy();
+    delete bad.qcGateMatrixVersion;
+    expect(() => PcdSp5QcLedgerInputSchema.parse(bad)).toThrow();
+  });
+
+  it("rejects missing gateVerdicts", () => {
+    const bad: any = happy();
+    delete bad.gateVerdicts;
+    expect(() => PcdSp5QcLedgerInputSchema.parse(bad)).toThrow();
+  });
+
+  it("rejects missing gatesRan", () => {
+    const bad: any = happy();
+    delete bad.gatesRan;
+    expect(() => PcdSp5QcLedgerInputSchema.parse(bad)).toThrow();
+  });
+});
+
+describe("PcdSp5QcLedgerInputSchema refines", () => {
+  const happy = () => ({
+    assetRecordId: "asset_1",
+    productIdentityId: "prod_1",
+    pcdIdentitySnapshotId: "snap_1",
+    creatorIdentityId: null,
+    qcEvaluationVersion: "pcd-qc-evaluation@1.0.0",
+    qcGateMatrixVersion: "pcd-qc-gate-matrix@1.0.0",
+    gateVerdicts: { gates: [], aggregateStatus: "warn" as const },
+    gatesRan: [] as (
+      | "face_similarity"
+      | "logo_similarity"
+      | "ocr_package_text"
+      | "geometry_scale"
+    )[],
+    faceSimilarityScore: null,
+    logoSimilarityScore: null,
+    packageOcrMatchScore: null,
+    geometryMatchScore: null,
+    scaleConfidence: null,
+    colorDeltaScore: null,
+    passFail: "warn" as const,
+    warnings: [] as string[],
+  });
+
+  it("rejects face in gatesRan + creatorIdentityId null", () => {
+    const bad = happy();
+    bad.gatesRan = ["face_similarity"];
+    bad.gateVerdicts = {
+      gates: [
+        { gate: "face_similarity", status: "pass", score: 0.9, threshold: 0.78, reason: "ok" },
+      ],
+      aggregateStatus: "pass",
+    };
+    bad.creatorIdentityId = null;
+    bad.faceSimilarityScore = 0.9;
+    expect(() => PcdSp5QcLedgerInputSchema.parse(bad)).toThrow(
+      /creatorIdentityId and faceSimilarityScore required/,
+    );
+  });
+
+  it("rejects face in gatesRan + faceSimilarityScore null", () => {
+    const bad = happy();
+    bad.gatesRan = ["face_similarity"];
+    bad.gateVerdicts = {
+      gates: [
+        { gate: "face_similarity", status: "pass", score: 0.9, threshold: 0.78, reason: "ok" },
+      ],
+      aggregateStatus: "pass",
+    };
+    bad.creatorIdentityId = "creator_1";
+    bad.faceSimilarityScore = null;
+    expect(() => PcdSp5QcLedgerInputSchema.parse(bad)).toThrow(
+      /creatorIdentityId and faceSimilarityScore required/,
+    );
+  });
+
+  it("rejects gatesRan order != gateVerdicts.gates order", () => {
+    const bad = happy();
+    bad.gatesRan = ["logo_similarity", "face_similarity"];
+    bad.gateVerdicts = {
+      gates: [
+        { gate: "face_similarity", status: "pass", score: 0.9, threshold: 0.78, reason: "ok" },
+        { gate: "logo_similarity", status: "pass", score: 0.9, threshold: 0.7, reason: "ok" },
+      ],
+      aggregateStatus: "pass",
+    };
+    bad.creatorIdentityId = "creator_1";
+    bad.faceSimilarityScore = 0.9;
+    expect(() => PcdSp5QcLedgerInputSchema.parse(bad)).toThrow(/same order/);
+  });
+
+  it("accepts face in gatesRan + creatorIdentityId + faceSimilarityScore present", () => {
+    const ok = happy();
+    ok.gatesRan = ["face_similarity"];
+    ok.gateVerdicts = {
+      gates: [
+        { gate: "face_similarity", status: "pass", score: 0.9, threshold: 0.78, reason: "ok" },
+      ],
+      aggregateStatus: "pass",
+    };
+    ok.creatorIdentityId = "creator_1";
+    ok.faceSimilarityScore = 0.9;
+    ok.passFail = "pass";
+    expect(() => PcdSp5QcLedgerInputSchema.parse(ok)).not.toThrow();
   });
 });
