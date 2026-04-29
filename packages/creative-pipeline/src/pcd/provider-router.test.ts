@@ -25,8 +25,8 @@ function makeContext(overrides: Partial<ResolvedPcdContext> = {}): ResolvedPcdCo
   return {
     productIdentityId: "p-1",
     creatorIdentityId: "c-1",
-    productTier: 2,
-    creatorTier: 2,
+    productTierAtResolution: 2,
+    creatorTierAtResolution: 2,
     effectiveTier: 2,
     allowedOutputTier: 2,
     shotSpecVersion: PCD_SHOT_SPEC_VERSION,
@@ -78,8 +78,8 @@ describe("routePcdShot — Part A: access-policy gate", () => {
     const result = await routePcdShot(
       {
         resolvedContext: makeContext({
-          productTier: 1,
-          creatorTier: 1,
+          productTierAtResolution: 1,
+          creatorTierAtResolution: 1,
           effectiveTier: 1,
           allowedOutputTier: 1,
         }),
@@ -102,8 +102,8 @@ describe("routePcdShot — Part A: access-policy gate", () => {
     const result = await routePcdShot(
       {
         resolvedContext: makeContext({
-          productTier: 1,
-          creatorTier: 1,
+          productTierAtResolution: 1,
+          creatorTierAtResolution: 1,
           effectiveTier: 1,
           allowedOutputTier: 1,
         }),
@@ -116,7 +116,7 @@ describe("routePcdShot — Part A: access-policy gate", () => {
     expect(result.allowed).toBe(true);
   });
 
-  it("component-tier passthrough: (productTier=3, creatorTier=1) maps to (productTier=3, avatarTier=1) for SP2 policy", async () => {
+  it("stamped component-tier passthrough: (productTierAtResolution=3, creatorTierAtResolution=1) maps to (productTier=3, avatarTier=1) for SP2 policy", async () => {
     const log = { calls: 0 };
     const stores: ProviderRouterStores = {
       campaignTakeStore: makeCampaignTakeStore(false, log),
@@ -124,8 +124,8 @@ describe("routePcdShot — Part A: access-policy gate", () => {
     const result = await routePcdShot(
       {
         resolvedContext: makeContext({
-          productTier: 3,
-          creatorTier: 1,
+          productTierAtResolution: 3,
+          creatorTierAtResolution: 1,
           effectiveTier: 1, // min
           allowedOutputTier: 1,
         }),
@@ -156,8 +156,8 @@ describe("routePcdShot — Part B: matrix filter + Tier 3 rules", () => {
     const result = await routePcdShot(
       {
         resolvedContext: makeContext({
-          productTier: 2,
-          creatorTier: 2,
+          productTierAtResolution: 2,
+          creatorTierAtResolution: 2,
           effectiveTier: 2,
           allowedOutputTier: 2,
         }),
@@ -184,8 +184,8 @@ describe("routePcdShot — Part B: matrix filter + Tier 3 rules", () => {
     const result = await routePcdShot(
       {
         resolvedContext: makeContext({
-          productTier: 3,
-          creatorTier: 3,
+          productTierAtResolution: 3,
+          creatorTierAtResolution: 3,
           effectiveTier: 3,
           allowedOutputTier: 3,
         }),
@@ -211,8 +211,8 @@ describe("routePcdShot — Part B: matrix filter + Tier 3 rules", () => {
     const result = await routePcdShot(
       {
         resolvedContext: makeContext({
-          productTier: 3,
-          creatorTier: 3,
+          productTierAtResolution: 3,
+          creatorTierAtResolution: 3,
           effectiveTier: 3,
           allowedOutputTier: 3,
         }),
@@ -240,8 +240,8 @@ describe("routePcdShot — Part B: matrix filter + Tier 3 rules", () => {
     const result = await routePcdShot(
       {
         resolvedContext: makeContext({
-          productTier: 3,
-          creatorTier: 3,
+          productTierAtResolution: 3,
+          creatorTierAtResolution: 3,
           effectiveTier: 3,
           allowedOutputTier: 3,
         }),
@@ -267,8 +267,8 @@ describe("routePcdShot — Part B: matrix filter + Tier 3 rules", () => {
     const result = await routePcdShot(
       {
         resolvedContext: makeContext({
-          productTier: 3,
-          creatorTier: 3,
+          productTierAtResolution: 3,
+          creatorTierAtResolution: 3,
           effectiveTier: 3,
           allowedOutputTier: 3,
         }),
@@ -291,8 +291,8 @@ describe("routePcdShot — Part B: matrix filter + Tier 3 rules", () => {
     const result = await routePcdShot(
       {
         resolvedContext: makeContext({
-          productTier: 3,
-          creatorTier: 3,
+          productTierAtResolution: 3,
+          creatorTierAtResolution: 3,
           effectiveTier: 3,
           allowedOutputTier: 3,
         }),
@@ -344,8 +344,8 @@ describe("routePcdShot — Part C: empty candidates (NO_PROVIDER_CAPABILITY)", (
     const result = await routePcdShotFresh(
       {
         resolvedContext: makeContext({
-          productTier: 3,
-          creatorTier: 3,
+          productTierAtResolution: 3,
+          creatorTierAtResolution: 3,
           effectiveTier: 3,
           allowedOutputTier: 3,
         }),
@@ -376,8 +376,8 @@ describe("routePcdShot — Part D: decision reason shape", () => {
     const result = await routePcdShot(
       {
         resolvedContext: makeContext({
-          productTier: 2,
-          creatorTier: 2,
+          productTierAtResolution: 2,
+          creatorTierAtResolution: 2,
           effectiveTier: 2,
           allowedOutputTier: 2,
         }),
@@ -428,8 +428,8 @@ describe("routePcdShot — Part E: determinism", () => {
     };
     const input: RoutePcdShotInput = {
       resolvedContext: makeContext({
-        productTier: 3,
-        creatorTier: 3,
+        productTierAtResolution: 3,
+        creatorTierAtResolution: 3,
         effectiveTier: 3,
         allowedOutputTier: 3,
       }),
@@ -472,7 +472,7 @@ describe("routePcdShot — Part F: first-match is policy", () => {
     const log = { calls: 0 };
     const r1 = await route1(
       {
-        resolvedContext: makeContext({ effectiveTier: 2, productTier: 2, creatorTier: 2, allowedOutputTier: 2 }),
+        resolvedContext: makeContext({ effectiveTier: 2, productTierAtResolution: 2, creatorTierAtResolution: 2, allowedOutputTier: 2 }),
         shotType: "simple_ugc",
         outputIntent: "final_export",
         approvedCampaignContext: NO_CAMPAIGN,
@@ -488,7 +488,7 @@ describe("routePcdShot — Part F: first-match is policy", () => {
     const { routePcdShot: route2 } = await import("./provider-router.js");
     const r2 = await route2(
       {
-        resolvedContext: makeContext({ effectiveTier: 2, productTier: 2, creatorTier: 2, allowedOutputTier: 2 }),
+        resolvedContext: makeContext({ effectiveTier: 2, productTierAtResolution: 2, creatorTierAtResolution: 2, allowedOutputTier: 2 }),
         shotType: "simple_ugc",
         outputIntent: "final_export",
         approvedCampaignContext: NO_CAMPAIGN,
@@ -545,8 +545,8 @@ describe("routePcdShot — Part G: end-to-end matrix-router agreement (Tier 3)",
       const result = await routePcdShot(
         {
           resolvedContext: makeContext({
-            productTier: 3,
-            creatorTier: 3,
+            productTierAtResolution: 3,
+            creatorTierAtResolution: 3,
             effectiveTier: 3,
             allowedOutputTier: 3,
           }),
@@ -570,8 +570,8 @@ describe("routePcdShot — Part G: end-to-end matrix-router agreement (Tier 3)",
       const result = await routePcdShot(
         {
           resolvedContext: makeContext({
-            productTier: 3,
-            creatorTier: 3,
+            productTierAtResolution: 3,
+            creatorTierAtResolution: 3,
             effectiveTier: 3,
             allowedOutputTier: 3,
           }),
@@ -595,8 +595,8 @@ describe("routePcdShot — Part G: end-to-end matrix-router agreement (Tier 3)",
       const result = await routePcdShot(
         {
           resolvedContext: makeContext({
-            productTier: 3,
-            creatorTier: 3,
+            productTierAtResolution: 3,
+            creatorTierAtResolution: 3,
             effectiveTier: 3,
             allowedOutputTier: 3,
           }),
@@ -609,6 +609,75 @@ describe("routePcdShot — Part G: end-to-end matrix-router agreement (Tier 3)",
       expect(result.allowed).toBe(true);
     },
   );
+});
+
+describe("regression — stamped-world authority (non-negotiable)", () => {
+  it("R1 — registry re-tiered after stamping does not change routing for an already-stamped job", async () => {
+    // Two consecutive routePcdShot calls with the SAME stamped context.
+    // The fakes for productStore / creatorStore are configured to throw
+    // if called — proving the router never reads them. If a future
+    // contributor re-introduces a current-registry tier read inside the
+    // router, this test fails.
+    const log = { calls: 0 };
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log),
+    };
+    const stampedContext = makeContext({
+      productTierAtResolution: 3,
+      creatorTierAtResolution: 3,
+      effectiveTier: 3,
+      allowedOutputTier: 3,
+    });
+
+    const r1 = await routePcdShot(
+      {
+        resolvedContext: stampedContext,
+        shotType: "talking_head",
+        outputIntent: "final_export",
+        approvedCampaignContext: NO_CAMPAIGN,
+      },
+      stores,
+    );
+    const r2 = await routePcdShot(
+      {
+        resolvedContext: stampedContext,
+        shotType: "talking_head",
+        outputIntent: "final_export",
+        approvedCampaignContext: NO_CAMPAIGN,
+      },
+      stores,
+    );
+    expect(r1).toEqual(r2);
+  });
+
+  it("R2 — SP2 gate receives stamped component tiers, not any current value", async () => {
+    const log = { calls: 0 };
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log),
+    };
+    // Compute SP2's expected decision from STAMPED tier inputs.
+    const expectedAccessDecision = decidePcdGenerationAccess({
+      avatarTier: 1,
+      productTier: 3,
+      shotType: "simple_ugc",
+      outputIntent: "final_export",
+    });
+    const result = await routePcdShot(
+      {
+        resolvedContext: makeContext({
+          productTierAtResolution: 3,
+          creatorTierAtResolution: 1,
+          effectiveTier: 1,
+          allowedOutputTier: 1,
+        }),
+        shotType: "simple_ugc",
+        outputIntent: "final_export",
+        approvedCampaignContext: NO_CAMPAIGN,
+      },
+      stores,
+    );
+    expect(result.accessDecision).toEqual(expectedAccessDecision);
+  });
 });
 
 describe("Forbidden imports in provider-router.ts", () => {
