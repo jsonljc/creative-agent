@@ -9,6 +9,7 @@ export function deepFreeze<T>(obj: T): T {
   if (Array.isArray(o)) {
     for (const item of o) deepFreeze(item);
   } else {
+    // Symbol-keyed properties intentionally excluded — out of scope for SP8.
     for (const key of Object.keys(o)) deepFreeze(o[key]);
   }
   return Object.freeze(obj);
