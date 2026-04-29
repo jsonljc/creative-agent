@@ -238,3 +238,118 @@ describe("HooksStageOutputSchema", () => {
     expect(HooksStageOutputSchema.safeParse({ hooks: [rest] }).success).toBe(false);
   });
 });
+
+import {
+  CreatorScriptSchema,
+  CreatorScriptsStageOutputSchema,
+} from "../pcd-preproduction.js";
+
+describe("CreatorScriptSchema", () => {
+  const baseFields = {
+    id: "script-1",
+    hookText: "Still losing WhatsApp leads after running ads?",
+    creatorAngle: "founder explaining the hidden leak",
+    visualBeats: ["show inbox", "show instant reply", "show booking"],
+    productMoment: "Lead → reply → booking",
+    cta: "Try Switchboard",
+    complianceNotes: [],
+    identityConstraints: {
+      creatorIdentityId: "creator-1",
+      productIdentityId: "product-1",
+      voiceId: null,
+    },
+    parentHookId: "hook-1",
+  };
+
+  it("accepts a spoken_lines script", () => {
+    expect(
+      CreatorScriptSchema.safeParse({
+        ...baseFields,
+        scriptStyle: "spoken_lines",
+        spokenLines: ["Most businesses don't lose leads because the ads are bad."],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("accepts a talking_points script", () => {
+    expect(
+      CreatorScriptSchema.safeParse({
+        ...baseFields,
+        scriptStyle: "talking_points",
+        talkingPoints: ["Slow reply kills leads.", "Switchboard auto-replies."],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects a script with both spokenLines and talkingPoints", () => {
+    expect(
+      CreatorScriptSchema.safeParse({
+        ...baseFields,
+        scriptStyle: "spoken_lines",
+        spokenLines: ["x"],
+        talkingPoints: ["y"],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a script with neither spokenLines nor talkingPoints", () => {
+    expect(
+      CreatorScriptSchema.safeParse({
+        ...baseFields,
+        scriptStyle: "spoken_lines",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a script with empty spokenLines list", () => {
+    expect(
+      CreatorScriptSchema.safeParse({
+        ...baseFields,
+        scriptStyle: "spoken_lines",
+        spokenLines: [],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("requires parentHookId", () => {
+    const { parentHookId: _p, ...rest } = baseFields;
+    expect(
+      CreatorScriptSchema.safeParse({
+        ...rest,
+        scriptStyle: "spoken_lines",
+        spokenLines: ["x"],
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("CreatorScriptsStageOutputSchema", () => {
+  it("accepts length-1 scripts list", () => {
+    const valid = {
+      scripts: [
+        {
+          id: "script-1",
+          hookText: "x",
+          creatorAngle: "y",
+          visualBeats: [],
+          productMoment: "z",
+          cta: "w",
+          complianceNotes: [],
+          identityConstraints: {
+            creatorIdentityId: "c1",
+            productIdentityId: "p1",
+            voiceId: null,
+          },
+          parentHookId: "h1",
+          scriptStyle: "talking_points" as const,
+          talkingPoints: ["a"],
+        },
+      ],
+    };
+    expect(CreatorScriptsStageOutputSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it("rejects empty scripts list", () => {
+    expect(CreatorScriptsStageOutputSchema.safeParse({ scripts: [] }).success).toBe(false);
+  });
+});

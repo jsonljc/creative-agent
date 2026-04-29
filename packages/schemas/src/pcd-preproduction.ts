@@ -135,3 +135,43 @@ export const HooksStageOutputSchema = z.object({
   hooks: z.array(HookSchema).min(1),
 });
 export type HooksStageOutput = z.infer<typeof HooksStageOutputSchema>;
+
+export const CreatorScriptIdentityConstraintsSchema = z.object({
+  creatorIdentityId: z.string().min(1),
+  productIdentityId: z.string().min(1),
+  voiceId: z.string().nullable(),
+});
+export type CreatorScriptIdentityConstraints = z.infer<
+  typeof CreatorScriptIdentityConstraintsSchema
+>;
+
+const CreatorScriptBaseShape = z.object({
+  id: z.string().min(1),
+  hookText: z.string().min(1),
+  creatorAngle: z.string(),
+  visualBeats: z.array(z.string()),
+  productMoment: z.string(),
+  cta: z.string(),
+  complianceNotes: z.array(z.string()),
+  identityConstraints: CreatorScriptIdentityConstraintsSchema,
+  parentHookId: z.string().min(1),
+});
+
+// Discriminated union: exactly one of spokenLines OR talkingPoints. Per the
+// SP7 design Q10 lock — neither both nor neither is valid.
+export const CreatorScriptSchema = z.discriminatedUnion("scriptStyle", [
+  CreatorScriptBaseShape.extend({
+    scriptStyle: z.literal("spoken_lines"),
+    spokenLines: z.array(z.string()).min(1),
+  }).strict(),
+  CreatorScriptBaseShape.extend({
+    scriptStyle: z.literal("talking_points"),
+    talkingPoints: z.array(z.string()).min(1),
+  }).strict(),
+]);
+export type CreatorScript = z.infer<typeof CreatorScriptSchema>;
+
+export const CreatorScriptsStageOutputSchema = z.object({
+  scripts: z.array(CreatorScriptSchema).min(1),
+});
+export type CreatorScriptsStageOutput = z.infer<typeof CreatorScriptsStageOutputSchema>;
