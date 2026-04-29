@@ -27,6 +27,10 @@ describe("SP5 enum schemas", () => {
     }
   });
 
+  it("PcdQcGateStatus rejects unknown values", () => {
+    expect(() => PcdQcGateStatusSchema.parse("unknown_status")).toThrow();
+  });
+
   it("PcdQcAggregateStatus rejects 'skipped'", () => {
     expect(() => PcdQcAggregateStatusSchema.parse("skipped")).toThrow();
   });
@@ -79,6 +83,23 @@ describe("SP5 verdict + applicability schemas", () => {
     expect(vs.aggregateStatus).toBe("warn");
   });
 
+  it("PcdQcGateVerdicts rejects empty gates with aggregateStatus='pass' (skipped never aggregates to pass)", () => {
+    expect(() =>
+      PcdQcGateVerdictsSchema.parse({
+        gates: [],
+        aggregateStatus: "pass",
+      }),
+    ).toThrow();
+  });
+
+  it("PcdQcGateVerdicts accepts empty gates with aggregateStatus='warn'", () => {
+    const vs = PcdQcGateVerdictsSchema.parse({
+      gates: [],
+      aggregateStatus: "warn",
+    });
+    expect(vs.aggregateStatus).toBe("warn");
+  });
+
   it("PcdQcGateApplicability requires shotType, effectiveTier, gate, mode", () => {
     const a = PcdQcGateApplicabilitySchema.parse({
       shotType: "label_closeup",
@@ -88,5 +109,42 @@ describe("SP5 verdict + applicability schemas", () => {
       rationale: "Tier 3 hard-blocks on OCR mismatch",
     });
     expect(a.mode).toBe("block");
+  });
+});
+
+describe("PcdQcGateApplicabilitySchema rejection paths", () => {
+  const valid = () => ({
+    shotType: "label_closeup" as const,
+    effectiveTier: 3 as const,
+    gate: "ocr_package_text" as const,
+    mode: "block" as const,
+  });
+
+  it("rejects unknown shotType", () => {
+    expect(() =>
+      PcdQcGateApplicabilitySchema.parse({ ...valid(), shotType: "unknown_shot" }),
+    ).toThrow();
+  });
+
+  it("rejects effectiveTier outside 1/2/3", () => {
+    expect(() => PcdQcGateApplicabilitySchema.parse({ ...valid(), effectiveTier: 4 })).toThrow();
+    expect(() => PcdQcGateApplicabilitySchema.parse({ ...valid(), effectiveTier: 0 })).toThrow();
+  });
+
+  it("rejects unknown gate", () => {
+    expect(() => PcdQcGateApplicabilitySchema.parse({ ...valid(), gate: "color_delta" })).toThrow();
+  });
+
+  it("rejects unknown mode", () => {
+    expect(() => PcdQcGateApplicabilitySchema.parse({ ...valid(), mode: "skip" })).toThrow();
+  });
+
+  it("rejects rationale exceeding 200 chars", () => {
+    expect(() =>
+      PcdQcGateApplicabilitySchema.parse({
+        ...valid(),
+        rationale: "x".repeat(201),
+      }),
+    ).toThrow();
   });
 });

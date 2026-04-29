@@ -236,10 +236,14 @@ export const PcdQcGateVerdictSchema = z.object({
 });
 export type PcdQcGateVerdict = z.infer<typeof PcdQcGateVerdictSchema>;
 
-export const PcdQcGateVerdictsSchema = z.object({
-  gates: z.array(PcdQcGateVerdictSchema),
-  aggregateStatus: PcdQcAggregateStatusSchema,
-});
+export const PcdQcGateVerdictsSchema = z
+  .object({
+    gates: z.array(PcdQcGateVerdictSchema),
+    aggregateStatus: PcdQcAggregateStatusSchema,
+  })
+  .refine((v) => !(v.gates.length === 0 && v.aggregateStatus === "pass"), {
+    message: "aggregateStatus cannot be 'pass' when no gates ran",
+  });
 export type PcdQcGateVerdicts = z.infer<typeof PcdQcGateVerdictsSchema>;
 
 export const PcdQcGateApplicabilitySchema = z.object({
