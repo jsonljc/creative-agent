@@ -81,10 +81,12 @@ export async function routePcdShot(
 ): Promise<PcdRoutingDecision> {
   const { resolvedContext, shotType, outputIntent, approvedCampaignContext } = input;
 
-  // Step 1 — Tier policy gate.
+  // Step 1 — Tier policy gate (single stamped tier world).
+  // Both component tiers come from resolution-time stamps. The router
+  // never reads current registry tier state.
   const accessDecision = decidePcdGenerationAccess({
-    avatarTier: resolvedContext.creatorTier,
-    productTier: resolvedContext.productTier,
+    avatarTier: resolvedContext.creatorTierAtResolution,
+    productTier: resolvedContext.productTierAtResolution,
     shotType,
     outputIntent,
   });
