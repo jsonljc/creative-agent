@@ -101,15 +101,26 @@ function isIdentityTier(v: unknown): v is IdentityTier {
   return v === 1 || v === 2 || v === 3;
 }
 
-function isResolvedPcdJob(j: PcdResolvableJob): j is ResolvedPcdResolvableJob {
+/** True iff the original SP3 5-core fields (IDs + effectiveTier +
+ *  allowedOutputTier + current shotSpecVersion) are all valid. Does NOT
+ *  check the SP4-amend stamped tier fields — that's the asymmetry the
+ *  no-op vs malformed-guard path exploits.
+ */
+function hasFiveFieldCore(j: PcdResolvableJob): boolean {
   return (
     typeof j.productIdentityId === "string" &&
     typeof j.creatorIdentityId === "string" &&
-    isIdentityTier(j.productTierAtResolution) &&
-    isIdentityTier(j.creatorTierAtResolution) &&
     isIdentityTier(j.effectiveTier) &&
     isIdentityTier(j.allowedOutputTier) &&
     j.shotSpecVersion === PCD_SHOT_SPEC_VERSION
+  );
+}
+
+function isResolvedPcdJob(j: PcdResolvableJob): j is ResolvedPcdResolvableJob {
+  return (
+    hasFiveFieldCore(j) &&
+    isIdentityTier(j.productTierAtResolution) &&
+    isIdentityTier(j.creatorTierAtResolution)
   );
 }
 
@@ -197,16 +208,13 @@ export async function resolvePcdRegistryContext(
 }
 
 function assertResolvedJobHasStampedComponentTiers(job: PcdResolvableJob): void {
-  // Only triggers when the original 5-field core is present at the
-  // current shotSpecVersion (signals "claims to be resolved") but the
-  // stamped component tiers are missing.
-  const claimsResolvedCore =
-    typeof job.productIdentityId === "string" &&
-    typeof job.creatorIdentityId === "string" &&
-    isIdentityTier(job.effectiveTier) &&
-    isIdentityTier(job.allowedOutputTier) &&
-    job.shotSpecVersion === PCD_SHOT_SPEC_VERSION;
-  if (!claimsResolvedCore) return;
+  // Only triggers when the original 5-core is present at the current
+  // shotSpecVersion (signals "claims to be resolved") but the stamped
+  // component tiers are missing. The asymmetry vs isResolvedPcdJob is
+  // intentional: isResolvedPcdJob requires both stamped + core; this
+  // helper catches the (core valid AND stamped invalid) intersection
+  // that the no-op path leaves behind.
+  if (!hasFiveFieldCore(job)) return;
 
   if (!isIdentityTier(job.productTierAtResolution)) {
     throw new InvariantViolationError(job.id, "productTierAtResolution");

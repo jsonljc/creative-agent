@@ -612,12 +612,15 @@ describe("routePcdShot — Part G: end-to-end matrix-router agreement (Tier 3)",
 });
 
 describe("regression — stamped-world authority (non-negotiable)", () => {
-  it("R1 — registry re-tiered after stamping does not change routing for an already-stamped job", async () => {
-    // Two consecutive routePcdShot calls with the SAME stamped context.
-    // The fakes for productStore / creatorStore are configured to throw
-    // if called — proving the router never reads them. If a future
-    // contributor re-introduces a current-registry tier read inside the
-    // router, this test fails.
+  it("R1 — routing is deterministic for a fixed stamped context (no dependence on registry-side state)", async () => {
+    // Two consecutive routePcdShot calls with the SAME stamped context
+    // must return deep-equal decisions. The router signature itself does
+    // not accept any identity store (only campaignTakeStore), and the
+    // "no identity-store imports" forbidden-imports test enforces that
+    // structurally. R1 closes the loop at runtime: even given access to
+    // the same campaignTakeStore output, two calls with identical stamped
+    // context produce identical decisions — meaning routing is a pure
+    // function of the stamped tier world.
     const log = { calls: 0 };
     const stores: ProviderRouterStores = {
       campaignTakeStore: makeCampaignTakeStore(false, log),
@@ -700,5 +703,20 @@ describe("Forbidden imports in provider-router.ts", () => {
     const src = readFileSync(join(here, "provider-router.ts"), "utf8");
     expect(src).not.toMatch(/===\s*["'](kling|runway|heygen|sora|veo|openai_text)["']/);
     expect(src).not.toMatch(/!==\s*["'](kling|runway|heygen|sora|veo|openai_text)["']/);
+  });
+
+  it("does not import any identity store (no productStore / creatorStore / RegistryResolverStores / findOrCreateForJob references)", () => {
+    // Structural assertion: routePcdShot's signature only takes
+    // campaignTakeStore. To make accidental dual-authority routing
+    // structurally impossible, the router source must never reference
+    // identity-store identifiers. This is the structural counterpart to
+    // R1's deterministic-routing assertion.
+    const here = dirname(fileURLToPath(import.meta.url));
+    const src = readFileSync(join(here, "provider-router.ts"), "utf8");
+    expect(src).not.toMatch(/productStore/);
+    expect(src).not.toMatch(/creatorStore/);
+    expect(src).not.toMatch(/RegistryResolverStores/);
+    expect(src).not.toMatch(/findOrCreateForJob/);
+    expect(src).not.toMatch(/findOrCreateStockForDeployment/);
   });
 });
