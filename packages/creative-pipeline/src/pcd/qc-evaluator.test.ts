@@ -89,7 +89,9 @@ describe("evaluatePcdQcResult — Tier 1 (zero matrix rows, zero providers calle
         assetRecordId: "asset_1",
         shotType: "simple_ugc",
         effectiveTier: 1,
-        identitySnapshot: makeSnapshot({ avatarTierAtGeneration: 1, productTierAtGeneration: 1 }),
+        // Snapshot tier fields don't govern gate selection — input.effectiveTier does.
+        // Default snapshot (Tier 3 fields) is fine here.
+        identitySnapshot: makeSnapshot(),
         productLogoAssetId: "logo_1",
         productCanonicalText: "Acme Hot Sauce 8oz",
         productDimensionsMm: { h: 100, w: 50, d: 30 },

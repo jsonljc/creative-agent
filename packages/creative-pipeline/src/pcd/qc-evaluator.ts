@@ -124,10 +124,8 @@ export async function evaluatePcdQcResult(
   const logoVerdict = verdictByGate(moded, "logo_similarity");
   const ocrVerdict = verdictByGate(moded, "ocr_package_text");
   const geomVerdict = verdictByGate(moded, "geometry_scale");
-  const geomScaleConfidence =
-    typeof geomVerdict?.evidence?.scaleConfidence === "number"
-      ? (geomVerdict.evidence.scaleConfidence as number)
-      : null;
+  const rawScaleConf = geomVerdict?.evidence?.["scaleConfidence"];
+  const geomScaleConfidence = typeof rawScaleConf === "number" ? rawScaleConf : null;
 
   const ledgerInput = PcdSp5QcLedgerInputSchema.parse({
     assetRecordId: input.assetRecordId,
