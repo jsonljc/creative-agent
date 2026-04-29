@@ -25,3 +25,12 @@ export { PrismaPcdIdentitySnapshotStore } from "./stores/prisma-pcd-identity-sna
 export type { CreatePcdIdentitySnapshotInput } from "./stores/prisma-pcd-identity-snapshot-store.js";
 export { PrismaCreatorIdentityStore } from "./stores/prisma-creator-identity-store.js";
 export { PrismaCreativeJobStore } from "./stores/prisma-creative-job-store.js";
+
+// SP6: lifecycle store + reader adapters
+export { PrismaConsentRevocationStore } from "./stores/prisma-consent-revocation-store.js";
+export { PrismaAssetRecordReader } from "./stores/prisma-asset-record-reader.js";
+export { PrismaProductQcResultReader } from "./stores/prisma-product-qc-result-reader.js";
+export { PrismaPcdIdentitySnapshotReader } from "./stores/prisma-pcd-identity-snapshot-reader.js";
+export { PrismaConsentRecordReader } from "./stores/prisma-consent-record-reader.js";
+export { PrismaCreativeJobReader } from "./stores/prisma-creative-job-reader.js";
+export { PrismaCreatorIdentityReader } from "./stores/prisma-creator-identity-reader.js";

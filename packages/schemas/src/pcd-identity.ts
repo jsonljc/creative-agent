@@ -306,3 +306,67 @@ export const PcdSp5QcLedgerInputSchema = z
     { message: "gatesRan must equal gateVerdicts.gates[*].gate (same order)" },
   );
 export type PcdSp5QcLedgerInput = z.infer<typeof PcdSp5QcLedgerInputSchema>;
+
+// SP6: lifecycle-gate refusal reasons. Enum-only — no free-text payloads echo
+// user input. See docs/plans/2026-04-29-pcd-lifecycle-gates-sp6-design.md.
+export const PcdLifecycleRefusalReasonSchema = z.enum([
+  "qc_failed", // ProductQcResult.passFail === "fail"
+  "qc_not_conclusive", // ProductQcResult.passFail === "warn" (SP5 binding)
+  "qc_result_not_found", // SP5 invariant: every PCD asset has a QC row
+  "approval_not_granted", // AssetRecord.approvalState !== "approved"
+  "tier_insufficient", // CreativeJob.effectiveTier < required (or null)
+  "export_gate_closed", // ExportGateState.isOpen returned { open: false }
+  "consent_revoked", // ConsentRecord.revoked === true
+  "compliance_check_failed", // ComplianceCheck returned { pass: false }
+  "asset_not_found", // AssetRecord row missing
+  "snapshot_not_found", // PcdIdentitySnapshot row missing for asset
+  "creator_identity_not_found", // CreatorIdentity row missing
+  "creative_job_not_found", // CreativeJob row missing for asset's jobId
+]);
+export type PcdLifecycleRefusalReason = z.infer<typeof PcdLifecycleRefusalReasonSchema>;
+
+export const PcdApprovalAdvancementDecisionSchema = z.object({
+  allowed: z.boolean(),
+  assetRecordId: z.string(),
+  currentApprovalState: z.string(),
+  proposedApprovalState: z.enum(["approved", "rejected"]),
+  qcPassFail: z.enum(["pass", "fail", "warn"]).nullable(),
+  refusalReasons: z.array(PcdLifecycleRefusalReasonSchema),
+  approvalLifecycleVersion: z.string(),
+});
+export type PcdApprovalAdvancementDecision = z.infer<typeof PcdApprovalAdvancementDecisionSchema>;
+
+export const PcdFinalExportDecisionSchema = z.object({
+  allowed: z.boolean(),
+  assetRecordId: z.string(),
+  effectiveTier: IdentityTierSchema.nullable(),
+  approvalState: z.string().nullable(),
+  qcPassFail: z.enum(["pass", "fail", "warn"]).nullable(),
+  exportGateOpen: z.boolean(),
+  consentRevoked: z.boolean(),
+  refusalReasons: z.array(PcdLifecycleRefusalReasonSchema),
+  approvalLifecycleVersion: z.string(),
+});
+export type PcdFinalExportDecision = z.infer<typeof PcdFinalExportDecisionSchema>;
+
+export const PcdMetaDraftDecisionSchema = z.object({
+  allowed: z.boolean(),
+  assetRecordId: z.string(),
+  effectiveTier: IdentityTierSchema.nullable(),
+  approvalState: z.string().nullable(),
+  complianceCheckPassed: z.boolean(),
+  consentRevoked: z.boolean(),
+  refusalReasons: z.array(PcdLifecycleRefusalReasonSchema),
+  approvalLifecycleVersion: z.string(),
+});
+export type PcdMetaDraftDecision = z.infer<typeof PcdMetaDraftDecisionSchema>;
+
+export const PcdConsentRevocationPropagationResultSchema = z.object({
+  consentRecordId: z.string(),
+  assetIdsFlagged: z.array(z.string()),
+  assetIdsAlreadyFlagged: z.array(z.string()),
+  consentRevocationVersion: z.string(),
+});
+export type PcdConsentRevocationPropagationResult = z.infer<
+  typeof PcdConsentRevocationPropagationResultSchema
+>;
