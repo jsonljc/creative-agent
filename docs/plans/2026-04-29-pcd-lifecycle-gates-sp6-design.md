@@ -133,6 +133,15 @@ packages/schemas/src/pcd-identity.ts
 - Each gate's decision struct carries the version constant pinned from imports — caller cannot override.
 - Refusal reasons are an enum, not a free-text field. PII bounds: refusal-reason payloads never echo user input.
 
+### Type-boundary normalization (effectiveTier)
+
+`IdentityTierSchema` is the numeric union `1 | 2 | 3` (z.union of literal numbers, not a string-like enum — verified in `packages/schemas/src/pcd-identity.ts:3`). Reader interfaces return `effectiveTier: number | null` because the underlying Prisma column is nullable `Int`. SP6 normalizes once at each gate boundary:
+
+- If `effectiveTier === null` → record `tier_insufficient` refusal (and pass `null` through to `ComplianceCheckInput.effectiveTier`).
+- If `effectiveTier !== null` → validate via `IdentityTierSchema.safeParse(effectiveTier)`. Failure → throw `InvariantViolationError("effectiveTier out of range", { jobId, value: effectiveTier })`. Success → use the parsed `IdentityTier` value for the numeric `<` comparison and pass it forward.
+
+The decision-struct `effectiveTier: IdentityTierSchema.nullable()` is satisfied by the normalized value. No drift between reader output and decision payload.
+
 ## Schema additions
 
 ### Prisma migration (additive, single commit with schema change)
@@ -147,7 +156,7 @@ model AssetRecord {
 }
 ```
 
-- Nullable-equivalent (defaults to `false` so historical rows are well-defined).
+- **Non-null `Boolean @default(false)`** — not nullable, not optional. Historical rows are well-defined without backfill because the default applies on add-column.
 - No backfill job required: every existing asset reads as not-flagged. Propagation is the only writer.
 - No FK loosening, no rename, no follow-up migration.
 
@@ -280,7 +289,7 @@ async function decidePcdFinalExportGate(
 2. Read `CreativeJob` by `AssetRecord.jobId`. Missing → `["creative_job_not_found"]`.
 3. Read `ProductQcResult` by `assetRecordId`. Missing → reason `qc_result_not_found`. Otherwise read `passFail`.
 4. Read `PcdIdentitySnapshot` by `assetRecordId`. May be null for non-PCD historical assets (snapshot is SP4+). When null, `consentRevoked = false`.
-5. If snapshot exists and `snapshot.consentRecordId !== null`, read `ConsentRecord` and check `revoked`.
+5. If snapshot exists and `snapshot.consentRecordId !== null`, read `ConsentRecord`. **If the lookup returns null, throw `InvariantViolationError("consent record referenced by snapshot does not exist", { assetRecordId, consentRecordId })`** — this is corrupted state, not a normal refusal condition. Otherwise check `revoked`.
 6. Call `exportGateState.isOpen(assetRecordId)`.
 7. Compute refusal reasons (collect all, ordered by severity):
    - `effectiveTier < requiredTier` → `tier_insufficient`
@@ -321,8 +330,8 @@ async function decidePcdMetaDraftGate(
 
 1. Read `AssetRecord`. Missing → `["asset_not_found"]`.
 2. Read `CreativeJob`. Missing → `["creative_job_not_found"]`.
-3. Read `PcdIdentitySnapshot`; check consent if present.
-4. **Always invoke `complianceCheck.checkMetaDraftCompliance({ assetRecordId, shotType, effectiveTier })`** — even when other refusal reasons are already present. The Meta-draft gate genuinely calls the interface; the call is not invisible theater. This preserves the merge-back seam: when Switchboard's real FTC-disclosure check ships, the gate already routes through it.
+3. Read `PcdIdentitySnapshot`; if present and `snapshot.consentRecordId !== null`, read `ConsentRecord`. **Missing consent record on a snapshot that references one → throw `InvariantViolationError("consent record referenced by snapshot does not exist", { assetRecordId, consentRecordId })`** (corrupted state, not a refusal).
+4. **Always invoke `complianceCheck.checkMetaDraftCompliance({ assetRecordId, shotType, effectiveTier })`** — even when other refusal reasons are already present, including when `effectiveTier === null`. The Meta-draft gate genuinely calls the interface; the call is not invisible theater. This preserves the merge-back seam: when Switchboard's real FTC-disclosure check ships, the gate already routes through it.
 5. Compute refusal reasons:
    - `effectiveTier < 2` → `tier_insufficient`
    - `approvalState !== "approved"` → `approval_not_granted`
@@ -451,7 +460,11 @@ Future FTC-disclosure / Meta-draft compliance review seam.
 export type ComplianceCheckInput = {
   assetRecordId: string;
   shotType: PcdShotType;
-  effectiveTier: IdentityTier;
+  // Widened to allow null because the Meta-draft gate must call ComplianceCheck
+  // even when CreativeJob.effectiveTier is null (preserves the merge-back seam).
+  // Real implementers may treat null as a refusal reason; the in-tree
+  // AlwaysPassComplianceCheck ignores tier entirely.
+  effectiveTier: IdentityTier | null;
   // Future merge-back fields: scriptClaimsPath, testimonialFlags, voiceConsentRecordId, ...
 };
 
@@ -483,6 +496,9 @@ export interface ConsentRevocationStore {
    * the supplied consentRecordId. Implementation: JOIN AssetRecord with
    * PcdIdentitySnapshot on AssetRecord.id = PcdIdentitySnapshot.assetRecordId
    * WHERE PcdIdentitySnapshot.consentRecordId = $1.
+   *
+   * **Returned ids are sorted ascending** for deterministic decision payloads
+   * and stable idempotency tests.
    */
   findAssetIdsByRevokedConsent(consentRecordId: string): Promise<string[]>;
 
@@ -490,6 +506,9 @@ export interface ConsentRevocationStore {
    * Atomically flips AssetRecord.consentRevokedAfterGeneration to true for the
    * supplied ids where it is currently false. Returns the ids whose value
    * changed (newly flagged). Ids already true are not in the return.
+   *
+   * **Both `newlyFlagged` and `alreadyFlagged` are sorted ascending** for
+   * deterministic decision payloads and stable idempotency tests.
    */
   markAssetsConsentRevokedAfterGeneration(
     assetRecordIds: string[],
@@ -500,13 +519,14 @@ export interface ConsentRevocationStore {
 Concrete `PrismaConsentRevocationStore` in `packages/db/src/stores/prisma-consent-revocation-store.ts` uses two Prisma queries:
 
 ```ts
-// findAssetIdsByRevokedConsent
-prisma.pcdIdentitySnapshot.findMany({
+// findAssetIdsByRevokedConsent — sorted ascending for determinism
+const ids = await prisma.pcdIdentitySnapshot.findMany({
   where: { consentRecordId },
   select: { assetRecordId: true },
 }).then(rows => rows.map(r => r.assetRecordId));
+return ids.sort();
 
-// markAssetsConsentRevokedAfterGeneration
+// markAssetsConsentRevokedAfterGeneration — both partitions sorted ascending
 const before = await prisma.assetRecord.findMany({
   where: { id: { in: assetRecordIds } },
   select: { id: true, consentRevokedAfterGeneration: true },
@@ -517,8 +537,11 @@ await prisma.assetRecord.updateMany({
   data: { consentRevokedAfterGeneration: true },
 });
 return {
-  newlyFlagged: toFlag,
-  alreadyFlagged: before.filter(r => r.consentRevokedAfterGeneration).map(r => r.id),
+  newlyFlagged: toFlag.slice().sort(),
+  alreadyFlagged: before
+    .filter(r => r.consentRevokedAfterGeneration)
+    .map(r => r.id)
+    .sort(),
 };
 ```
 
@@ -694,8 +717,10 @@ Co-located `*.test.ts` for each non-type-only file. In-memory fakes implement th
 **`prisma-consent-revocation-store.test.ts`** (in `packages/db`):
 
 38. `findAssetIdsByRevokedConsent` returns ids matching snapshot.consentRecordId.
-39. `markAssetsConsentRevokedAfterGeneration` flips false→true and returns `newlyFlagged`.
-40. Calling `markAssetsConsentRevokedAfterGeneration` twice on same ids returns empty `newlyFlagged` second time.
+39. `findAssetIdsByRevokedConsent` returns ids in sorted (ascending) order.
+40. `markAssetsConsentRevokedAfterGeneration` flips false→true and returns `newlyFlagged`.
+41. `markAssetsConsentRevokedAfterGeneration` returns both `newlyFlagged` and `alreadyFlagged` in sorted (ascending) order.
+42. Calling `markAssetsConsentRevokedAfterGeneration` twice on same ids returns empty `newlyFlagged` second time.
 
 ### Anti-pattern grep tests
 
