@@ -52,7 +52,7 @@ This design document captures the design decisions made during brainstorming and
 
 - `apps/api` wiring (does not exist in this repo; concrete store implementations land at merge-back).
 - `decidePcdGenerationAccess` body changes (SP2; SP4 calls it, does not modify it).
-- New `CreativeJob` schema fields (rejected during brainstorming — registry owns tier truth).
+- No `CreativeJob` schema fields beyond `productTierAtResolution` and `creatorTierAtResolution` (the two stamped at-resolution component-tier columns added by this amendment per Q-extension-1). The earlier "no CreativeJob schema change at all" lock was reversed during code review of PR #3 to fix the split-brain routing bug — see Q-extension-1 in the resolved-questions table for the rationale.
 - New provider integrations (no Sora/Veo/Runway/Kling/HeyGen client work).
 - Retry / fallback / circuit-breaker orchestration.
 - UI / dashboard / chat integration.
