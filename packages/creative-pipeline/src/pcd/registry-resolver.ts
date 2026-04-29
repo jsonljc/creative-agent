@@ -1,22 +1,10 @@
 import type { AvatarQualityTier, IdentityTier, ProductQualityTier } from "@creativeagent/schemas";
 import { PCD_SHOT_SPEC_VERSION } from "./shot-spec-version.js";
+import { InvariantViolationError } from "./invariant-violation-error.js";
 
-/** Thrown when a job claims to be resolved but the stamped tier context
- *  is incomplete or invalid. The resolver does NOT fall back to registry
- *  reads in this case — silent fallback would silently reintroduce the
- *  dual-authority routing bug this slice exists to fix.
- */
-export class InvariantViolationError extends Error {
-  constructor(
-    public readonly jobId: string,
-    public readonly missingField: string,
-  ) {
-    super(
-      `PCD resolver invariant violated: job "${jobId}" claims resolved state but ${missingField} is NULL or invalid. Resolver refuses to fall back to registry reads (would reintroduce dual-authority routing).`,
-    );
-    this.name = "InvariantViolationError";
-  }
-}
+// Re-export so existing consumers (registry-resolver.test.ts and any external
+// importer of `./registry-resolver.js`) keep working without an import-path change.
+export { InvariantViolationError };
 
 export type PcdResolvableJob = {
   // Identity for the write target.
