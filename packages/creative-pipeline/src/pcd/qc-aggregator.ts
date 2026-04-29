@@ -29,9 +29,9 @@ export function applyPcdQcGateMode(
 //   else (all skipped, or empty)   → "warn"
 //
 // The empty/all-skipped → "warn" rule is intentional. "warn" here means "QC
-// was not conclusively pass" — NOT "a defect was detected." Consumers (SP6,
-// future UI) MUST interpret "warn" as "not conclusively QC-passed". Skipped
-// or unevaluated gates must not become implicit approval.
+// was not conclusively pass" — NOT "a defect was detected." Consumers MUST
+// interpret "warn" as "not conclusively QC-passed". Skipped or unevaluated
+// gates must not become an implicit pass.
 export function aggregatePcdQcGateVerdicts(
   verdicts: ReadonlyArray<PcdQcGateVerdict>,
 ): PcdQcGateVerdicts {

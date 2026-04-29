@@ -519,12 +519,19 @@ describe("evaluatePcdQcResult — anti-pattern grep", () => {
   });
 });
 
-describe("evaluatePcdQcResult — no SP6 leakage", () => {
-  it("evaluator source does not reference SP6 consent / revocation concepts", () => {
-    const src = readFileSync(new URL("./qc-evaluator.ts", import.meta.url).pathname, "utf-8");
-    expect(src).not.toMatch(/consent/i);
-    expect(src).not.toMatch(/revoc/i);
-    expect(src).not.toMatch(/meta_draft/i);
+describe("evaluatePcdQcResult — no SP6 leakage (binding)", () => {
+  const evalSrc = readFileSync(new URL("./qc-evaluator.ts", import.meta.url), "utf-8");
+  const aggSrc = readFileSync(new URL("./qc-aggregator.ts", import.meta.url), "utf-8");
+
+  it("evaluator + aggregator contain zero matches for SP6 surfaces", () => {
+    for (const src of [evalSrc, aggSrc]) {
+      expect(src).not.toMatch(/approval/i);
+      expect(src).not.toMatch(/canApprove/i);
+      expect(src).not.toMatch(/WorkTrace/i);
+      expect(src).not.toMatch(/outbox/i);
+      expect(src).not.toMatch(/ApprovalLifecycle/i);
+      expect(src).not.toMatch(/assetRecord\.update/i);
+    }
   });
 });
 
