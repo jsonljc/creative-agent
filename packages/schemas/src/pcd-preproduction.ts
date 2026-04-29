@@ -86,3 +86,52 @@ export const PcdIdentityContextSchema = z.object({
   identityContextVersion: z.string(),
 });
 export type PcdIdentityContext = z.infer<typeof PcdIdentityContextSchema>;
+
+export const TrendSignalSchema = z.object({
+  id: z.string().min(1),
+  summary: z.string().min(1),
+  audienceFit: z.string(),
+  evidenceRefs: z.array(z.string()),
+});
+export type TrendSignal = z.infer<typeof TrendSignalSchema>;
+
+export const TrendStageOutputSchema = z.object({
+  signals: z.array(TrendSignalSchema).min(1),
+});
+export type TrendStageOutput = z.infer<typeof TrendStageOutputSchema>;
+
+export const MotivatorSchema = z.object({
+  id: z.string().min(1),
+  frictionOrDesire: z.string().min(1),
+  audienceSegment: z.string(),
+  evidenceRefs: z.array(z.string()),
+  parentTrendId: z.string().min(1),
+});
+export type Motivator = z.infer<typeof MotivatorSchema>;
+
+export const MotivatorsStageOutputSchema = z.object({
+  motivators: z.array(MotivatorSchema).min(1),
+});
+export type MotivatorsStageOutput = z.infer<typeof MotivatorsStageOutputSchema>;
+
+export const HookTypeSchema = z.enum([
+  "direct_camera",
+  "mid_action",
+  "reaction",
+  "text_overlay_start",
+]);
+export type HookType = z.infer<typeof HookTypeSchema>;
+
+export const HookSchema = z.object({
+  id: z.string().min(1),
+  text: z.string().min(1),
+  hookType: HookTypeSchema,
+  parentMotivatorId: z.string().min(1),
+  parentTrendId: z.string().min(1),
+});
+export type Hook = z.infer<typeof HookSchema>;
+
+export const HooksStageOutputSchema = z.object({
+  hooks: z.array(HookSchema).min(1),
+});
+export type HooksStageOutput = z.infer<typeof HooksStageOutputSchema>;

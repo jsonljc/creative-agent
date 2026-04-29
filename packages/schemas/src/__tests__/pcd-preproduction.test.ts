@@ -152,3 +152,89 @@ describe("PcdIdentityContextSchema", () => {
     ).toBe(false);
   });
 });
+
+import {
+  TrendStageOutputSchema,
+  MotivatorsStageOutputSchema,
+  HooksStageOutputSchema,
+  HookTypeSchema,
+} from "../pcd-preproduction.js";
+
+describe("TrendStageOutputSchema", () => {
+  const valid = {
+    signals: [
+      {
+        id: "trend-1",
+        summary: "Solo founders are losing leads after-hours",
+        audienceFit: "founder/operator",
+        evidenceRefs: [],
+      },
+    ],
+  };
+  it("accepts length-1 signal list", () => {
+    expect(TrendStageOutputSchema.safeParse(valid).success).toBe(true);
+  });
+  it("rejects empty signals list", () => {
+    expect(TrendStageOutputSchema.safeParse({ signals: [] }).success).toBe(false);
+  });
+  it("requires id, summary, audienceFit, evidenceRefs per signal", () => {
+    expect(
+      TrendStageOutputSchema.safeParse({
+        signals: [{ id: "trend-1", summary: "x" }],
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("MotivatorsStageOutputSchema", () => {
+  const valid = {
+    motivators: [
+      {
+        id: "motivator-1",
+        frictionOrDesire: "Slow lead reply kills conversion",
+        audienceSegment: "solo-founder",
+        evidenceRefs: [],
+        parentTrendId: "trend-1",
+      },
+    ],
+  };
+  it("accepts length-1 motivators list with parentTrendId", () => {
+    expect(MotivatorsStageOutputSchema.safeParse(valid).success).toBe(true);
+  });
+  it("requires parentTrendId per motivator", () => {
+    const noParent = { motivators: [{ ...valid.motivators[0], parentTrendId: undefined }] };
+    expect(MotivatorsStageOutputSchema.safeParse(noParent).success).toBe(false);
+  });
+});
+
+describe("HookTypeSchema", () => {
+  it("accepts the four UGC hook types", () => {
+    for (const v of ["direct_camera", "mid_action", "reaction", "text_overlay_start"]) {
+      expect(HookTypeSchema.safeParse(v).success).toBe(true);
+    }
+  });
+  it("rejects unknown hook types", () => {
+    expect(HookTypeSchema.safeParse("voiceover_static").success).toBe(false);
+  });
+});
+
+describe("HooksStageOutputSchema", () => {
+  const valid = {
+    hooks: [
+      {
+        id: "hook-1",
+        text: "Still losing WhatsApp leads after running ads?",
+        hookType: "direct_camera" as const,
+        parentMotivatorId: "motivator-1",
+        parentTrendId: "trend-1",
+      },
+    ],
+  };
+  it("accepts length-1 hooks list with both parent IDs", () => {
+    expect(HooksStageOutputSchema.safeParse(valid).success).toBe(true);
+  });
+  it("requires both parentMotivatorId and parentTrendId", () => {
+    const { parentMotivatorId: _m, ...rest } = valid.hooks[0]!;
+    expect(HooksStageOutputSchema.safeParse({ hooks: [rest] }).success).toBe(false);
+  });
+});
