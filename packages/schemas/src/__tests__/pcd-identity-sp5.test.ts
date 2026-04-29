@@ -314,24 +314,30 @@ describe("PcdSp5QcLedgerInputSchema refines", () => {
     bad.creatorIdentityId = null;
     bad.faceSimilarityScore = 0.9;
     expect(() => PcdSp5QcLedgerInputSchema.parse(bad)).toThrow(
-      /creatorIdentityId and faceSimilarityScore required/,
+      /creatorIdentityId required when face_similarity gate ran/,
     );
   });
 
-  it("rejects face in gatesRan + faceSimilarityScore null", () => {
-    const bad = happy();
-    bad.gatesRan = ["face_similarity"];
-    bad.gateVerdicts = {
+  it("accepts face in gatesRan + creatorIdentityId + faceSimilarityScore null (provider-error / skipped case)", () => {
+    const ok = happy();
+    ok.gatesRan = ["face_similarity"];
+    // The face gate ran but produced no score (e.g., provider threw, predicate
+    // returned status: "fail"; or creator refs were empty, predicate returned
+    // status: "skipped"). The schema must accept this legitimate shape.
+    ok.gateVerdicts = {
       gates: [
-        { gate: "face_similarity", status: "pass", score: 0.9, threshold: 0.78, reason: "ok" },
+        {
+          gate: "face_similarity",
+          status: "fail",
+          reason: "face similarity provider error: boom",
+        },
       ],
-      aggregateStatus: "pass",
+      aggregateStatus: "fail",
     };
-    bad.creatorIdentityId = "creator_1";
-    bad.faceSimilarityScore = null;
-    expect(() => PcdSp5QcLedgerInputSchema.parse(bad)).toThrow(
-      /creatorIdentityId and faceSimilarityScore required/,
-    );
+    ok.creatorIdentityId = "creator_1";
+    ok.faceSimilarityScore = null;
+    ok.passFail = "fail";
+    expect(() => PcdSp5QcLedgerInputSchema.parse(ok)).not.toThrow();
   });
 
   it("rejects gatesRan order != gateVerdicts.gates order", () => {

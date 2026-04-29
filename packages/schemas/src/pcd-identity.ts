@@ -297,11 +297,9 @@ export const PcdSp5QcLedgerInputSchema = z
     warnings: z.array(z.string()),
   })
   .refine(
-    (v) =>
-      !v.gatesRan.includes("face_similarity") ||
-      (v.creatorIdentityId !== null && v.faceSimilarityScore !== null),
+    (v) => !v.gatesRan.includes("face_similarity") || v.creatorIdentityId !== null,
     {
-      message: "creatorIdentityId and faceSimilarityScore required when face_similarity gate ran",
+      message: "creatorIdentityId required when face_similarity gate ran",
     },
   )
   .refine(
