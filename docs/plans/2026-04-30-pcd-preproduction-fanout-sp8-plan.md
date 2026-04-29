@@ -10,6 +10,18 @@
 
 **Source-of-truth design:** `docs/plans/2026-04-30-pcd-preproduction-fanout-sp8-design.md` (committed in `fcc51cb`).
 
+## User-locked priority invariants (do not violate)
+
+User reviewed the design 2026-04-30 and approved with scope discipline. These are non-negotiable:
+
+1. **Composer owns the forensic decision struct.** Gate returns ONLY `{ selectedScriptIds, decidedBy, decidedAt }`.
+2. **Gate cannot import or stamp version constants.** All version pinning lives in `preproduction-chain.ts`. Anti-pattern test enforces.
+3. **Branching preserves parent lineage:** every motivator carries `parentTrendId`; every hook carries `parentMotivatorId` AND `parentTrendId`; every script carries `parentHookId`.
+4. **Identity context is deep-frozen, not shallow-frozen.**
+5. **`AutoApproveAllScriptsGate` is the deterministic local/default implementer ONLY.** Real production MUST replace it with human-in-the-loop selection. The class file carries a loud header comment to prevent misuse.
+6. **No Prisma migration, no `apps/api` wiring, no `WorkTrace` emit, no real Claude runners** in SP8. Markers and stubs only.
+7. **Implementation discipline:** if Task 5 (the migration block) becomes too large in practice, STOP and split into separate PRs (SP8A: gate-narrowing + composer-assembly; SP8B: branching tree fanout; SP8C: deep-freeze + readonly hardening) before continuing.
+
 **Pre-flight verification (before starting Task 1):**
 
 Run from repo root:
@@ -701,6 +713,8 @@ export const PcdProductionFanoutDecisionSchema = z.object({
   decidedBy: z.string().nullable(),
 
   // SP8 — operator commentary seam; SP8 composer always emits null.
+  // SP9+: bound this field — max length, operator-only writeable, never used
+  // by stubs / never read for control flow / never copied into runner prompts.
   decisionNote: z.string().nullable(),
 
   // SP10 forward-compat (always null in SP8).
@@ -733,6 +747,20 @@ export interface ProductionFanoutGate {
   requestSelection(input: RequestSelectionInput): Promise<ProductionFanoutGateOperatorDecision>;
 }
 
+// =============================================================================
+// AutoApproveAllScriptsGate — TEST-ONLY / DEFAULT-LOCAL DEVELOPMENT IMPLEMENTER
+// =============================================================================
+// This gate auto-selects every available script. It is the in-tree default so
+// the chain runs deterministically in tests and local dev.
+//
+// THIS IS NOT THE PRODUCT BEHAVIOR. Real production MUST replace this with a
+// human-in-the-loop selection UX (Inngest waitForEvent → dashboard UI →
+// operator-event payload populates selectedScriptIds + decidedBy + decidedAt).
+// "Auto approve all 24 scripts" is a stub for plumbing, not a UX target.
+//
+// DO NOT use this class in production. DO NOT add config flags to "enable
+// auto-approval in prod". The merge-back swap is by injection, not by flag.
+// =============================================================================
 // MERGE-BACK: replace AutoApproveAllScriptsGate with Switchboard Inngest waitForEvent + dashboard UI.
 export class AutoApproveAllScriptsGate implements ProductionFanoutGate {
   async requestSelection(
