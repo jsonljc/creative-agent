@@ -15,3 +15,6 @@ coverage/
 .vitest-cache/
 
 packages/db/src/generated/
+
+# Local worktrees (subagent-driven-development)
+.worktrees/
