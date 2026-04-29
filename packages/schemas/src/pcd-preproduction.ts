@@ -18,3 +18,15 @@ export const PreproductionChainStageEnumSchema = z.enum([
   "production_fanout_gate",
 ]);
 export type PreproductionChainStage = z.infer<typeof PreproductionChainStageEnumSchema>;
+
+// UGC creative-format constraints. Lives in PcdIdentityContext so every stage
+// runner consumes the same UGC-format ground truth — prevents drift toward
+// polished ad-film language.
+export const UgcStyleConstraintSchema = z.enum([
+  "native_vertical",                  // 9:16 selfie-style framing
+  "creator_led",                      // first-person creator voice
+  "no_overproduced_storyboard",       // no studio-shoot framing
+  "product_fidelity_required",        // canonical text/logo faithfulness
+  "no_invented_product_claims",       // no claims absent from registry
+]);
+export type UgcStyleConstraint = z.infer<typeof UgcStyleConstraintSchema>;
