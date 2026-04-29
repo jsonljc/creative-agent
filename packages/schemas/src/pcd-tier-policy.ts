@@ -1,26 +1,9 @@
 import { z } from "zod";
 import { IdentityTierSchema } from "./pcd-identity.js";
 
-export const PcdShotTypeSchema = z.enum([
-  "script_only",
-  "storyboard",
-  "simple_ugc",
-  "talking_head",
-  "product_demo",
-  "product_in_hand",
-  "face_closeup",
-  "label_closeup",
-  "object_insert",
-]);
-export type PcdShotType = z.infer<typeof PcdShotTypeSchema>;
-
-export const OutputIntentSchema = z.enum([
-  "draft",
-  "preview",
-  "final_export",
-  "meta_draft",
-]);
-export type OutputIntent = z.infer<typeof OutputIntentSchema>;
+// Re-export so @creativeagent/schemas barrel consumers continue to find them here.
+export { PcdShotTypeSchema, OutputIntentSchema } from "./pcd-identity.js";
+export type { PcdShotType, OutputIntent } from "./pcd-identity.js";
 
 export const PcdRequiredActionSchema = z.enum([
   "upgrade_avatar_identity",

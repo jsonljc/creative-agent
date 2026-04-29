@@ -109,6 +109,38 @@ export const ProductQcResultSchema = z.object({
 });
 export type ProductQcResult = z.infer<typeof ProductQcResultSchema>;
 
+export const PcdShotTypeSchema = z.enum([
+  "script_only",
+  "storyboard",
+  "simple_ugc",
+  "talking_head",
+  "product_demo",
+  "product_in_hand",
+  "face_closeup",
+  "label_closeup",
+  "object_insert",
+]);
+export type PcdShotType = z.infer<typeof PcdShotTypeSchema>;
+
+export const OutputIntentSchema = z.enum(["draft", "preview", "final_export", "meta_draft"]);
+export type OutputIntent = z.infer<typeof OutputIntentSchema>;
+
+// SP4: routing-decision reason — references PcdShotTypeSchema and OutputIntentSchema
+// defined above (single source of truth; pcd-tier-policy.ts imports them from here).
+export const PcdRoutingDecisionReasonSchema = z.object({
+  capabilityRefIndex: z.number().int().nonnegative(),
+  matchedShotType: PcdShotTypeSchema,
+  matchedEffectiveTier: IdentityTierSchema,
+  matchedOutputIntent: OutputIntentSchema,
+  tier3RulesApplied: z.array(
+    z.enum(["first_last_frame_anchor", "performance_transfer", "edit_over_regenerate"]),
+  ),
+  candidatesEvaluated: z.number().int().nonnegative(),
+  candidatesAfterTier3Filter: z.number().int().nonnegative(),
+  selectionRationale: z.string().max(200),
+});
+export type PcdRoutingDecisionReason = z.infer<typeof PcdRoutingDecisionReasonSchema>;
+
 export const PcdIdentitySnapshotSchema = z.object({
   id: z.string(),
   assetRecordId: z.string(),
@@ -132,6 +164,42 @@ export const PcdIdentitySnapshotSchema = z.object({
   seedOrNoSeed: z.string(),
   rewrittenPromptText: z.string().nullable(),
 
+  // SP4 additions — nullable for historical compatibility (pre-SP4 / merge-back
+  // rows that predate this slice). SP4 writer treats them as required for new writes.
+  shotSpecVersion: z.string().nullable(),
+  routerVersion: z.string().nullable(),
+  routingDecisionReason: PcdRoutingDecisionReasonSchema.nullable(),
+
   createdAt: z.coerce.date(),
 });
 export type PcdIdentitySnapshot = z.infer<typeof PcdIdentitySnapshotSchema>;
+
+export const PcdSp4IdentitySnapshotInputSchema = z.object({
+  // Identity-side
+  assetRecordId: z.string(),
+  productIdentityId: z.string(),
+  productTierAtGeneration: IdentityTierSchema,
+  productImageAssetIds: z.array(z.string()),
+  productCanonicalTextHash: z.string(),
+  productLogoAssetId: z.string().nullable(),
+  creatorIdentityId: z.string(),
+  avatarTierAtGeneration: IdentityTierSchema,
+  avatarReferenceAssetIds: z.array(z.string()),
+  voiceAssetId: z.string().nullable(),
+  consentRecordId: z.string().nullable(),
+
+  // Provider-side (filled from provider response)
+  selectedProvider: z.string(),
+  providerModelSnapshot: z.string(),
+  seedOrNoSeed: z.string(),
+  rewrittenPromptText: z.string().nullable(),
+
+  // SP4 forensic fields (REQUIRED for new writes; nullable on the stored row)
+  shotSpecVersion: z.string(),
+  routerVersion: z.string(),
+  routingDecisionReason: PcdRoutingDecisionReasonSchema,
+
+  // policyVersion + providerCapabilityVersion intentionally absent: writer
+  // pins them from imports; caller cannot override.
+});
+export type PcdSp4IdentitySnapshotInput = z.infer<typeof PcdSp4IdentitySnapshotInputSchema>;

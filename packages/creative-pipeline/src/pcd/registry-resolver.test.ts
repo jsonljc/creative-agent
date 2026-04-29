@@ -7,29 +7,10 @@ import {
   type PcdResolvableJob,
   type RegistryResolverStores,
   type ResolvedPcdContext,
+  InvariantViolationError,
 } from "./registry-resolver.js";
 import { PCD_SHOT_SPEC_VERSION } from "./shot-spec-version.js";
 import type { AvatarQualityTier, IdentityTier, ProductQualityTier } from "@creativeagent/schemas";
-
-function neverCalledStores(): RegistryResolverStores {
-  return {
-    productStore: {
-      findOrCreateForJob: async () => {
-        throw new Error("productStore.findOrCreateForJob should not be called");
-      },
-    },
-    creatorStore: {
-      findOrCreateStockForDeployment: async () => {
-        throw new Error("creatorStore.findOrCreateStockForDeployment should not be called");
-      },
-    },
-    jobStore: {
-      attachIdentityRefs: async () => {
-        throw new Error("jobStore.attachIdentityRefs should not be called");
-      },
-    },
-  };
-}
 
 const RESOLVED_JOB: PcdResolvableJob = {
   id: "job-1",
@@ -39,6 +20,8 @@ const RESOLVED_JOB: PcdResolvableJob = {
   productImages: [],
   productIdentityId: "p1",
   creatorIdentityId: "c1",
+  productTierAtResolution: 2,
+  creatorTierAtResolution: 2,
   effectiveTier: 2,
   allowedOutputTier: 2,
   shotSpecVersion: PCD_SHOT_SPEC_VERSION,
@@ -50,6 +33,8 @@ describe("resolvePcdRegistryContext — idempotency guard (already resolved at c
     expect(result).toEqual({
       productIdentityId: "p1",
       creatorIdentityId: "c1",
+      productTierAtResolution: 2,
+      creatorTierAtResolution: 2,
       effectiveTier: 2,
       allowedOutputTier: 2,
       shotSpecVersion: PCD_SHOT_SPEC_VERSION,
@@ -76,6 +61,26 @@ type FakeOptions = {
   productId?: string;
   creatorId?: string;
 };
+
+function neverCalledStores(): RegistryResolverStores {
+  return {
+    productStore: {
+      findOrCreateForJob: async () => {
+        throw new Error("productStore.findOrCreateForJob should not be called");
+      },
+    },
+    creatorStore: {
+      findOrCreateStockForDeployment: async () => {
+        throw new Error("creatorStore.findOrCreateStockForDeployment should not be called");
+      },
+    },
+    jobStore: {
+      attachIdentityRefs: async () => {
+        throw new Error("jobStore.attachIdentityRefs should not be called");
+      },
+    },
+  };
+}
 
 function makeFakes(opts: FakeOptions = {}): {
   stores: RegistryResolverStores;
@@ -161,6 +166,8 @@ describe("resolvePcdRegistryContext — full attach flow (happy path)", () => {
     expect(result).toEqual({
       productIdentityId: "p1",
       creatorIdentityId: "c1",
+      productTierAtResolution: 2,
+      creatorTierAtResolution: 2,
       effectiveTier: 2,
       allowedOutputTier: 2,
       shotSpecVersion: PCD_SHOT_SPEC_VERSION,
@@ -289,15 +296,17 @@ describe("PCD_SHOT_SPEC_VERSION constant", () => {
 });
 
 describe("resolvePcdRegistryContext — output shape & determinism", () => {
-  it("ResolvedPcdContext has exactly the five expected keys", async () => {
+  it("ResolvedPcdContext has exactly the seven expected keys", async () => {
     const { stores } = makeFakes();
     const result = await resolvePcdRegistryContext(UNRESOLVED_JOB, stores);
     expect(Object.keys(result).sort()).toEqual(
       [
         "allowedOutputTier",
         "creatorIdentityId",
+        "creatorTierAtResolution",
         "effectiveTier",
         "productIdentityId",
+        "productTierAtResolution",
         "shotSpecVersion",
       ].sort(),
     );
@@ -342,7 +351,7 @@ describe("resolvePcdRegistryContext — store-contract idempotency expectations"
     expect(log.attachIdentityRefsCalls).toBe(2);
   });
 
-  it("attachIdentityRefs payload always carries all five fields with current version", async () => {
+  it("attachIdentityRefs payload always carries all seven fields with current version", async () => {
     const { stores, log } = makeFakes({
       productQualityTier: "url_imported",
       creatorQualityTier: "stock",
@@ -355,6 +364,8 @@ describe("resolvePcdRegistryContext — store-contract idempotency expectations"
     expect([1, 2, 3]).toContain(refs.effectiveTier);
     expect([1, 2, 3]).toContain(refs.allowedOutputTier);
     expect(refs.shotSpecVersion).toBe(PCD_SHOT_SPEC_VERSION);
+    expect(refs.productTierAtResolution).toBe(1);
+    expect(refs.creatorTierAtResolution).toBe(1);
   });
 });
 
@@ -380,5 +391,79 @@ describe("registry-resolver — forbidden imports guard (Layer 2 purity)", () =>
     for (const needle of banned) {
       expect(source).not.toContain(needle);
     }
+  });
+});
+
+describe("SP4 amend — stamped tier world", () => {
+  it("full-attach path: returns productTierAtResolution and creatorTierAtResolution from registry mapping", async () => {
+    const { stores, log } = makeFakes({
+      productQualityTier: "verified",
+      creatorQualityTier: "anchored",
+    });
+    const unresolvedJob: PcdResolvableJob = {
+      id: "job-2",
+      organizationId: "org-1",
+      deploymentId: "dep-1",
+      productDescription: "another product",
+      productImages: [],
+    };
+    const result = await resolvePcdRegistryContext(unresolvedJob, stores);
+    expect(result.productTierAtResolution).toBe(2);
+    expect(result.creatorTierAtResolution).toBe(2);
+    expect(result.effectiveTier).toBe(2);
+    expect(log.attachIdentityRefsCalls).toBe(1);
+    // attachIdentityRefs payload includes the stamped tiers.
+    expect(log.attachIdentityRefsArgs[0]?.refs.productTierAtResolution).toBe(2);
+    expect(log.attachIdentityRefsArgs[0]?.refs.creatorTierAtResolution).toBe(2);
+  });
+
+  it("no-op path: zero store calls AND zero attachIdentityRefs writes", async () => {
+    const result = await resolvePcdRegistryContext(RESOLVED_JOB, neverCalledStores());
+    expect(result.productTierAtResolution).toBe(2);
+    expect(result.creatorTierAtResolution).toBe(2);
+  });
+
+  it("malformed-resolved-job: missing productTierAtResolution → InvariantViolationError; no store reads", async () => {
+    const malformed: PcdResolvableJob = {
+      ...RESOLVED_JOB,
+      productTierAtResolution: null,
+    };
+    await expect(resolvePcdRegistryContext(malformed, neverCalledStores())).rejects.toBeInstanceOf(
+      InvariantViolationError,
+    );
+  });
+
+  it("malformed-resolved-job: missing creatorTierAtResolution → InvariantViolationError; no store reads", async () => {
+    const malformed: PcdResolvableJob = {
+      ...RESOLVED_JOB,
+      creatorTierAtResolution: null,
+    };
+    await expect(resolvePcdRegistryContext(malformed, neverCalledStores())).rejects.toBeInstanceOf(
+      InvariantViolationError,
+    );
+  });
+
+  it("idempotency guard: a job missing the new stamped fields is treated as unresolved (not malformed) when shotSpecVersion is stale", async () => {
+    // A pre-SP4-amend job: has the original 5-field core but at a stale
+    // shotSpecVersion AND missing the two new stamped fields. This should
+    // take the full-attach path, NOT the malformed-error branch (the
+    // malformed-error branch only fires when the core is present at the
+    // CURRENT shotSpecVersion).
+    const stale: PcdResolvableJob = {
+      ...RESOLVED_JOB,
+      shotSpecVersion: "shot-spec@0.9.0", // stale
+      productTierAtResolution: null,
+      creatorTierAtResolution: null,
+    };
+    const { stores, log } = makeFakes({
+      productQualityTier: "verified",
+      creatorQualityTier: "anchored",
+    });
+    const result = await resolvePcdRegistryContext(stale, stores);
+    expect(result.shotSpecVersion).toBe(PCD_SHOT_SPEC_VERSION);
+    expect(log.attachIdentityRefsCalls).toBe(1);
+    // Full-attach stamped both new fields:
+    expect(result.productTierAtResolution).toBe(2);
+    expect(result.creatorTierAtResolution).toBe(2);
   });
 });

@@ -8,6 +8,10 @@ export interface AttachIdentityRefsInput {
   effectiveTier: number;
   allowedOutputTier: number;
   shotSpecVersion: string;
+  // SP4 amend: stamped at-resolution component tiers. Required for
+  // SP4-and-later resolutions; the resolver writes both at full-attach time.
+  productTierAtResolution: number;
+  creatorTierAtResolution: number;
   fidelityTierAtGeneration?: number;
 }
 
@@ -201,6 +205,8 @@ export class PrismaCreativeJobStore {
         effectiveTier: input.effectiveTier,
         allowedOutputTier: input.allowedOutputTier,
         shotSpecVersion: input.shotSpecVersion,
+        productTierAtResolution: input.productTierAtResolution,
+        creatorTierAtResolution: input.creatorTierAtResolution,
         fidelityTierAtGeneration: input.fidelityTierAtGeneration,
       },
     }) as unknown as CreativeJob;
@@ -217,6 +223,13 @@ export class PrismaCreativeJobStore {
         creatorIdentityId: input.creatorIdentityId,
         effectiveTier: 1,
         allowedOutputTier: 1,
+        // Legacy registry backfill has no component-tier evidence.
+        // Stamp Tier 1 as the conservative compatibility default — matches
+        // SP1 backfill semantic ("backfilled = Tier 1, full stop"). Tier-3
+        // actions on backfilled jobs require explicit asset upgrades per
+        // the source-of-truth design spec.
+        productTierAtResolution: 1,
+        creatorTierAtResolution: 1,
         registryBackfilled: true,
         fidelityTierAtGeneration: 1,
       },
