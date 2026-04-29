@@ -365,6 +365,8 @@ describe("PrismaCreativeJobStore", () => {
         effectiveTier: 2,
         allowedOutputTier: 3,
         shotSpecVersion: "v1.0",
+        productTierAtResolution: 2,
+        creatorTierAtResolution: 3,
         fidelityTierAtGeneration: 2,
       };
 
@@ -381,6 +383,8 @@ describe("PrismaCreativeJobStore", () => {
           effectiveTier: 2,
           allowedOutputTier: 3,
           shotSpecVersion: "v1.0",
+          productTierAtResolution: 2,
+          creatorTierAtResolution: 3,
           fidelityTierAtGeneration: 2,
         },
       });
@@ -399,6 +403,8 @@ describe("PrismaCreativeJobStore", () => {
         creatorIdentityId: "creator_id_1",
         effectiveTier: 1,
         allowedOutputTier: 1,
+        productTierAtResolution: 1,
+        creatorTierAtResolution: 1,
         registryBackfilled: true,
         fidelityTierAtGeneration: 1,
       };
@@ -413,6 +419,8 @@ describe("PrismaCreativeJobStore", () => {
           creatorIdentityId: "creator_id_1",
           effectiveTier: 1,
           allowedOutputTier: 1,
+          productTierAtResolution: 1,
+          creatorTierAtResolution: 1,
           registryBackfilled: true,
           fidelityTierAtGeneration: 1,
         },
