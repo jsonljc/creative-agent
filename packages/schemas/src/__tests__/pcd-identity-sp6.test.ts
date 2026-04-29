@@ -179,3 +179,15 @@ describe("PcdConsentRevocationPropagationResultSchema", () => {
     expect(ok.success).toBe(true);
   });
 });
+
+import * as schemasIndex from "../index.js";
+
+describe("schemas barrel — SP6 surface", () => {
+  it("re-exports all SP6 names", () => {
+    expect(schemasIndex.PcdLifecycleRefusalReasonSchema).toBeDefined();
+    expect(schemasIndex.PcdApprovalAdvancementDecisionSchema).toBeDefined();
+    expect(schemasIndex.PcdFinalExportDecisionSchema).toBeDefined();
+    expect(schemasIndex.PcdMetaDraftDecisionSchema).toBeDefined();
+    expect(schemasIndex.PcdConsentRevocationPropagationResultSchema).toBeDefined();
+  });
+});
