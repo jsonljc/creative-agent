@@ -120,7 +120,7 @@ export const HookTypeSchema = z.enum([
   "reaction",
   "text_overlay_start",
 ]);
-export type HookType = z.infer<typeof HookTypeSchema>;
+export type PreproductionHookType = z.infer<typeof HookTypeSchema>;
 
 export const HookSchema = z.object({
   id: z.string().min(1),
@@ -129,7 +129,7 @@ export const HookSchema = z.object({
   parentMotivatorId: z.string().min(1),
   parentTrendId: z.string().min(1),
 });
-export type Hook = z.infer<typeof HookSchema>;
+export type PreproductionHook = z.infer<typeof HookSchema>;
 
 export const HooksStageOutputSchema = z.object({
   hooks: z.array(HookSchema).min(1),
@@ -175,3 +175,52 @@ export const CreatorScriptsStageOutputSchema = z.object({
   scripts: z.array(CreatorScriptSchema).min(1),
 });
 export type CreatorScriptsStageOutput = z.infer<typeof CreatorScriptsStageOutputSchema>;
+
+export const PcdCostForecastSchema = z.object({
+  estimatedUsd: z.number().nonnegative(),
+  currency: z.string().min(1),
+  lineItems: z.array(
+    z.object({
+      label: z.string().min(1),
+      estimatedUsd: z.number().nonnegative(),
+    }),
+  ),
+});
+export type PcdCostForecast = z.infer<typeof PcdCostForecastSchema>;
+
+export const PcdProductionFanoutDecisionSchema = z.object({
+  // Forensic identity carry-through
+  briefId: z.string().min(1),
+  creatorIdentityId: z.string().min(1),
+  productIdentityId: z.string().min(1),
+  consentRecordId: z.string().nullable(),
+  effectiveTier: IdentityTierSchema,
+
+  // Selection (sorted ascending; the gate adapter enforces sort)
+  selectedScriptIds: z.array(z.string().min(1)).min(1),
+  availableScriptIds: z.array(z.string().min(1)).min(1),
+
+  // Pinned versions (caller cannot override; pinned by import)
+  preproductionChainVersion: z.string(),
+  identityContextVersion: z.string(),
+  approvalLifecycleVersion: z.string(),
+
+  // Gate metadata
+  decidedAt: z.string().datetime(),
+  decidedBy: z.string().nullable(),
+
+  // SP10 forward-compat (always null in SP7)
+  costForecast: PcdCostForecastSchema.nullable(),
+});
+export type PcdProductionFanoutDecision = z.infer<typeof PcdProductionFanoutDecisionSchema>;
+
+export const PcdPreproductionChainResultSchema = z.object({
+  decision: PcdProductionFanoutDecisionSchema,
+  stageOutputs: z.object({
+    trends: TrendStageOutputSchema,
+    motivators: MotivatorsStageOutputSchema,
+    hooks: HooksStageOutputSchema,
+    scripts: CreatorScriptsStageOutputSchema,
+  }),
+});
+export type PcdPreproductionChainResult = z.infer<typeof PcdPreproductionChainResultSchema>;

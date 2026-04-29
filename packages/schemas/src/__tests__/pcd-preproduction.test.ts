@@ -353,3 +353,81 @@ describe("CreatorScriptsStageOutputSchema", () => {
     expect(CreatorScriptsStageOutputSchema.safeParse({ scripts: [] }).success).toBe(false);
   });
 });
+
+import {
+  PcdCostForecastSchema,
+  PcdProductionFanoutDecisionSchema,
+  PcdPreproductionChainResultSchema,
+} from "../pcd-preproduction.js";
+
+describe("PcdCostForecastSchema", () => {
+  it("accepts a forecast with empty line items", () => {
+    expect(
+      PcdCostForecastSchema.safeParse({
+        estimatedUsd: 0,
+        currency: "USD",
+        lineItems: [],
+      }).success,
+    ).toBe(true);
+  });
+  it("rejects negative estimatedUsd", () => {
+    expect(
+      PcdCostForecastSchema.safeParse({
+        estimatedUsd: -1,
+        currency: "USD",
+        lineItems: [],
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("PcdProductionFanoutDecisionSchema", () => {
+  const valid = {
+    briefId: "brief-1",
+    creatorIdentityId: "creator-1",
+    productIdentityId: "product-1",
+    consentRecordId: null,
+    effectiveTier: 2,
+    selectedScriptIds: ["script-1"],
+    availableScriptIds: ["script-1"],
+    preproductionChainVersion: "preproduction-chain@1.0.0",
+    identityContextVersion: "identity-context@1.0.0",
+    approvalLifecycleVersion: "approval-lifecycle@1.0.0",
+    decidedAt: "2026-04-29T12:00:00.000Z",
+    decidedBy: null,
+    costForecast: null,
+  };
+
+  it("accepts a fully populated decision", () => {
+    expect(PcdProductionFanoutDecisionSchema.safeParse(valid).success).toBe(true);
+  });
+  it("rejects empty selectedScriptIds", () => {
+    expect(
+      PcdProductionFanoutDecisionSchema.safeParse({ ...valid, selectedScriptIds: [] }).success,
+    ).toBe(false);
+  });
+  it("rejects empty availableScriptIds", () => {
+    expect(
+      PcdProductionFanoutDecisionSchema.safeParse({ ...valid, availableScriptIds: [] }).success,
+    ).toBe(false);
+  });
+  it("rejects malformed decidedAt", () => {
+    expect(
+      PcdProductionFanoutDecisionSchema.safeParse({ ...valid, decidedAt: "not-a-date" }).success,
+    ).toBe(false);
+  });
+  it("accepts non-null costForecast", () => {
+    expect(
+      PcdProductionFanoutDecisionSchema.safeParse({
+        ...valid,
+        costForecast: { estimatedUsd: 1.5, currency: "USD", lineItems: [] },
+      }).success,
+    ).toBe(true);
+  });
+});
+
+describe("PcdPreproductionChainResultSchema", () => {
+  it("requires both decision and stageOutputs", () => {
+    expect(PcdPreproductionChainResultSchema.safeParse({ decision: {} }).success).toBe(false);
+  });
+});
