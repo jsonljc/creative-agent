@@ -111,3 +111,139 @@ describe("evaluatePcdQcResult — Tier 1 (zero matrix rows, zero providers calle
     expect(row.passFail).toBe("warn");
   });
 });
+
+describe("evaluatePcdQcResult — Tier 3 face_closeup dispatch", () => {
+  it("calls scoreFaceSimilarity and persists face gate in gatesRan with creatorIdentityId set", async () => {
+    const { providers, scoreFaceSimilarity, scoreLogoSimilarity, extractText, measure } =
+      makeProviders();
+    const { store, calls } = makeStore();
+
+    await evaluatePcdQcResult(
+      {
+        assetRecordId: "asset_1",
+        shotType: "face_closeup",
+        effectiveTier: 3 as const,
+        identitySnapshot: makeSnapshot(),
+        productLogoAssetId: null,
+        productCanonicalText: null,
+        productDimensionsMm: null,
+      },
+      providers,
+      { qcLedgerStore: store },
+    );
+
+    expect(scoreFaceSimilarity).toHaveBeenCalledTimes(1);
+    expect(scoreLogoSimilarity).not.toHaveBeenCalled();
+    expect(extractText).not.toHaveBeenCalled();
+    expect(measure).not.toHaveBeenCalled();
+    expect(calls.length).toBe(1);
+    expect(calls[0].gatesRan).toEqual(["face_similarity"]);
+    expect(calls[0].creatorIdentityId).toBe("creator_1");
+  });
+
+  it("persists faceSimilarityScore from provider and passFail=pass when score passes threshold", async () => {
+    const { providers } = makeProviders();
+    const { store, calls } = makeStore();
+
+    await evaluatePcdQcResult(
+      {
+        assetRecordId: "asset_1",
+        shotType: "face_closeup",
+        effectiveTier: 3 as const,
+        identitySnapshot: makeSnapshot(),
+        productLogoAssetId: null,
+        productCanonicalText: null,
+        productDimensionsMm: null,
+      },
+      providers,
+      { qcLedgerStore: store },
+    );
+
+    // makeProviders() returns score: 0.9, threshold is 0.78, so pass
+    expect(calls[0].faceSimilarityScore).toBe(0.9);
+    expect(calls[0].passFail).toBe("pass");
+    expect(calls[0].gateVerdicts.gates[0]?.status).toBe("pass");
+  });
+});
+
+describe("evaluatePcdQcResult — mode lowering", () => {
+  it("warn_only mode: face gate below threshold → passFail=warn not fail", async () => {
+    const { providers, scoreFaceSimilarity } = makeProviders();
+    // Return score below threshold (0.78)
+    scoreFaceSimilarity.mockResolvedValue({ score: 0.5 });
+    const { store, calls } = makeStore();
+
+    await evaluatePcdQcResult(
+      {
+        assetRecordId: "asset_1",
+        // talking_head + tier 2 → face_similarity with mode: "warn_only"
+        shotType: "talking_head",
+        effectiveTier: 2 as const,
+        identitySnapshot: makeSnapshot(),
+        productLogoAssetId: null,
+        productCanonicalText: null,
+        productDimensionsMm: null,
+      },
+      providers,
+      { qcLedgerStore: store },
+    );
+
+    expect(calls[0].passFail).toBe("warn");
+    expect(calls[0].gateVerdicts.gates[0]?.status).toBe("warn");
+    expect(calls[0].gateVerdicts.aggregateStatus).toBe("warn");
+  });
+
+  it("block mode: face gate below threshold → passFail=fail", async () => {
+    const { providers, scoreFaceSimilarity } = makeProviders();
+    // Return score below threshold (0.78)
+    scoreFaceSimilarity.mockResolvedValue({ score: 0.5 });
+    const { store, calls } = makeStore();
+
+    await evaluatePcdQcResult(
+      {
+        assetRecordId: "asset_1",
+        // face_closeup + tier 3 → face_similarity with mode: "block"
+        shotType: "face_closeup",
+        effectiveTier: 3 as const,
+        identitySnapshot: makeSnapshot(),
+        productLogoAssetId: null,
+        productCanonicalText: null,
+        productDimensionsMm: null,
+      },
+      providers,
+      { qcLedgerStore: store },
+    );
+
+    expect(calls[0].passFail).toBe("fail");
+    expect(calls[0].gateVerdicts.gates[0]?.status).toBe("fail");
+    expect(calls[0].gateVerdicts.aggregateStatus).toBe("fail");
+  });
+});
+
+describe("evaluatePcdQcResult — provider-error obeys mode", () => {
+  it("provider throws in warn_only mode → passFail=warn, faceSimilarityScore=null", async () => {
+    const { providers, scoreFaceSimilarity } = makeProviders();
+    scoreFaceSimilarity.mockRejectedValue(new Error("boom"));
+    const { store, calls } = makeStore();
+
+    await evaluatePcdQcResult(
+      {
+        assetRecordId: "asset_1",
+        // talking_head + tier 2 → face_similarity with mode: "warn_only"
+        shotType: "talking_head",
+        effectiveTier: 2 as const,
+        identitySnapshot: makeSnapshot(),
+        productLogoAssetId: null,
+        productCanonicalText: null,
+        productDimensionsMm: null,
+      },
+      providers,
+      { qcLedgerStore: store },
+    );
+
+    expect(calls[0].passFail).toBe("warn");
+    expect(calls[0].faceSimilarityScore).toBeNull();
+    expect(calls[0].gateVerdicts.gates[0]?.status).toBe("warn");
+    expect(calls[0].gateVerdicts.gates[0]?.reason).toMatch(/provider error.*boom/);
+  });
+});
