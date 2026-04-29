@@ -472,7 +472,12 @@ describe("routePcdShot — Part F: first-match is policy", () => {
     const log = { calls: 0 };
     const r1 = await route1(
       {
-        resolvedContext: makeContext({ effectiveTier: 2, productTierAtResolution: 2, creatorTierAtResolution: 2, allowedOutputTier: 2 }),
+        resolvedContext: makeContext({
+          effectiveTier: 2,
+          productTierAtResolution: 2,
+          creatorTierAtResolution: 2,
+          allowedOutputTier: 2,
+        }),
         shotType: "simple_ugc",
         outputIntent: "final_export",
         approvedCampaignContext: NO_CAMPAIGN,
@@ -488,7 +493,12 @@ describe("routePcdShot — Part F: first-match is policy", () => {
     const { routePcdShot: route2 } = await import("./provider-router.js");
     const r2 = await route2(
       {
-        resolvedContext: makeContext({ effectiveTier: 2, productTierAtResolution: 2, creatorTierAtResolution: 2, allowedOutputTier: 2 }),
+        resolvedContext: makeContext({
+          effectiveTier: 2,
+          productTierAtResolution: 2,
+          creatorTierAtResolution: 2,
+          allowedOutputTier: 2,
+        }),
         shotType: "simple_ugc",
         outputIntent: "final_export",
         approvedCampaignContext: NO_CAMPAIGN,

@@ -109,7 +109,9 @@ describe("writePcdIdentitySnapshot — Part A: version pinning", () => {
     await writePcdIdentitySnapshot(
       makeInput({
         // Caller tries to spread a bogus policyVersion onto the input.
-        ...({ policyVersion: "tier-policy@bogus" } as unknown as Partial<WritePcdIdentitySnapshotInput>),
+        ...({
+          policyVersion: "tier-policy@bogus",
+        } as unknown as Partial<WritePcdIdentitySnapshotInput>),
       }),
       makeStores(store),
     );

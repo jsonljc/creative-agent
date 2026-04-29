@@ -1,10 +1,7 @@
 import type { IdentityTier, OutputIntent, PcdShotType } from "@creativeagent/schemas";
 import type { PcdProviderCapability } from "./provider-capability-matrix.js";
 
-export type Tier3Rule =
-  | "first_last_frame_anchor"
-  | "performance_transfer"
-  | "edit_over_regenerate";
+export type Tier3Rule = "first_last_frame_anchor" | "performance_transfer" | "edit_over_regenerate";
 
 // MERGE-BACK: production implementer of CampaignTakeStore is owned by SP6
 // ApprovalLifecycle / campaign-take persistence (Switchboard side). This SP4
@@ -139,10 +136,7 @@ export function assertTier3RoutingDecisionCompliant(input: {
     if (rule === "first_last_frame_anchor" && !input.selectedCapability.supportsFirstLastFrame) {
       throw new Tier3RoutingViolationError(rule, input.selectedCapability.provider);
     }
-    if (
-      rule === "performance_transfer" &&
-      !input.selectedCapability.supportsPerformanceTransfer
-    ) {
+    if (rule === "performance_transfer" && !input.selectedCapability.supportsPerformanceTransfer) {
       throw new Tier3RoutingViolationError(rule, input.selectedCapability.provider);
     }
     if (rule === "edit_over_regenerate" && !input.selectedCapability.supportsEditExtend) {

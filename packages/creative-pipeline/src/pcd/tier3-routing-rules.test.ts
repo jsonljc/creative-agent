@@ -43,9 +43,7 @@ const PUBLISHABLE: ReadonlyArray<OutputIntent> = ["preview", "final_export", "me
 describe("requiresFirstLastFrameAnchor", () => {
   it.each(
     ALL_TIERS.flatMap((t) =>
-      ALL_SHOT_TYPES.flatMap((s) =>
-        ALL_OUTPUT_INTENTS.map((o) => [t, s, o] as const),
-      ),
+      ALL_SHOT_TYPES.flatMap((s) => ALL_OUTPUT_INTENTS.map((o) => [t, s, o] as const)),
     ),
   )("tier=%s shot=%s intent=%s", (effectiveTier, shotType, outputIntent) => {
     const expected =
@@ -55,12 +53,13 @@ describe("requiresFirstLastFrameAnchor", () => {
 });
 
 describe("requiresPerformanceTransfer", () => {
-  it.each(
-    ALL_TIERS.flatMap((t) => ALL_SHOT_TYPES.map((s) => [t, s] as const)),
-  )("tier=%s shot=%s", (effectiveTier, shotType) => {
-    const expected = effectiveTier === 3 && shotType === "talking_head";
-    expect(requiresPerformanceTransfer({ effectiveTier, shotType })).toBe(expected);
-  });
+  it.each(ALL_TIERS.flatMap((t) => ALL_SHOT_TYPES.map((s) => [t, s] as const)))(
+    "tier=%s shot=%s",
+    (effectiveTier, shotType) => {
+      const expected = effectiveTier === 3 && shotType === "talking_head";
+      expect(requiresPerformanceTransfer({ effectiveTier, shotType })).toBe(expected);
+    },
+  );
 });
 
 function makeCampaignTakeStore(returns: boolean, calls: { count: number }): CampaignTakeStore {

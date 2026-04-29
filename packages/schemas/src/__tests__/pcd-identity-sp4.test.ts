@@ -44,7 +44,11 @@ describe("PcdRoutingDecisionReasonSchema", () => {
     expect(() =>
       PcdRoutingDecisionReasonSchema.parse({
         ...valid,
-        tier3RulesApplied: ["first_last_frame_anchor", "performance_transfer", "edit_over_regenerate"],
+        tier3RulesApplied: [
+          "first_last_frame_anchor",
+          "performance_transfer",
+          "edit_over_regenerate",
+        ],
       }),
     ).not.toThrow();
     expect(() =>
