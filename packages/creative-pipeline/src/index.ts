@@ -105,6 +105,9 @@ export {
   type PcdProductionFanoutDecision,
 } from "@creativeagent/schemas";
 
+// SP7: identity-aware pre-production chain + single production gate
+export * from "./pcd/preproduction/index.js";
+
 // SP6: lifecycle gates — approval / final-export / meta-draft / consent
 export { PCD_APPROVAL_LIFECYCLE_VERSION } from "./pcd/approval-lifecycle-version.js";
 export { PCD_CONSENT_REVOCATION_VERSION } from "./pcd/consent-revocation-version.js";
