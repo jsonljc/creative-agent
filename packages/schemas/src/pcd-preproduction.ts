@@ -30,3 +30,18 @@ export const UgcStyleConstraintSchema = z.enum([
   "no_invented_product_claims",       // no claims absent from registry
 ]);
 export type UgcStyleConstraint = z.infer<typeof UgcStyleConstraintSchema>;
+
+// Brief input schema: creator+product context, platform targets, and style guide.
+// Required for all preproduction chain jobs. Combines identity refs with creative
+// direction to ensure every stage runner has authoritative context.
+export const PcdBriefInputSchema = z.object({
+  briefId: z.string().min(1),
+  productDescription: z.string().min(1),
+  targetAudience: z.string().min(1),
+  platforms: z.array(z.string().min(1)),
+  brandVoice: z.string().nullable().optional(),
+  references: z.array(z.string()).optional(),
+  creatorIdentityRef: z.string().min(1),
+  productIdentityRef: z.string().min(1),
+});
+export type PcdBriefInput = z.infer<typeof PcdBriefInputSchema>;

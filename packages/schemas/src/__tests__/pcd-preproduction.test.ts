@@ -42,3 +42,48 @@ describe("UgcStyleConstraintSchema", () => {
     expect(UgcStyleConstraintSchema.safeParse("").success).toBe(false);
   });
 });
+
+import { PcdBriefInputSchema } from "../pcd-preproduction.js";
+
+describe("PcdBriefInputSchema", () => {
+  const valid = {
+    briefId: "brief-1",
+    productDescription: "AI WhatsApp lead-reply assistant",
+    targetAudience: "Solo founders running paid traffic",
+    platforms: ["instagram_reels", "tiktok"],
+    brandVoice: null,
+    references: [],
+    creatorIdentityRef: "creator-1",
+    productIdentityRef: "product-1",
+  };
+
+  it("accepts a minimal valid brief", () => {
+    expect(PcdBriefInputSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it("requires briefId", () => {
+    const { briefId: _b, ...withoutId } = valid;
+    expect(PcdBriefInputSchema.safeParse(withoutId).success).toBe(false);
+  });
+
+  it("requires creatorIdentityRef", () => {
+    const { creatorIdentityRef: _c, ...withoutCreator } = valid;
+    expect(PcdBriefInputSchema.safeParse(withoutCreator).success).toBe(false);
+  });
+
+  it("requires productIdentityRef", () => {
+    const { productIdentityRef: _p, ...withoutProduct } = valid;
+    expect(PcdBriefInputSchema.safeParse(withoutProduct).success).toBe(false);
+  });
+
+  it("allows brandVoice to be null or undefined", () => {
+    expect(PcdBriefInputSchema.safeParse({ ...valid, brandVoice: null }).success).toBe(true);
+    const { brandVoice: _bv, ...withoutBrandVoice } = valid;
+    expect(PcdBriefInputSchema.safeParse(withoutBrandVoice).success).toBe(true);
+  });
+
+  it("allows references to be omitted", () => {
+    const { references: _r, ...withoutRefs } = valid;
+    expect(PcdBriefInputSchema.safeParse(withoutRefs).success).toBe(true);
+  });
+});
