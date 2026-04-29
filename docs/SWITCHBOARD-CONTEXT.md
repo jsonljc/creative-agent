@@ -49,6 +49,7 @@ Nothing to stub — entire SP2 lives in `packages/creative-pipeline/src/pcd/tier
 ### SP3 (wire policy into job creation)
 
 **Will need from Switchboard at merge:**
+
 - `CreativeJobStore.create()` call site in `packages/creative-pipeline/src/runners/` (Switchboard's existing creative job runner)
 - Resolver pattern that joins `AssetRecord.creator` (per design spec)
 
@@ -57,24 +58,36 @@ Nothing to stub — entire SP2 lives in `packages/creative-pipeline/src/pcd/tier
 ### SP4 (tier-based routing)
 
 **Will need:**
+
 - Switchboard's `ProviderRegistry` (`packages/core/src/providers/...`) — Sora, Veo, Runway, Kling, HeyGen profiles
 - Capability descriptors
 
 **Stub strategy:** local `ProviderProfile` type with the minimum fields the router reads. Mark any Switchboard-only fields as `// MERGE-BACK: replace with Switchboard ProviderProfile`.
+
 - **CampaignTakeStore is an SP4-declared orchestration dependency; production implementation is reserved for SP6 ApprovalLifecycle/campaign-take ownership at merge-back.** The contract lives at `packages/creative-pipeline/src/pcd/tier3-routing-rules.ts` with a `// MERGE-BACK:` comment marker for code search. No in-tree production implementer ships in SP4 — only test fakes. Production wiring at merge-back must inject the SP6 ApprovalLifecycle-backed store.
 - **`PcdIdentitySnapshotStore.createForShot` (creative-pipeline) vs `PrismaPcdIdentitySnapshotStore.create` (db): method names diverge intentionally for semantic clarity.** Resolved in-tree: `adaptPcdIdentitySnapshotStore(prismaStore)` in `packages/db/src/stores/prisma-pcd-identity-snapshot-store.ts` returns a `PcdIdentitySnapshotStoreAdapter` whose `createForShot` shape structurally matches the writer's `PcdIdentitySnapshotStore` contract. Merge-back wiring is `writePcdIdentitySnapshot(input, { pcdIdentitySnapshotStore: adaptPcdIdentitySnapshotStore(prismaStore) })`.
 
 ### SP5 (QC gate)
 
-**Will need:**
-- `AssetRecord` writes (already in our schema — same shape as Switchboard's)
-- QC providers (likely external APIs, not Switchboard internals)
+**Will need from Switchboard at merge:**
 
-Mostly self-contained.
+- A real implementer of `SimilarityProvider` (face + logo embedding) — production model lives in Switchboard's QC service.
+- A real implementer of `OcrProvider` — Switchboard QC's OCR pipeline.
+- A real implementer of `GeometryProvider` — Switchboard QC's depth/object-detection pipeline.
+- Optional: a `PrismaPcdQcResultStore` rename if Switchboard ever decides to rename `ProductQcResult → PcdQcResult` (deferred indefinitely; SP5 keeps SP1's name).
+
+**Stub strategy here:** SP5 ships only the three provider contract surfaces (`SimilarityProvider`, `OcrProvider`, `GeometryProvider`) marked `// MERGE-BACK: replace with Switchboard QC provider`. Concrete production implementers are reserved for Switchboard's QC service ownership at merge-back. In-tree consumers (predicates, tests) inject test stubs that conform to these types.
+
+**Merge-back notes:**
+
+- `SimilarityProvider`, `OcrProvider`, `GeometryProvider` are SP5-declared orchestration dependencies; production implementations are reserved for Switchboard QC service ownership at merge-back.
+- `ProductQcResult` table-name reconciliation (preserved verbatim from SP1; potential rename to `PcdQcResult`) is deferred to merge-back — SP5 widens additively without renaming.
+- `PcdQcLedgerStore.createForAsset` vs Prisma-natural `create` method-name divergence: if any orchestration caller needs the contract method name strictly, ship `adaptPcdQcResultStore` per SP4's `adaptPcdIdentitySnapshotStore` precedent.
 
 ### SP6 (consent + Meta draft + revocation)
 
 **Will need:**
+
 - Switchboard's `ApprovalLifecycle` model (lives at `packages/core/src/approval/`)
 - WorkTrace emit
 - Notification fan-out via three-channel system
