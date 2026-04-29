@@ -93,6 +93,51 @@ export const ConsentRecordSchema = z.object({
 });
 export type ConsentRecord = z.infer<typeof ConsentRecordSchema>;
 
+// SP5: QC gate schemas — gate keys, statuses, aggregate statuses, modes, verdicts.
+// Note: PcdQcGateApplicabilitySchema is defined further down in this file
+// (it depends on PcdShotTypeSchema, which is positioned after ProductQcResultSchema
+// per the SP4-era layout). Keep this comment in sync if either schema moves.
+
+export const PcdQcGateKeySchema = z.enum([
+  "face_similarity",
+  "logo_similarity",
+  "ocr_package_text",
+  "geometry_scale",
+]);
+export type PcdQcGateKey = z.infer<typeof PcdQcGateKeySchema>;
+
+export const PcdQcGateStatusSchema = z.enum(["pass", "warn", "fail", "skipped"]);
+export type PcdQcGateStatus = z.infer<typeof PcdQcGateStatusSchema>;
+
+export const PcdQcAggregateStatusSchema = z.enum(["pass", "warn", "fail"]);
+export type PcdQcAggregateStatus = z.infer<typeof PcdQcAggregateStatusSchema>;
+
+export const PcdQcGateModeSchema = z.enum(["block", "warn_only"]);
+export type PcdQcGateMode = z.infer<typeof PcdQcGateModeSchema>;
+
+export const PcdQcGateVerdictSchema = z.object({
+  gate: PcdQcGateKeySchema,
+  status: PcdQcGateStatusSchema,
+  score: z.number().optional(),
+  threshold: z.number().optional(),
+  reason: z.string().min(1),
+  // evidence is a small, non-PII, non-binary diagnostic bag. See design doc
+  // "Evidence bounds (binding)" — no raw OCR text, no embeddings, no image
+  // payloads, ≤2 KB JSON soft limit.
+  evidence: z.record(z.unknown()).optional(),
+});
+export type PcdQcGateVerdict = z.infer<typeof PcdQcGateVerdictSchema>;
+
+export const PcdQcGateVerdictsSchema = z
+  .object({
+    gates: z.array(PcdQcGateVerdictSchema),
+    aggregateStatus: PcdQcAggregateStatusSchema,
+  })
+  .refine((v) => !(v.gates.length === 0 && v.aggregateStatus === "pass"), {
+    message: "aggregateStatus cannot be 'pass' when no gates ran",
+  });
+export type PcdQcGateVerdicts = z.infer<typeof PcdQcGateVerdictsSchema>;
+
 export const ProductQcResultSchema = z.object({
   id: z.string(),
   productIdentityId: z.string(),
@@ -106,6 +151,16 @@ export const ProductQcResultSchema = z.object({
   passFail: z.enum(["pass", "fail", "warn"]),
   warnings: z.array(z.string()),
   createdAt: z.coerce.date(),
+  // SP5 additions — see docs/plans/2026-04-29-pcd-qc-gates-sp5-design.md.
+  // nullable = DB historical-compat (pre-SP5 rows).
+  // optional = schema-compat for partial in-memory test fixtures.
+  creatorIdentityId: z.string().nullable().optional(),
+  pcdIdentitySnapshotId: z.string().nullable().optional(),
+  faceSimilarityScore: z.number().min(0).max(1).nullable().optional(),
+  gatesRan: z.array(PcdQcGateKeySchema).nullable().optional(),
+  gateVerdicts: PcdQcGateVerdictsSchema.nullable().optional(),
+  qcEvaluationVersion: z.string().nullable().optional(),
+  qcGateMatrixVersion: z.string().nullable().optional(),
 });
 export type ProductQcResult = z.infer<typeof ProductQcResultSchema>;
 
@@ -203,3 +258,51 @@ export const PcdSp4IdentitySnapshotInputSchema = z.object({
   // pins them from imports; caller cannot override.
 });
 export type PcdSp4IdentitySnapshotInput = z.infer<typeof PcdSp4IdentitySnapshotInputSchema>;
+
+export const PcdQcGateApplicabilitySchema = z.object({
+  shotType: PcdShotTypeSchema,
+  effectiveTier: IdentityTierSchema,
+  gate: PcdQcGateKeySchema,
+  mode: PcdQcGateModeSchema,
+  rationale: z.string().max(200).optional(),
+});
+export type PcdQcGateApplicability = z.infer<typeof PcdQcGateApplicabilitySchema>;
+
+export const PcdSp5QcLedgerInputSchema = z
+  .object({
+    // Identity-side (required)
+    assetRecordId: z.string(),
+    productIdentityId: z.string(),
+    pcdIdentitySnapshotId: z.string(),
+    creatorIdentityId: z.string().nullable(),
+
+    // Forensic version pins (REQUIRED, evaluator-pinned from imports)
+    qcEvaluationVersion: z.string(),
+    qcGateMatrixVersion: z.string(),
+
+    // Gate result fields (REQUIRED)
+    gateVerdicts: PcdQcGateVerdictsSchema,
+    gatesRan: z.array(PcdQcGateKeySchema),
+
+    // Per-gate scalar scores (nullable when gate skipped or not run)
+    faceSimilarityScore: z.number().min(0).max(1).nullable(),
+    logoSimilarityScore: z.number().min(0).max(1).nullable(),
+    packageOcrMatchScore: z.number().min(0).max(1).nullable(),
+    geometryMatchScore: z.number().min(0).max(1).nullable(),
+    scaleConfidence: z.number().min(0).max(1).nullable(),
+    colorDeltaScore: z.number().min(0).nullable(),
+
+    // Aggregate (derived from gateVerdicts.aggregateStatus)
+    passFail: z.enum(["pass", "fail", "warn"]),
+    warnings: z.array(z.string()),
+  })
+  .refine((v) => !v.gatesRan.includes("face_similarity") || v.creatorIdentityId !== null, {
+    message: "creatorIdentityId required when face_similarity gate ran",
+  })
+  .refine(
+    (v) =>
+      v.gatesRan.length === v.gateVerdicts.gates.length &&
+      v.gatesRan.every((g, i) => g === v.gateVerdicts.gates[i]?.gate),
+    { message: "gatesRan must equal gateVerdicts.gates[*].gate (same order)" },
+  );
+export type PcdSp5QcLedgerInput = z.infer<typeof PcdSp5QcLedgerInputSchema>;
