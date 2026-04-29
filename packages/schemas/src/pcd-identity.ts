@@ -324,3 +324,49 @@ export const PcdLifecycleRefusalReasonSchema = z.enum([
   "creative_job_not_found", // CreativeJob row missing for asset's jobId
 ]);
 export type PcdLifecycleRefusalReason = z.infer<typeof PcdLifecycleRefusalReasonSchema>;
+
+export const PcdApprovalAdvancementDecisionSchema = z.object({
+  allowed: z.boolean(),
+  assetRecordId: z.string(),
+  currentApprovalState: z.string(),
+  proposedApprovalState: z.enum(["approved", "rejected"]),
+  qcPassFail: z.enum(["pass", "fail", "warn"]).nullable(),
+  refusalReasons: z.array(PcdLifecycleRefusalReasonSchema),
+  approvalLifecycleVersion: z.string(),
+});
+export type PcdApprovalAdvancementDecision = z.infer<typeof PcdApprovalAdvancementDecisionSchema>;
+
+export const PcdFinalExportDecisionSchema = z.object({
+  allowed: z.boolean(),
+  assetRecordId: z.string(),
+  effectiveTier: IdentityTierSchema.nullable(),
+  approvalState: z.string().nullable(),
+  qcPassFail: z.enum(["pass", "fail", "warn"]).nullable(),
+  exportGateOpen: z.boolean(),
+  consentRevoked: z.boolean(),
+  refusalReasons: z.array(PcdLifecycleRefusalReasonSchema),
+  approvalLifecycleVersion: z.string(),
+});
+export type PcdFinalExportDecision = z.infer<typeof PcdFinalExportDecisionSchema>;
+
+export const PcdMetaDraftDecisionSchema = z.object({
+  allowed: z.boolean(),
+  assetRecordId: z.string(),
+  effectiveTier: IdentityTierSchema.nullable(),
+  approvalState: z.string().nullable(),
+  complianceCheckPassed: z.boolean(),
+  consentRevoked: z.boolean(),
+  refusalReasons: z.array(PcdLifecycleRefusalReasonSchema),
+  approvalLifecycleVersion: z.string(),
+});
+export type PcdMetaDraftDecision = z.infer<typeof PcdMetaDraftDecisionSchema>;
+
+export const PcdConsentRevocationPropagationResultSchema = z.object({
+  consentRecordId: z.string(),
+  assetIdsFlagged: z.array(z.string()),
+  assetIdsAlreadyFlagged: z.array(z.string()),
+  consentRevocationVersion: z.string(),
+});
+export type PcdConsentRevocationPropagationResult = z.infer<
+  typeof PcdConsentRevocationPropagationResultSchema
+>;
