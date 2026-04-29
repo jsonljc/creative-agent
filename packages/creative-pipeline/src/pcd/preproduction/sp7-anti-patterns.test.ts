@@ -27,9 +27,7 @@ function readCodeOnly(file: string): string {
   // Strip line comments and block comments before regex matching so doc-comments
   // describing the anti-pattern don't trip the grep.
   const src = readFileSync(file, "utf8");
-  return src
-    .replace(/\/\/[^\n]*/g, "")
-    .replace(/\/\*[\s\S]*?\*\//g, "");
+  return src.replace(/\/\/[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
 }
 
 const allSources = listSp7SourceFiles();
@@ -50,9 +48,7 @@ describe("SP7 anti-pattern grep", () => {
       expect(code, `${file} contains 'if (effectiveTier ==='`).not.toMatch(
         /if\s*\(\s*effectiveTier\s*===/,
       );
-      expect(code, `${file} contains 'if (shotType ==='`).not.toMatch(
-        /if\s*\(\s*shotType\s*===/,
-      );
+      expect(code, `${file} contains 'if (shotType ==='`).not.toMatch(/if\s*\(\s*shotType\s*===/);
     }
   });
 
@@ -80,12 +76,8 @@ describe("SP7 anti-pattern grep", () => {
   it("no Switchboard parent-system imports in any SP7 source", () => {
     for (const file of allSources) {
       const src = readFileSync(file, "utf8");
-      expect(src, `${file} imports ApprovalLifecycle`).not.toMatch(
-        /import.*\bApprovalLifecycle\b/,
-      );
-      expect(src, `${file} imports ExportLifecycle`).not.toMatch(
-        /import.*\bExportLifecycle\b/,
-      );
+      expect(src, `${file} imports ApprovalLifecycle`).not.toMatch(/import.*\bApprovalLifecycle\b/);
+      expect(src, `${file} imports ExportLifecycle`).not.toMatch(/import.*\bExportLifecycle\b/);
       expect(src, `${file} imports core/approval`).not.toMatch(/import.*core\/approval/);
     }
   });

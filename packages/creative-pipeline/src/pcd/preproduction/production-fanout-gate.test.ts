@@ -2,10 +2,7 @@ import { describe, expect, it } from "vitest";
 import { PCD_APPROVAL_LIFECYCLE_VERSION } from "../approval-lifecycle-version.js";
 import { InvariantViolationError } from "../invariant-violation-error.js";
 import { PcdProductionFanoutDecisionSchema } from "@creativeagent/schemas";
-import {
-  AutoApproveOnlyScriptGate,
-  type RequestSelectionInput,
-} from "./production-fanout-gate.js";
+import { AutoApproveOnlyScriptGate, type RequestSelectionInput } from "./production-fanout-gate.js";
 import { PCD_PREPRODUCTION_CHAIN_VERSION } from "./preproduction-chain-version.js";
 import { PCD_IDENTITY_CONTEXT_VERSION } from "./identity-context-version.js";
 

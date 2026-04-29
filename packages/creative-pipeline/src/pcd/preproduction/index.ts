@@ -1,10 +1,7 @@
 export { PCD_PREPRODUCTION_CHAIN_VERSION } from "./preproduction-chain-version.js";
 export { PCD_IDENTITY_CONTEXT_VERSION } from "./identity-context-version.js";
 export { PreproductionChainError } from "./preproduction-chain-error.js";
-export type {
-  Sp7ProductRegistryReader,
-  Sp7CreatorRegistryReader,
-} from "./sp7-readers.js";
+export type { Sp7ProductRegistryReader, Sp7CreatorRegistryReader } from "./sp7-readers.js";
 
 export {
   buildPcdIdentityContext,

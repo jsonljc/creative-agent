@@ -4,13 +4,7 @@ import { UgcStyleConstraintSchema } from "../pcd-preproduction.js";
 
 describe("PreproductionChainStageEnumSchema", () => {
   it("accepts every documented stage name", () => {
-    const stages = [
-      "trends",
-      "motivators",
-      "hooks",
-      "creator_scripts",
-      "production_fanout_gate",
-    ];
+    const stages = ["trends", "motivators", "hooks", "creator_scripts", "production_fanout_gate"];
     for (const s of stages) {
       expect(PreproductionChainStageEnumSchema.safeParse(s).success).toBe(true);
     }
@@ -239,10 +233,7 @@ describe("HooksStageOutputSchema", () => {
   });
 });
 
-import {
-  CreatorScriptSchema,
-  CreatorScriptsStageOutputSchema,
-} from "../pcd-preproduction.js";
+import { CreatorScriptSchema, CreatorScriptsStageOutputSchema } from "../pcd-preproduction.js";
 
 describe("CreatorScriptSchema", () => {
   const baseFields = {

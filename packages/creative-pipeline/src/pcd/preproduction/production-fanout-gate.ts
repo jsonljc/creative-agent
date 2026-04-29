@@ -23,10 +23,9 @@ export interface ProductionFanoutGate {
 export class AutoApproveOnlyScriptGate implements ProductionFanoutGate {
   async requestSelection(input: RequestSelectionInput): Promise<PcdProductionFanoutDecision> {
     if (input.scripts.length !== 1) {
-      throw new InvariantViolationError(
-        "AutoApproveOnlyScriptGate requires exactly one script",
-        { scriptsLength: input.scripts.length },
-      );
+      throw new InvariantViolationError("AutoApproveOnlyScriptGate requires exactly one script", {
+        scriptsLength: input.scripts.length,
+      });
     }
     const script = input.scripts[0]!;
     const sortedIds = [script.id].slice().sort();

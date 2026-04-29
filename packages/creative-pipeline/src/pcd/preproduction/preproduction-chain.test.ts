@@ -189,7 +189,11 @@ describe("runIdentityAwarePreproductionChain — pre-stage errors propagate raw"
 
   it("InvariantViolationError from missing product propagates raw", async () => {
     const stores = happyStores();
-    stores.sp7ProductRegistryReader = { async findById() { return null; } };
+    stores.sp7ProductRegistryReader = {
+      async findById() {
+        return null;
+      },
+    };
     await expect(runIdentityAwarePreproductionChain(validBrief, stores)).rejects.toThrow(
       InvariantViolationError,
     );

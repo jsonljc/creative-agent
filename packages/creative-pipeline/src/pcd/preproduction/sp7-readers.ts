@@ -1,7 +1,4 @@
-import type {
-  AvatarQualityTier,
-  ProductQualityTier,
-} from "@creativeagent/schemas";
+import type { AvatarQualityTier, ProductQualityTier } from "@creativeagent/schemas";
 
 // SP7 — wider readers than SP6's narrow consent-only readers. Read product
 // and creator registry rows by ID and return the fields the SP7 chain needs:

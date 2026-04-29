@@ -13,10 +13,18 @@ const brief = {
   productIdentityRef: "product-1",
 };
 const ctx = {} as never;
-const trends = { signals: [{ id: "trend-brief-123-1", summary: "z", audienceFit: "y", evidenceRefs: [] }] };
+const trends = {
+  signals: [{ id: "trend-brief-123-1", summary: "z", audienceFit: "y", evidenceRefs: [] }],
+};
 const motivators = {
   motivators: [
-    { id: "motivator-brief-123-1", frictionOrDesire: "f", audienceSegment: "y", evidenceRefs: [], parentTrendId: "trend-brief-123-1" },
+    {
+      id: "motivator-brief-123-1",
+      frictionOrDesire: "f",
+      audienceSegment: "y",
+      evidenceRefs: [],
+      parentTrendId: "trend-brief-123-1",
+    },
   ],
 };
 

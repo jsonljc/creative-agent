@@ -19,10 +19,7 @@ import {
   type AssertConsentNotRevokedForGenerationStores,
 } from "../consent-pre-check-generation.js";
 import { PCD_IDENTITY_CONTEXT_VERSION } from "./identity-context-version.js";
-import type {
-  Sp7CreatorRegistryReader,
-  Sp7ProductRegistryReader,
-} from "./sp7-readers.js";
+import type { Sp7CreatorRegistryReader, Sp7ProductRegistryReader } from "./sp7-readers.js";
 
 export type BuildPcdIdentityContextStores = {
   sp7ProductRegistryReader: Sp7ProductRegistryReader;
