@@ -145,39 +145,47 @@ export async function resolvePcdRegistryContext(
   job: PcdResolvableJob,
   stores: RegistryResolverStores,
 ): Promise<ResolvedPcdContext> {
-  // Always read current registry component tiers. On the no-op path we still
-  // skip attachIdentityRefs (no write), but we need productTier and creatorTier
-  // to satisfy the SP4-revised ResolvedPcdContext contract. Registry is the
-  // source of truth for component tiers; CreativeJob does not shadow them.
-  const product = await stores.productStore.findOrCreateForJob(job);
-  const creator = await stores.creatorStore.findOrCreateStockForDeployment(job.deploymentId);
-  const productTier = mapProductQualityTierToIdentityTier(product.qualityTier);
-  const creatorTier = mapCreatorQualityTierToIdentityTier(creator.qualityTier);
-
+  // No-op path: every field comes from the job row. Zero store calls.
+  // Restores SP3's original "zero store calls on no-op" idempotency
+  // invariant. The pre-amend SP4 design relaxed this to read current
+  // registry tiers; the amendment locks it back.
   if (isResolvedPcdJob(job)) {
-    // No-op path: effectiveTier and allowedOutputTier reflect ORIGINAL
-    // resolution time (preserved from job stamp). productTier and creatorTier
-    // reflect CURRENT registry state. They may diverge if registry rows were
-    // re-tiered after job stamping. Downstream consumers must treat
-    // effectiveTier as authoritative for gating.
     return {
       productIdentityId: job.productIdentityId,
       creatorIdentityId: job.creatorIdentityId,
-      productTier,
-      creatorTier,
+      productTierAtResolution: job.productTierAtResolution,
+      creatorTierAtResolution: job.creatorTierAtResolution,
       effectiveTier: job.effectiveTier,
       allowedOutputTier: job.allowedOutputTier,
       shotSpecVersion: job.shotSpecVersion,
     };
   }
 
-  const effectiveTier = computeEffectiveTier(productTier, creatorTier);
+  // Malformed-resolved-job invariant: if the resolved 5-field core is
+  // present at the current shotSpecVersion but stamped component tiers
+  // are missing/invalid, throw. Never fall back to registry reads —
+  // silent fallback would silently reintroduce dual-authority routing.
+  // Unreachable inside corrected SP4 (every resolution stamps both);
+  // the guard catches any future regression that forgets to stamp.
+  assertResolvedJobHasStampedComponentTiers(job);
+
+  // Full-attach path: read both registry stores to derive component
+  // tiers, compute effectiveTier, stamp all fields via attachIdentityRefs,
+  // and return the resolved context.
+  const product = await stores.productStore.findOrCreateForJob(job);
+  const creator = await stores.creatorStore.findOrCreateStockForDeployment(
+    job.deploymentId,
+  );
+
+  const productTierAtResolution = mapProductQualityTierToIdentityTier(product.qualityTier);
+  const creatorTierAtResolution = mapCreatorQualityTierToIdentityTier(creator.qualityTier);
+  const effectiveTier = computeEffectiveTier(productTierAtResolution, creatorTierAtResolution);
 
   const resolved: ResolvedPcdContext = {
     productIdentityId: product.id,
     creatorIdentityId: creator.id,
-    productTier,
-    creatorTier,
+    productTierAtResolution,
+    creatorTierAtResolution,
     effectiveTier,
     allowedOutputTier: effectiveTier,
     shotSpecVersion: PCD_SHOT_SPEC_VERSION,
@@ -186,4 +194,24 @@ export async function resolvePcdRegistryContext(
   await stores.jobStore.attachIdentityRefs(job.id, resolved);
 
   return resolved;
+}
+
+function assertResolvedJobHasStampedComponentTiers(job: PcdResolvableJob): void {
+  // Only triggers when the original 5-field core is present at the
+  // current shotSpecVersion (signals "claims to be resolved") but the
+  // stamped component tiers are missing.
+  const claimsResolvedCore =
+    typeof job.productIdentityId === "string" &&
+    typeof job.creatorIdentityId === "string" &&
+    isIdentityTier(job.effectiveTier) &&
+    isIdentityTier(job.allowedOutputTier) &&
+    job.shotSpecVersion === PCD_SHOT_SPEC_VERSION;
+  if (!claimsResolvedCore) return;
+
+  if (!isIdentityTier(job.productTierAtResolution)) {
+    throw new InvariantViolationError(job.id, "productTierAtResolution");
+  }
+  if (!isIdentityTier(job.creatorTierAtResolution)) {
+    throw new InvariantViolationError(job.id, "creatorTierAtResolution");
+  }
 }
