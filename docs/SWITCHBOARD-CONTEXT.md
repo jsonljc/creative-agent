@@ -84,15 +84,29 @@ Nothing to stub — entire SP2 lives in `packages/creative-pipeline/src/pcd/tier
 - `ProductQcResult` table-name reconciliation (preserved verbatim from SP1; potential rename to `PcdQcResult`) is deferred to merge-back — SP5 widens additively without renaming.
 - `PcdQcLedgerStore.createForAsset` vs Prisma-natural `create` method-name divergence: if any orchestration caller needs the contract method name strictly, ship `adaptPcdQcResultStore` per SP4's `adaptPcdIdentitySnapshotStore` precedent.
 
-### SP6 (consent + Meta draft + revocation)
+### SP6 (consent + Meta draft + revocation) — SHIPPED
 
-**Will need:**
+**SP6-declared merge-back surfaces (production wiring at merge-back):**
 
-- Switchboard's `ApprovalLifecycle` model (lives at `packages/core/src/approval/`)
-- WorkTrace emit
-- Notification fan-out via three-channel system
+- `ExportGateState` (default `AlwaysOpenExportGateState`) → adapter over Switchboard's `ExportLifecycle` (`packages/core/src/export-lifecycle/`).
+- `ComplianceCheck` (default `AlwaysPassComplianceCheck`) → real FTC-disclosure / Meta-draft compliance pipeline (script claims path, testimonial flagging, voice-consent verification).
+- `LegalOverrideRecord` table — deferred to Switchboard. SP6 final-export gate refuses revoked-consent re-export by default with a `// MERGE-BACK: legal-override path` marker. Override store and UX are Switchboard's.
+- `WorkTrace` emit — every SP6 lifecycle decision-point carries `// MERGE-BACK: emit WorkTrace here` markers. Six markers total: three at lifecycle-gate returns, one at consent-revocation per-asset boundary, plus the legal-override and notification-fanout deferrals on consent revocation.
+- Notification fan-out — `// MERGE-BACK: notification fan-out` marker at end of `propagateConsentRevocation`. Switchboard's three-channel notification system fires per affected campaign owner at merge-back.
 
-**Stub strategy:** local `ApprovalRequest` interface. SP6 is the slice with the most merge-back surface — write it last and write it knowing it will get rewritten against the real contracts.
+**Schema reconciliation at merge-back:**
+
+- `AssetRecord.consentRevokedAfterGeneration Boolean @default(false)` — new column added by SP6 migration. If Switchboard `main` has not added this column independently, the SP6 migration applies cleanly; if Switchboard added a same-semantic column with a different name, reconcile by renaming SP6's column in the migration before merge-back.
+- `AssetRecord.approvalState String @default("pending")` — SP1-shipped. SP6 reads it; Switchboard's `ApprovalLifecycle` writes it at merge-back. SP6 returns proposed-state strings on its decision structs ("approved" | "rejected") for `ApprovalLifecycle` to consume.
+- `ConsentRecord.revoked / revokedAt / revocable / expiresAt` — SP1-shipped. No widening needed.
+- `PcdIdentitySnapshot.consentRecordId` — SP1-shipped. SP6's primary join key for revocation propagation.
+
+**Architectural seams the merge-back does NOT need to rewrite:**
+
+- The six SP6 decision/pre-check functions are pure store-injected. No production wiring inside `packages/creative-pipeline/src/pcd/` changes at merge-back — only the injected stores swap (Prisma adapters → Switchboard's audited equivalents) and the markers get implementations.
+- `PcdLifecycleRefusalReason` enum is exported from `@creativeagent/schemas` — at merge-back it becomes `@switchboard/schemas` via the standard sed pass.
+- `InvariantViolationError` was promoted to its own file with a widened `(reason, context?)` constructor while preserving the legacy `(jobId, fieldName)` overload for SP3/SP4 callers — no further refactor needed at merge-back.
+- **Layer 2 mirror pattern:** the six reader interfaces and `ConsentRevocationStore` are defined in `packages/creative-pipeline/src/pcd/lifecycle-readers.ts` and `consent-revocation.ts` respectively, with **structural mirrors** in `packages/db/src/stores/` Prisma adapter files. This pattern was used because `db` (Layer 2) cannot depend on `creative-pipeline` (Layer 3). At merge-back, Switchboard may consolidate these mirrors by moving the interfaces into `@switchboard/schemas` (Layer 1, importable by both layers).
 
 ## Conventions inherited from Switchboard
 
