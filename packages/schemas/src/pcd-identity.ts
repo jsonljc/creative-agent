@@ -93,6 +93,49 @@ export const ConsentRecordSchema = z.object({
 });
 export type ConsentRecord = z.infer<typeof ConsentRecordSchema>;
 
+// SP5: QC gate schemas — gate keys, statuses, modes, verdicts, applicability.
+// Defined before ProductQcResultSchema so the widened schema can reference them directly.
+
+export const PcdQcGateKeySchema = z.enum([
+  "face_similarity",
+  "logo_similarity",
+  "ocr_package_text",
+  "geometry_scale",
+]);
+export type PcdQcGateKey = z.infer<typeof PcdQcGateKeySchema>;
+
+export const PcdQcGateStatusSchema = z.enum(["pass", "warn", "fail", "skipped"]);
+export type PcdQcGateStatus = z.infer<typeof PcdQcGateStatusSchema>;
+
+export const PcdQcAggregateStatusSchema = z.enum(["pass", "warn", "fail"]);
+export type PcdQcAggregateStatus = z.infer<typeof PcdQcAggregateStatusSchema>;
+
+export const PcdQcGateModeSchema = z.enum(["block", "warn_only"]);
+export type PcdQcGateMode = z.infer<typeof PcdQcGateModeSchema>;
+
+export const PcdQcGateVerdictSchema = z.object({
+  gate: PcdQcGateKeySchema,
+  status: PcdQcGateStatusSchema,
+  score: z.number().optional(),
+  threshold: z.number().optional(),
+  reason: z.string().min(1),
+  // evidence is a small, non-PII, non-binary diagnostic bag. See design doc
+  // "Evidence bounds (binding)" — no raw OCR text, no embeddings, no image
+  // payloads, ≤2 KB JSON soft limit.
+  evidence: z.record(z.unknown()).optional(),
+});
+export type PcdQcGateVerdict = z.infer<typeof PcdQcGateVerdictSchema>;
+
+export const PcdQcGateVerdictsSchema = z
+  .object({
+    gates: z.array(PcdQcGateVerdictSchema),
+    aggregateStatus: PcdQcAggregateStatusSchema,
+  })
+  .refine((v) => !(v.gates.length === 0 && v.aggregateStatus === "pass"), {
+    message: "aggregateStatus cannot be 'pass' when no gates ran",
+  });
+export type PcdQcGateVerdicts = z.infer<typeof PcdQcGateVerdictsSchema>;
+
 export const ProductQcResultSchema = z.object({
   id: z.string(),
   productIdentityId: z.string(),
@@ -106,6 +149,16 @@ export const ProductQcResultSchema = z.object({
   passFail: z.enum(["pass", "fail", "warn"]),
   warnings: z.array(z.string()),
   createdAt: z.coerce.date(),
+  // SP5 additions — see docs/plans/2026-04-29-pcd-qc-gates-sp5-design.md.
+  // nullable = DB historical-compat (pre-SP5 rows).
+  // optional = schema-compat for partial in-memory test fixtures.
+  creatorIdentityId: z.string().nullable().optional(),
+  pcdIdentitySnapshotId: z.string().nullable().optional(),
+  faceSimilarityScore: z.number().min(0).max(1).nullable().optional(),
+  gatesRan: z.array(PcdQcGateKeySchema).nullable().optional(),
+  gateVerdicts: PcdQcGateVerdictsSchema.nullable().optional(),
+  qcEvaluationVersion: z.string().nullable().optional(),
+  qcGateMatrixVersion: z.string().nullable().optional(),
 });
 export type ProductQcResult = z.infer<typeof ProductQcResultSchema>;
 
@@ -203,48 +256,6 @@ export const PcdSp4IdentitySnapshotInputSchema = z.object({
   // pins them from imports; caller cannot override.
 });
 export type PcdSp4IdentitySnapshotInput = z.infer<typeof PcdSp4IdentitySnapshotInputSchema>;
-
-// SP5: QC gate schemas — gate keys, statuses, modes, verdicts, applicability
-
-export const PcdQcGateKeySchema = z.enum([
-  "face_similarity",
-  "logo_similarity",
-  "ocr_package_text",
-  "geometry_scale",
-]);
-export type PcdQcGateKey = z.infer<typeof PcdQcGateKeySchema>;
-
-export const PcdQcGateStatusSchema = z.enum(["pass", "warn", "fail", "skipped"]);
-export type PcdQcGateStatus = z.infer<typeof PcdQcGateStatusSchema>;
-
-export const PcdQcAggregateStatusSchema = z.enum(["pass", "warn", "fail"]);
-export type PcdQcAggregateStatus = z.infer<typeof PcdQcAggregateStatusSchema>;
-
-export const PcdQcGateModeSchema = z.enum(["block", "warn_only"]);
-export type PcdQcGateMode = z.infer<typeof PcdQcGateModeSchema>;
-
-export const PcdQcGateVerdictSchema = z.object({
-  gate: PcdQcGateKeySchema,
-  status: PcdQcGateStatusSchema,
-  score: z.number().optional(),
-  threshold: z.number().optional(),
-  reason: z.string().min(1),
-  // evidence is a small, non-PII, non-binary diagnostic bag. See design doc
-  // "Evidence bounds (binding)" — no raw OCR text, no embeddings, no image
-  // payloads, ≤2 KB JSON soft limit.
-  evidence: z.record(z.unknown()).optional(),
-});
-export type PcdQcGateVerdict = z.infer<typeof PcdQcGateVerdictSchema>;
-
-export const PcdQcGateVerdictsSchema = z
-  .object({
-    gates: z.array(PcdQcGateVerdictSchema),
-    aggregateStatus: PcdQcAggregateStatusSchema,
-  })
-  .refine((v) => !(v.gates.length === 0 && v.aggregateStatus === "pass"), {
-    message: "aggregateStatus cannot be 'pass' when no gates ran",
-  });
-export type PcdQcGateVerdicts = z.infer<typeof PcdQcGateVerdictsSchema>;
 
 export const PcdQcGateApplicabilitySchema = z.object({
   shotType: PcdShotTypeSchema,

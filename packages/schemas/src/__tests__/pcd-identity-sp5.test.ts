@@ -7,6 +7,7 @@ import {
   PcdQcGateVerdictSchema,
   PcdQcGateVerdictsSchema,
   PcdQcGateApplicabilitySchema,
+  ProductQcResultSchema,
 } from "../pcd-identity.js";
 
 describe("SP5 enum schemas", () => {
@@ -146,5 +147,66 @@ describe("PcdQcGateApplicabilitySchema rejection paths", () => {
         rationale: "x".repeat(201),
       }),
     ).toThrow();
+  });
+});
+
+describe("SP5 ProductQcResultSchema widening", () => {
+  it("parses pre-SP5 row (new fields absent / null / [] for gatesRan)", () => {
+    const row = ProductQcResultSchema.parse({
+      id: "qc_pre",
+      productIdentityId: "prod_1",
+      assetRecordId: "asset_1",
+      passFail: "pass",
+      warnings: [],
+      createdAt: new Date(),
+      // creatorIdentityId, pcdIdentitySnapshotId, faceSimilarityScore,
+      // gatesRan, gateVerdicts, qcEvaluationVersion, qcGateMatrixVersion all absent
+    });
+    expect(row.creatorIdentityId).toBeUndefined();
+    expect(row.gateVerdicts).toBeUndefined();
+  });
+
+  it("parses pre-SP5 row with gatesRan = [] (Postgres array default)", () => {
+    const row = ProductQcResultSchema.parse({
+      id: "qc_pre2",
+      productIdentityId: "prod_1",
+      assetRecordId: "asset_1",
+      passFail: "warn",
+      warnings: [],
+      createdAt: new Date(),
+      gatesRan: [],
+    });
+    expect(row.gatesRan).toEqual([]);
+  });
+
+  it("parses fully-populated SP5 row", () => {
+    const row = ProductQcResultSchema.parse({
+      id: "qc_sp5",
+      productIdentityId: "prod_1",
+      assetRecordId: "asset_1",
+      creatorIdentityId: "creator_1",
+      pcdIdentitySnapshotId: "snap_1",
+      faceSimilarityScore: 0.91,
+      gatesRan: ["face_similarity"],
+      gateVerdicts: {
+        gates: [
+          {
+            gate: "face_similarity",
+            status: "pass",
+            score: 0.91,
+            threshold: 0.78,
+            reason: "face similarity 0.910 >= threshold 0.78",
+          },
+        ],
+        aggregateStatus: "pass",
+      },
+      qcEvaluationVersion: "pcd-qc-evaluation@1.0.0",
+      qcGateMatrixVersion: "pcd-qc-gate-matrix@1.0.0",
+      passFail: "pass",
+      warnings: [],
+      createdAt: new Date(),
+    });
+    expect(row.qcEvaluationVersion).toBe("pcd-qc-evaluation@1.0.0");
+    expect(row.gateVerdicts?.aggregateStatus).toBe("pass");
   });
 });
