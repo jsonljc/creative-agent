@@ -99,10 +99,68 @@ export {
   type PcdQcLedgerStore,
 } from "./pcd/qc-evaluator.js";
 
-// SP6 — propagation surface (full SP6 barrel re-exports happen in Task 20)
+// SP6: lifecycle gates — approval / final-export / meta-draft / consent
+export { PCD_APPROVAL_LIFECYCLE_VERSION } from "./pcd/approval-lifecycle-version.js";
+export { PCD_CONSENT_REVOCATION_VERSION } from "./pcd/consent-revocation-version.js";
+
+export { InvariantViolationError } from "./pcd/invariant-violation-error.js";
+export { ConsentRevokedRefusalError } from "./pcd/consent-revocation-error.js";
+
+export type {
+  AssetRecordReader,
+  ProductQcResultReader,
+  PcdIdentitySnapshotReader,
+  ConsentRecordReader,
+  CreativeJobReader,
+  CreatorIdentityReader,
+} from "./pcd/lifecycle-readers.js";
+
+export {
+  AlwaysOpenExportGateState,
+  type ExportGateOpenness,
+  type ExportGateState,
+} from "./pcd/export-gate-state.js";
+
+export {
+  AlwaysPassComplianceCheck,
+  type ComplianceCheck,
+  type ComplianceCheckInput,
+  type ComplianceCheckResult,
+} from "./pcd/compliance-check.js";
+
+export {
+  decidePcdApprovalAdvancement,
+  type DecidePcdApprovalAdvancementInput,
+  type DecidePcdApprovalAdvancementStores,
+} from "./pcd/approval-advancement.js";
+
+export {
+  decidePcdFinalExportGate,
+  type DecidePcdFinalExportGateInput,
+  type DecidePcdFinalExportGateStores,
+} from "./pcd/final-export-gate.js";
+
+export {
+  decidePcdMetaDraftGate,
+  type DecidePcdMetaDraftGateInput,
+  type DecidePcdMetaDraftGateStores,
+} from "./pcd/meta-draft-gate.js";
+
 export {
   propagateConsentRevocation,
   type ConsentRevocationStore,
   type PropagateConsentRevocationInput,
   type PropagateConsentRevocationStores,
 } from "./pcd/consent-revocation.js";
+
+export {
+  assertConsentNotRevokedForGeneration,
+  type AssertConsentNotRevokedForGenerationInput,
+  type AssertConsentNotRevokedForGenerationStores,
+} from "./pcd/consent-pre-check-generation.js";
+
+export {
+  assertConsentNotRevokedForEdit,
+  type AssertConsentNotRevokedForEditInput,
+  type AssertConsentNotRevokedForEditStores,
+} from "./pcd/consent-pre-check-edit.js";
