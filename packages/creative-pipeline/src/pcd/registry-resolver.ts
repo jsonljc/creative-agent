@@ -184,9 +184,7 @@ export async function resolvePcdRegistryContext(
   // tiers, compute effectiveTier, stamp all fields via attachIdentityRefs,
   // and return the resolved context.
   const product = await stores.productStore.findOrCreateForJob(job);
-  const creator = await stores.creatorStore.findOrCreateStockForDeployment(
-    job.deploymentId,
-  );
+  const creator = await stores.creatorStore.findOrCreateStockForDeployment(job.deploymentId);
 
   const productTierAtResolution = mapProductQualityTierToIdentityTier(product.qualityTier);
   const creatorTierAtResolution = mapCreatorQualityTierToIdentityTier(creator.qualityTier);
