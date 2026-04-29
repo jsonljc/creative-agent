@@ -108,6 +108,30 @@ Nothing to stub — entire SP2 lives in `packages/creative-pipeline/src/pcd/tier
 - `InvariantViolationError` was promoted to its own file with a widened `(reason, context?)` constructor while preserving the legacy `(jobId, fieldName)` overload for SP3/SP4 callers — no further refactor needed at merge-back.
 - **Layer 2 mirror pattern:** the six reader interfaces and `ConsentRevocationStore` are defined in `packages/creative-pipeline/src/pcd/lifecycle-readers.ts` and `consent-revocation.ts` respectively, with **structural mirrors** in `packages/db/src/stores/` Prisma adapter files. This pattern was used because `db` (Layer 2) cannot depend on `creative-pipeline` (Layer 3). At merge-back, Switchboard may consolidate these mirrors by moving the interfaces into `@switchboard/schemas` (Layer 1, importable by both layers).
 
+### SP7 (preproduction chain) — SHIPPED in creativeagent
+
+**SP7-declared merge-back surfaces (production wiring at merge-back):**
+
+- Four stub stage runners → real Switchboard Claude-driven runners. New file `creator-scripts-stage-runner.ts` at merge-back supersedes both Switchboard's existing `script-writer.ts` and the UGC pipeline's `ugc-script-writer.ts`. New file `motivators-stage-runner.ts` at merge-back is net-new (no current Switchboard equivalent at top level — funnel-friction-translator's role moves up).
+- `AutoApproveOnlyScriptGate` → Switchboard Inngest `step.waitForEvent` adapter wrapping a new event pair: `creative-pipeline/preproduction.gate.requested` (emitted by the SP7 composer at the gate boundary) and `creative-pipeline/preproduction.gate.approved` (emitted by the dashboard UI). Operator selection payload populates `decidedBy` and `selectedScriptIds`.
+- `WorkTrace` emit — every SP7 stage boundary carries a `// MERGE-BACK: emit WorkTrace here` marker. Five markers in `preproduction-chain.ts` (after each of four stages + at gate decision) plus one in `build-pcd-identity-context.ts` after the context is built, plus the `// MERGE-BACK: include PCD_PREPRODUCTION_CHAIN_VERSION in WorkTrace decision payload` directive. Plus `// MERGE-BACK: wire UGC production handoff here` on the composer's return.
+- Two new SP7 reader interfaces (`Sp7ProductRegistryReader`, `Sp7CreatorRegistryReader`) — wider than SP6's narrow consent-only readers. Production wiring at merge-back is a Prisma adapter from `packages/db/`; SP7 ships interfaces only. Both readers consume existing SP1 ProductIdentity / CreatorIdentity columns; no schema changes required.
+
+**Schema reconciliation at merge-back:**
+
+- No Prisma migration. SP7 is pure orchestration. All schema additions are zod-only in `packages/schemas/src/pcd-preproduction.ts`.
+- `ProductIdentity.brandPositioningText` — SP7 reads this field if it exists on the merge-back-time ProductIdentity schema; otherwise `null`. SP7 does not widen `ProductIdentity`. If Switchboard's main has not added the column by merge-back, the reader returns `null` for the field and the schema accepts the null.
+- `CreatorIdentity.voiceId` — the current Prisma schema has `voice Json` not `voiceId String?`. SP7's `Sp7CreatorRegistryReader.findById()` returns `voiceId: string | null` as its contract. The Prisma adapter at merge-back is responsible for either (a) returning `null`, or (b) extracting a stable id from the `voice` JSON column if one exists. SP7 stub readers in tests return `null`.
+
+**Architectural seams the merge-back does NOT need to rewrite:**
+
+- The SP7 composer + builder + gate + four stage runners are pure store-injected. No production wiring inside `packages/creative-pipeline/src/pcd/preproduction/` changes at merge-back — only the injected stub runners + default gate swap (real Claude runners + Inngest waitForEvent adapter) and the markers get implementations.
+- `PreproductionChainError` lives in this repo; merge-back keeps the class verbatim.
+- `PCD_PREPRODUCTION_CHAIN_VERSION` and `PCD_IDENTITY_CONTEXT_VERSION` are SP7's two new pinned constants. The PCD slice carries ten total pinned constants after SP7.
+- SP7 introduces NO circular dependency. Pre-production stages (Switchboard's `stages/`, `ugc/`) import from `pcd/preproduction/` at merge-back; the reverse direction does not exist. SP7 lives inside pcd/ rather than as a sibling synergy/ subdir per the design's Q11 lock.
+
+**SP7 does not call SP3's `resolvePcdRegistryContext`.** The design doc describes SP7 as "wrapping" SP3, which is structural composition language — in implementation, SP7's `buildPcdIdentityContext` reads product/creator registry directly via two new SP7-specific reader interfaces (`Sp7ProductRegistryReader`, `Sp7CreatorRegistryReader`) and duplicates SP3's pure `qualityTier → IdentityTier` mapping locally. SP3's source is not edited. SP3's resolver expects a `PcdResolvableJob` with `organizationId`/`deploymentId`/`productDescription`/`productImages` and persists via `jobStore.attachIdentityRefs`; SP7's pre-job `PcdBriefInput` doesn't fit that signature, and SP7 must not persist.
+
 ## Conventions inherited from Switchboard
 
 These are already enforced in `CLAUDE.md` but listed here for the merge-back checklist:
