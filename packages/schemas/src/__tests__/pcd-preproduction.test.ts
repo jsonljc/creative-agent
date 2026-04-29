@@ -87,3 +87,68 @@ describe("PcdBriefInputSchema", () => {
     expect(PcdBriefInputSchema.safeParse(withoutRefs).success).toBe(true);
   });
 });
+
+import { PcdIdentityContextSchema } from "../pcd-preproduction.js";
+
+describe("PcdIdentityContextSchema", () => {
+  const valid = {
+    creatorIdentityId: "creator-1",
+    productIdentityId: "product-1",
+    consentRecordId: null,
+    effectiveTier: 2,
+    productTierAtResolution: 2,
+    creatorTierAtResolution: 2,
+    allowedShotTypes: ["simple_ugc", "talking_head"],
+    allowedOutputIntents: ["draft", "preview", "final_export"],
+    tier3Rules: {
+      firstLastFrameRequired: false,
+      performanceTransferRequired: false,
+      editOverRegenerateRequired: false,
+    },
+    voiceId: null,
+    productCanonicalText: "ACME Pro 200ml Hand Cream",
+    productHeroPackshotAssetId: null,
+    brandPositioningText: null,
+    ugcStyleConstraints: [
+      "native_vertical",
+      "creator_led",
+      "no_overproduced_storyboard",
+      "product_fidelity_required",
+      "no_invented_product_claims",
+    ],
+    consentRevoked: false,
+    identityContextVersion: "identity-context@1.0.0",
+  };
+
+  it("accepts a fully populated context", () => {
+    expect(PcdIdentityContextSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it("requires identityContextVersion", () => {
+    const { identityContextVersion: _v, ...withoutVersion } = valid;
+    expect(PcdIdentityContextSchema.safeParse(withoutVersion).success).toBe(false);
+  });
+
+  it("rejects effectiveTier=0 or 4", () => {
+    expect(PcdIdentityContextSchema.safeParse({ ...valid, effectiveTier: 0 }).success).toBe(false);
+    expect(PcdIdentityContextSchema.safeParse({ ...valid, effectiveTier: 4 }).success).toBe(false);
+  });
+
+  it("rejects unknown shot type in allowedShotTypes", () => {
+    expect(
+      PcdIdentityContextSchema.safeParse({
+        ...valid,
+        allowedShotTypes: ["unknown_shot"],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("requires all tier3Rules sub-flags", () => {
+    expect(
+      PcdIdentityContextSchema.safeParse({
+        ...valid,
+        tier3Rules: { firstLastFrameRequired: false },
+      }).success,
+    ).toBe(false);
+  });
+});

@@ -2,9 +2,9 @@
 // Source of truth: docs/plans/2026-04-29-pcd-preproduction-chain-sp7-design.md
 import { z } from "zod";
 import {
-  IdentityTierSchema as _IdentityTierSchema,
-  OutputIntentSchema as _OutputIntentSchema,
-  PcdShotTypeSchema as _PcdShotTypeSchema,
+  IdentityTierSchema,
+  OutputIntentSchema,
+  PcdShotTypeSchema,
 } from "./pcd-identity.js";
 
 // Stage discriminant for PreproductionChainError. Also used by anti-pattern
@@ -45,3 +45,44 @@ export const PcdBriefInputSchema = z.object({
   productIdentityRef: z.string().min(1),
 });
 export type PcdBriefInput = z.infer<typeof PcdBriefInputSchema>;
+
+// Identity context schema: resolved per-job identity state with tier projection,
+// creative substrate, and UGC-format constraints. Stamped at identity-resolve time
+// and immutable for the entire preproduction chain. Every stage runner consumes
+// the same context to prevent drift toward polished ad-film language.
+export const PcdIdentityContextSchema = z.object({
+  // Identity refs
+  creatorIdentityId: z.string().min(1),
+  productIdentityId: z.string().min(1),
+  consentRecordId: z.string().nullable(),
+
+  // Tier projection (stamped at resolve-time)
+  effectiveTier: IdentityTierSchema,
+  productTierAtResolution: IdentityTierSchema,
+  creatorTierAtResolution: IdentityTierSchema,
+  allowedShotTypes: z.array(PcdShotTypeSchema),
+  allowedOutputIntents: z.array(OutputIntentSchema),
+
+  // Tier 3 rule flags
+  tier3Rules: z.object({
+    firstLastFrameRequired: z.boolean(),
+    performanceTransferRequired: z.boolean(),
+    editOverRegenerateRequired: z.boolean(),
+  }),
+
+  // Creative substrate
+  voiceId: z.string().nullable(),
+  productCanonicalText: z.string(),
+  productHeroPackshotAssetId: z.string().nullable(),
+  brandPositioningText: z.string().nullable(),
+
+  // UGC creative-format constraints
+  ugcStyleConstraints: z.array(UgcStyleConstraintSchema),
+
+  // Consent flag
+  consentRevoked: z.boolean(),
+
+  // Version pin
+  identityContextVersion: z.string(),
+});
+export type PcdIdentityContext = z.infer<typeof PcdIdentityContextSchema>;
