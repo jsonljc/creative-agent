@@ -39,6 +39,12 @@ model CreativeJob {
   creatorIdentityId           String?
   effectiveTier               Int?
   allowedOutputTier           Int?
+  // SP4 stamped component tiers — at-resolution stamps. Nullable for
+  // historical compatibility (pre-SP4 rows). SP4-and-later resolutions
+  // always populate. Backfill stamps both as 1 per SP1 conservative
+  // compatibility default.
+  productTierAtResolution     Int?
+  creatorTierAtResolution     Int?
   shotSpecVersion             String?
   registryBackfilled          Boolean  @default(false)
   fidelityTierAtGeneration    Int?
