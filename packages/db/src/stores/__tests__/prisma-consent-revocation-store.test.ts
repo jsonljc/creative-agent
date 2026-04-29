@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   PrismaConsentRevocationStore,
   type ConsentRevocationStore,
-} from "./prisma-consent-revocation-store.js";
+} from "../prisma-consent-revocation-store.js";
 
 // Minimal Prisma-shaped fake to exercise the store without a real DB.
 type FakePrisma = {
