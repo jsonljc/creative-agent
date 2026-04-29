@@ -26,10 +26,10 @@ This design document captures the design decisions made during brainstorming and
 - New `PcdQcGateVerdictsSchema` = `{ gates: PcdQcGateVerdict[], aggregateStatus: PcdQcAggregateStatus }`.
 - New `PcdQcGateApplicabilitySchema` = `{ shotType, effectiveTier, gate, mode, rationale? }`.
 - New `PcdSp5QcLedgerInputSchema` (writer-input shape — narrower than the persisted row; SP5-required forensic fields are non-nullable here).
-- Extended `ProductQcResultSchema` with seven new nullable fields: `creatorIdentityId`, `pcdIdentitySnapshotId`, `faceSimilarityScore`, `gatesRan`, `gateVerdicts`, `qcEvaluationVersion`, `qcGateMatrixVersion`. Nullable so the schema parses both pre-SP5 rows (NULL / `[]` for `gatesRan`) and SP5-and-later rows (non-NULL).
+- Extended `ProductQcResultSchema` with seven new fields: `creatorIdentityId`, `pcdIdentitySnapshotId`, `faceSimilarityScore`, `gateVerdicts`, `qcEvaluationVersion`, `qcGateMatrixVersion` (six nullable), plus `gatesRan` (non-null `String[]` defaulting to `'{}'` — Postgres array columns can't be NULL the same way scalars are; empty-array is the historical equivalent of NULL). Nullable/empty so the schema parses both pre-SP5 rows and SP5-and-later rows. **Note:** SP5 does not introduce the scalar score columns (`logoSimilarityScore`, `packageOcrMatchScore`, `colorDeltaScore`, `geometryMatchScore`, `scaleConfidence`) — those are SP1-shipped and reused as-is. SP5 adds only `faceSimilarityScore`.
 
 **Migration (`packages/db/prisma/migrations/<timestamp>_pcd_qc_result_sp5_gates/migration.sql`):**
-- One Prisma migration adding seven nullable columns to `ProductQcResult`. No defaults except for `gatesRan` (Postgres array, default `'{}'`). No column renames. No FK loosening (`productIdentityId` stays required). Migration SQL has a comment explaining historical-compatibility nullability.
+- One Prisma migration adding seven new columns to `ProductQcResult`: six nullable scalars/JSON (`creatorIdentityId`, `pcdIdentitySnapshotId`, `faceSimilarityScore`, `gateVerdicts`, `qcEvaluationVersion`, `qcGateMatrixVersion`) plus `gatesRan TEXT[] NOT NULL DEFAULT '{}'`. No column renames. No FK loosening (`productIdentityId` stays required). The five SP1 scalar score columns (`logoSimilarityScore`, `packageOcrMatchScore`, `colorDeltaScore`, `geometryMatchScore`, `scaleConfidence`) already exist on SP1's `ProductQcResult` and are not re-added. Migration SQL has a comment explaining historical-compatibility nullability and the array-default rationale.
 
 **Module files (`packages/creative-pipeline/src/pcd/`, all new):**
 - `qc-evaluation-version.ts` — sibling const file (mirrors SP3's `shot-spec-version.ts` pattern) exporting `PCD_QC_EVALUATION_VERSION = "pcd-qc-evaluation@1.0.0"`.
@@ -115,6 +115,8 @@ export const PcdQcGateVerdictSchema = z.object({
   score: z.number().optional(),
   threshold: z.number().optional(),
   reason: z.string().min(1),
+  // evidence is a small, non-PII, non-binary diagnostic bag. See "Evidence
+  // bounds (binding)" below for what may and may not go in here.
   evidence: z.record(z.unknown()).optional(),
 });
 export type PcdQcGateVerdict = z.infer<typeof PcdQcGateVerdictSchema>;
@@ -135,7 +137,10 @@ export const PcdQcGateApplicabilitySchema = z.object({
 export type PcdQcGateApplicability = z.infer<typeof PcdQcGateApplicabilitySchema>;
 ```
 
-Modified `ProductQcResultSchema` — seven new nullable fields appended:
+Modified `ProductQcResultSchema` — seven new fields appended. Each field uses `.nullable().optional()` deliberately:
+
+- `nullable` — DB historical-compat: pre-SP5 rows have NULL (or `[]` for `gatesRan`). Post-SP5 Prisma reads of pre-SP5 rows return null/empty, and the schema must parse them.
+- `optional` — schema-compat for partial in-memory test fixtures and pre-SP5 callers that may not include these keys at all.
 
 ```ts
 creatorIdentityId: z.string().nullable().optional(),
@@ -146,6 +151,8 @@ gateVerdicts: PcdQcGateVerdictsSchema.nullable().optional(),
 qcEvaluationVersion: z.string().nullable().optional(),
 qcGateMatrixVersion: z.string().nullable().optional(),
 ```
+
+(Post-migration Prisma reads always return the field on `gatesRan` since it's non-null with `'{}'` default; `nullable().optional()` on the Zod side just absorbs both pre-migration test fixtures and the array-default reality.)
 
 New writer-input schema (separate, narrower):
 
@@ -645,7 +652,7 @@ Step 6 — Persist.
 | Property | Guarantee |
 |---|---|
 | **Purity / I/O surface** | All I/O via injected `providers` and `stores`. No direct DB, network, time, or randomness in evaluator or any predicate. |
-| **Matrix-driven, not code-driven** | Evaluator never branches on `effectiveTier` or `shotType`. Both flow through `getPcdQcGateApplicability` only. Tests assert evaluator source contains zero `if (effectiveTier ===` or `if (shotType ===` patterns. |
+| **Matrix-driven, not code-driven** | Evaluator never branches on `effectiveTier` or `shotType`. Both flow through `getPcdQcGateApplicability` only. Tests assert evaluator source contains zero anti-pattern matches (`if (effectiveTier ===`, `if (shotType ===`, `if (gate ===`, `if (row.gate ===`). Gate keys remain allowed inside the single `switch (row.gate)` dispatch and in scalar-extraction helpers — those are persistence mapping, not policy. |
 | **One row per asset** | `qcLedgerStore.createForAsset` is called exactly once per `evaluatePcdQcResult` invocation. Idempotency boundary owned by the store; SP5 ships single-call semantics. |
 | **Tier 1 = zero providers called** | `Promise.all([])` short-circuits; no `providers.*` method invoked when matrix returns `[]`. Tested via fake recorder. |
 | **`passFail` derives from `gateVerdicts.aggregateStatus`** | Never set independently. Test asserts equality. |
@@ -697,6 +704,21 @@ Step 6 — Persist.
 - When no gates apply: no provider predicate is called; `gatesRan: []`; `gateVerdicts.gates: []`; `gateVerdicts.aggregateStatus: "warn"`; `passFail: "warn"`; `ProductQcResult` row is persisted.
 - Invariant: every PCD-generated asset has a `ProductQcResult` row. Missing row remains an error/unprocessed state for SP6.
 - Future Tier 1 telemetry: add `warn_only` rows + bump `PCD_QC_GATE_MATRIX_VERSION` to `pcd-qc-gate-matrix@1.1.0`. Zero orchestrator code change.
+
+**Semantics of `passFail: "warn"` (binding):** `warn` means "QC was not conclusively pass" — either gates ran and surfaced non-blocking concerns, or no blocking gates applied. `warn` does **not** mean "a defect was detected." Empty-gates rows are `warn` precisely because skipped/unevaluated gates must not become implicit approval. Consumers (SP6, future UI) MUST interpret `warn` as "not conclusively QC-passed," not as "QC found a problem." The aggregator and Tier-1 codepath share this single meaning. A code comment in `qc-aggregator.ts` documents the rule near the empty-array branch.
+
+### Evidence bounds (binding)
+
+`PcdQcGateVerdict.evidence` is a small diagnostic bag, not a junk drawer. Predicates MUST follow these bounds:
+
+- **May contain:** small scalar diagnostics (numeric ratios, boolean flags, normalized text length, edit-distance ratio, geometry's `scaleConfidence`).
+- **MUST NOT contain:** raw OCR-extracted text (could include PII), image payloads or thumbnails, ML embeddings, raw provider response blobs, full prompt text, or any binary data.
+- **Soft size limit:** evidence object should serialize to ≤2 KB JSON. Predicates author with this in mind; no runtime check, but code review enforces.
+- **Format:** flat or shallow nested record of small primitives. No deeply-nested structures.
+
+OCR predicate specifically: stores `editDistance: number` and `editDistanceRatio: number` in evidence; does NOT store the extracted `text` value (PII risk). The match decision relies on the ratio against the threshold; raw text is not needed downstream.
+
+Geometry predicate stores `scaleConfidence: number` in evidence (the only place it lives, since `PcdQcGateVerdict` reserves only one `score` field).
 
 ### Hard-block invariant (binding)
 
@@ -778,13 +800,21 @@ In-memory fakes for all three providers (recording every call) and `qcLedgerStor
 1. Tier-2 + `simple_ugc` + `final_export`: only matrix-listed gates run. Asserted via fake-recorder count.
 2. Tier-3 + `face_closeup`: face_similarity called; logo/ocr/geometry not called (unless matrix lists them). Exact assertion against the live matrix state.
 3. **Tier-1 + any shot:** zero provider calls across all three providers. `Promise.all([])` short-circuit verified via fake recorder.
-4. Evaluator source contains zero string-literal references to gate keys in conditionals (regex-grep test). The `switch (row.gate)` predicate dispatch is allowed — it's data-keyed.
-5. Evaluator source contains zero `if (effectiveTier ===` and zero `if (shotType ===` patterns (regex-grep).
+4. **Bad-pattern grep (binding, narrow):** evaluator source contains zero matches for any of the following anti-patterns (each as a literal regex):
+   - `if (row.gate ===`  — would substitute the matrix-driven dispatch
+   - `if (gate ===`       — same, more general form
+   - `if (input.shotType ===` — shot-type policy in code
+   - `if (input.effectiveTier ===` — tier policy in code
+   - `if (effectiveTier ===` — same, destructured form
+   - `if (shotType ===`         — same
+   Gate keys are explicitly **allowed** inside the single `switch (row.gate)` dispatch and inside the scalar-extraction helper (`verdictByGate("face_similarity")?.score`, etc.); those are persistence mapping, not policy. The grep is anti-pattern-keyed, not gate-name-keyed.
 
 **Part B — Mode lowering.**
 6. `warn_only` row + provider returns below threshold → row's `gateVerdicts.gates[i].status === "warn"` (lowered).
 7. `block` row + provider returns below threshold → `status === "fail"`.
 8. `block` + `fail` round-trip: status unchanged through `applyPcdQcGateMode`.
+8a. **Provider error obeys mode (binding):** `warn_only` row + provider throws → predicate returns `fail` → `applyPcdQcGateMode` lowers to `warn`. Row `passFail` reflects warn unless other gates fail. Asserts that provider outages on `warn_only` gates do not block.
+8b. **Provider error on `block` mode:** `block` row + provider throws → predicate returns `fail` → mode does not lower → row `passFail === "fail"`. Asserts that Tier 3 / blocking gates do hard-block on provider outages — no escape hatch.
 
 **Part C — Aggregation correctness.**
 9. Single fail among warns/passes → row `passFail === "fail"`.
@@ -855,6 +885,7 @@ Integration-style test using the Prisma test-DB harness (matches SP4's `prisma-p
 - **No mutation of `PCD_QC_GATE_MATRIX`** at runtime.
 - **No re-import of `PCD_TIER_POLICY_VERSION`, `PCD_PROVIDER_CAPABILITY_VERSION`, `PCD_PROVIDER_ROUTER_VERSION`, or `PCD_SHOT_SPEC_VERSION`** in SP5 modules — those belong to other slices' forensic state.
 - **Predicates do not import `qc-gate-matrix.ts` or `qc-evaluator.ts`.** One-way dependency: evaluator → predicates + matrix + aggregator.
+- **Evidence bag is bounded** (per "Evidence bounds (binding)" above). No raw OCR text, no embeddings, no image payloads, no full provider blobs. Code review enforces.
 - **Evaluator imports each predicate by name; no dynamic require / no string-keyed dispatch table.** Static imports keep tree-shaking and grep clean.
 - **All new test files include the forbidden-imports regex check.**
 - **All four QC predicate modules live in `packages/creative-pipeline/src/pcd/`** with co-located `*.test.ts`.
@@ -906,7 +937,8 @@ MODIFIED:
     + 7 new schemas/types (PcdQcGateKey, PcdQcGateStatus, PcdQcAggregateStatus,
         PcdQcGateMode, PcdQcGateVerdict, PcdQcGateVerdicts, PcdQcGateApplicability,
         PcdSp5QcLedgerInput)
-    + 7 nullable fields on ProductQcResultSchema
+    + 6 nullable fields + 1 non-null array field on ProductQcResultSchema
+      (gatesRan defaults to '{}')
 
   packages/db/prisma/schema.prisma
     + 7 nullable fields on ProductQcResult model
