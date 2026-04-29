@@ -16,7 +16,8 @@ export type DecidePcdApprovalAdvancementStores = {
  * passes. Closes the hard-block invariant step 5 SP5 deferred:
  * "label-visible without OCR match → approval refused."
  *
- * Refusal reasons (the only `if (passFail ===` branch in SP6 source):
+ * Refusal reasons (this is the only SP6 source file permitted to contain
+ * `if (...passFail ===)` patterns; see the two branches below):
  *   passFail === "fail" → qc_failed (SP5 step 5)
  *   passFail === "warn" → qc_not_conclusive (SP5 binding semantic)
  *
@@ -60,8 +61,10 @@ export async function decidePcdApprovalAdvancement(
     };
   }
 
-  // The single `if (passFail ===)` branch permitted in SP6 source — anti-pattern
-  // grep test (Task 17) enforces this is the only one.
+  // The two `if (qc.passFail === ...)` branches below are scoped to this file:
+  // approval-advancement.ts is the only SP6 source file permitted to contain
+  // the `if (...passFail ===)` pattern. The anti-pattern grep test (Task 17)
+  // enforces this scoping by skipping this file from its forbidden-pattern scan.
   if (qc.passFail === "fail") {
     return {
       allowed: false,
