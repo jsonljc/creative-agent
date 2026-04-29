@@ -234,6 +234,15 @@ model ProductQcResult {
   warnings              String[]
   createdAt             DateTime        @default(now())
 
+  // SP5 additions (nullable for historical compatibility; empty array for gatesRan)
+  creatorIdentityId         String?
+  pcdIdentitySnapshotId     String?
+  faceSimilarityScore       Float?
+  gatesRan                  String[]
+  gateVerdicts              Json?
+  qcEvaluationVersion       String?
+  qcGateMatrixVersion       String?
+
   @@index([productIdentityId])
   @@index([assetRecordId])
   @@index([passFail])
