@@ -98,3 +98,11 @@ export {
   type EvaluatePcdQcResultStores,
   type PcdQcLedgerStore,
 } from "./pcd/qc-evaluator.js";
+
+// SP6 — propagation surface (full SP6 barrel re-exports happen in Task 20)
+export {
+  propagateConsentRevocation,
+  type ConsentRevocationStore,
+  type PropagateConsentRevocationInput,
+  type PropagateConsentRevocationStores,
+} from "./pcd/consent-revocation.js";
