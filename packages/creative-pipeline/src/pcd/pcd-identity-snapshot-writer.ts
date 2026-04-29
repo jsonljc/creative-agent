@@ -64,9 +64,11 @@ export async function writePcdIdentitySnapshot(
   input: WritePcdIdentitySnapshotInput,
   stores: PcdIdentitySnapshotWriterStores,
 ): Promise<PcdIdentitySnapshot> {
-  // Step 1 — Validate input shape against PcdSp4IdentitySnapshotInputSchema.
-  // Throws ZodError on bad input. Strips unknown keys (e.g. caller-supplied
-  // policyVersion / providerCapabilityVersion).
+  // Step 1 — Build the snapshot-input subset from input and validate.
+  // Defense-in-depth: only an explicit allowlist of keys is forwarded to
+  // the schema, so caller-supplied policyVersion / providerCapabilityVersion
+  // / routerVersion never reach Zod and cannot smuggle through.
+  // Throws ZodError on bad input.
   const parsed = PcdSp4IdentitySnapshotInputSchema.parse({
     assetRecordId: input.assetRecordId,
     productIdentityId: input.productIdentityId,
