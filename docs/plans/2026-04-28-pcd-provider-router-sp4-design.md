@@ -33,7 +33,11 @@ This design document captures the design decisions made during brainstorming and
 - Co-located `*.test.ts` for each module.
 
 **SP3 resolver contract revision (additive):**
-- `ResolvedPcdContext` (in `packages/creative-pipeline/src/pcd/registry-resolver.ts`) gains two component-tier fields: `productTier: IdentityTier`, `creatorTier: IdentityTier`. The five-field idempotency guard is unchanged; the no-op path now performs two registry-store reads to derive component tiers from the current `qualityTier` (no `attachIdentityRefs` write).
+- `ResolvedPcdContext` (in `packages/creative-pipeline/src/pcd/registry-resolver.ts`) gains two stamped component-tier fields: `productTierAtResolution: IdentityTier`, `creatorTierAtResolution: IdentityTier`. The idempotency guard widens from 5 → 7 fields (both stamped tiers must be present and in `1|2|3`). The no-op path performs **zero** store calls and returns the resolved context entirely from the job row (restoring SP3's original "zero store calls on no-op" invariant).
+- A malformed-resolved-job runtime guard throws `InvariantViolationError` if the resolved-core fields (IDs, `effectiveTier`, `allowedOutputTier`, `shotSpecVersion`) are present at current versions but `productTierAtResolution` or `creatorTierAtResolution` is NULL/invalid. The resolver does NOT fall back to registry reads in that case — silent fallback would reintroduce dual-authority routing.
+
+**`CreativeJob` schema extension (binding):**
+- One additive Prisma migration adds two nullable columns to `CreativeJob`: `productTierAtResolution INTEGER`, `creatorTierAtResolution INTEGER`. No rename of existing `effectiveTier` / `allowedOutputTier` columns. Nullable for historical compatibility; SP4-and-later resolutions always populate. Backfill stays conservative at Tier 1 (matches SP1 backfill semantic — see store widening below).
 
 **Store widening (`packages/db/src/stores/prisma-pcd-identity-snapshot-store.ts`):**
 - `CreatePcdIdentitySnapshotInput` widened with the three new nullable fields. The existing `create()` method's `data: input` spread already passes them through; no method-body change.
@@ -186,27 +190,50 @@ The existing `create()` method's `data: input` spread already passes the new fie
 
 ### `packages/creative-pipeline/src/pcd/registry-resolver.ts` (additive contract revision)
 
-`ResolvedPcdContext` gains two component-tier fields:
+`ResolvedPcdContext` gains two **stamped** component-tier fields. All four tier-related fields are at-resolution stamps, written once at full-attach time and read directly from the job row on the no-op path:
 
 ```ts
 export type ResolvedPcdContext = {
   productIdentityId: string;
   creatorIdentityId: string;
-  productTier: IdentityTier;          // SP4 addition
-  creatorTier: IdentityTier;          // SP4 addition
-  effectiveTier: IdentityTier;
-  allowedOutputTier: IdentityTier;
+  productTierAtResolution: IdentityTier;        // SP4 addition (stamped)
+  creatorTierAtResolution: IdentityTier;        // SP4 addition (stamped)
+  effectiveTier: IdentityTier;                  // existing; semantically: at-resolution stamp
+  allowedOutputTier: IdentityTier;              // existing; semantically: at-resolution stamp
   shotSpecVersion: string;
 };
 ```
 
-Full-attach path: assigns `productTier` and `creatorTier` from already-computed values. Two new lines.
+Naming asymmetry is intentional: the `effectiveTier` / `allowedOutputTier` columns shipped in SP1 (migration `20260428065707_pcd_registry_sp1`) and renaming them now would force a column-rename migration that complicates merge-back into Switchboard. Inline comments and the design doc declare all four fields as at-resolution stamps.
 
-No-op path body change: when `isResolvedPcdJob(job)` returns true, the resolver still skips `attachIdentityRefs`, but performs two registry-store reads (`findOrCreateForJob`, `findOrCreateStockForDeployment`) to derive current `productTier` and `creatorTier` from the registry's current `qualityTier`. The five-field guard is unchanged.
+`PcdResolvableJob` (resolver input) widens with two new optional fields the resolver reads from the job row: `productTierAtResolution?: IdentityTier | null`, `creatorTierAtResolution?: IdentityTier | null`.
 
-Documented semantic: on the no-op path, `effectiveTier` and `allowedOutputTier` reflect the original resolution time; `productTier` and `creatorTier` reflect current registry state. They may diverge if registry rows have been re-tiered after job stamping. Downstream consumers must treat `effectiveTier` as authoritative for gating decisions.
+`isResolvedPcdJob` widens from 5 → 7 fields. Both new fields must be present and in `1|2|3` for the no-op path to fire.
 
-Rationale for not adding `productTier` / `creatorTier` columns to `CreativeJob`: registry owns identity-tier truth. `CreativeJob` should not become a shadow cache of derived registry fields. Two extra reads on a non-hot path is the cleaner trade.
+**Full-attach path**: computes both new fields from the registry reads it already does (`product.qualityTier` → `mapProductQualityTierToIdentityTier`, `creator.qualityTier` → `mapCreatorQualityTierToIdentityTier`), stamps them via `attachIdentityRefs`, returns them on the context. No new store reads beyond what the path already had.
+
+**No-op path** (zero store calls, restoring SP3's original invariant):
+
+```ts
+if (isResolvedPcdJob(job)) {
+  // No-op: every field is read from the job row (zero store calls).
+  // Stamped at-resolution tier world is authoritative; current registry
+  // state is not consulted here.
+  return {
+    productIdentityId: job.productIdentityId,
+    creatorIdentityId: job.creatorIdentityId,
+    productTierAtResolution: job.productTierAtResolution,
+    creatorTierAtResolution: job.creatorTierAtResolution,
+    effectiveTier: job.effectiveTier,
+    allowedOutputTier: job.allowedOutputTier,
+    shotSpecVersion: job.shotSpecVersion,
+  };
+}
+```
+
+**Malformed-resolved-job invariant guard**: if the 5-field core (IDs + `effectiveTier` + `allowedOutputTier` + `shotSpecVersion`) is present at current `PCD_SHOT_SPEC_VERSION` but `productTierAtResolution` or `creatorTierAtResolution` is NULL or outside `1|2|3`, the resolver throws `InvariantViolationError` naming the job ID. It does NOT fall back to registry reads. Silent fallback would silently reintroduce the dual-authority bug this slice exists to fix. The case is unreachable inside corrected SP4 (every SP4-resolution stamps both fields); the guard catches any future regression that forgets to stamp.
+
+Rationale for adding `productTierAtResolution` / `creatorTierAtResolution` columns to `CreativeJob` (revising the prior decision): SP4's snapshot is supposed to be self-explanatory. Mixing stamped and current tier state across the same routing decision means a future investigator can't reconstruct "why was this provider chosen?" without joining mutable registry state. Stamping at resolution time makes the snapshot self-interpreting AND restores SP3's original "zero store calls on no-op" idempotency invariant.
 
 ### `packages/creative-pipeline/src/pcd/provider-capability-matrix.ts` (new)
 
@@ -484,10 +511,10 @@ export type {
 Input: { resolvedContext, shotType, outputIntent, organizationId, campaignId }
 Stores: { campaignTakeStore }
 
-Step 1 — Tier policy gate.
+Step 1 — Tier policy gate (stamped tier world).
   accessDecision = decidePcdGenerationAccess({
-    avatarTier:  resolvedContext.creatorTier,
-    productTier: resolvedContext.productTier,
+    avatarTier:  resolvedContext.creatorTierAtResolution,
+    productTier: resolvedContext.productTierAtResolution,
     shotType,
     outputIntent,
   })
@@ -579,6 +606,7 @@ Step 5 — Build decision.
 | **No bypass** | Step 1's `decidePcdGenerationAccess` is unconditional. Step 4's empty-candidates branch is unconditional. |
 | **Tier 3 closure** | All three rules applied for `effectiveTier === 3`. Rules 1 and 2 are pure recomputes. Rule 3 reads `campaignTakeStore` exactly once and only under `approvedCampaignContext.kind === "campaign"`. |
 | **Campaign context boundary** | Under `kind: "none"`, rule 3 does not fire and `campaignTakeStore` is not consulted. Non-campaign generation paths do not need to fabricate a `campaignId`. |
+| **Tier authority — single stamped world** | Every tier consulted by the router (`creatorTierAtResolution`, `productTierAtResolution`, `effectiveTier`) comes from the resolved-at-resolution stamp on the job row. The router never reads current registry `qualityTier` for any decision. Re-tiering a registry row after a job has been resolved does NOT change that job's routing. The pre-amend `productTier` / `creatorTier` (current-state) fields are removed from `ResolvedPcdContext` so a routing call site cannot accidentally read them. |
 | **Distinguished denial** | Two denial kinds — `ACCESS_POLICY` (SP2 refused) and `NO_PROVIDER_CAPABILITY` (SP2 allowed but no provider survives Tier 3 filter). `accessDecision` unmutated in the second case. |
 
 ### `writePcdIdentitySnapshot` algorithm
@@ -683,10 +711,10 @@ Vitest, in-memory fakes, no DB, no network. Co-located tests for every new modul
 
 In-memory `campaignTakeStore` fake. No real matrix mutation; tests use the live `PCD_PROVIDER_CAPABILITY_MATRIX` import except in Part C and Part F, which use `vi.doMock`.
 
-**Part A — Step 1 access-policy gate.**
+**Part A — Step 1 access-policy gate (stamped tier world).**
 1. Tier-1 + non-restricted shot + `outputIntent: "final_export"` → `{ allowed: false, denialKind: "ACCESS_POLICY" }`. `accessDecision.allowed === false`.
 2. Tier-1 + `outputIntent: "draft"` → `{ allowed: true, … }` (assuming matrix has a Tier-1 draft provider).
-3. **Component-tier passthrough:** resolver supplies `(productTier=3, creatorTier=1)`; assert router passes `(avatarTier=1, productTier=3)` to `decidePcdGenerationAccess` and SP2's denial reflects the asymmetry.
+3. **Stamped component-tier passthrough:** resolver supplies `(productTierAtResolution=3, creatorTierAtResolution=1)`; assert router passes `(avatarTier=1, productTier=3)` to `decidePcdGenerationAccess`. SP2's denial reflects the asymmetric stamped state.
 
 **Part B — Step 2/3 matrix filter.**
 4. Tier-2 + `simple_ugc` + `final_export` + `approvedCampaignContext: { kind: "none" }` → first matching row selected.
@@ -749,11 +777,23 @@ In-memory `pcdIdentitySnapshotStore` fake recording every `createForShot` call.
 
 ### `registry-resolver.test.ts` (additive deltas)
 
-New `describe("SP4 additive contract deltas", ...)` block:
+The original SP3 "zero store calls on no-op" idempotency test is **restored** (the pre-amend SP4 had relaxed it to "two finder calls + zero attach calls"; the amended SP4 re-asserts the original).
 
-16. Returns `productTier` and `creatorTier` in the full-attach path (derived from registry `qualityTier` mapping).
-17. No-op path performs two registry reads but zero `attachIdentityRefs` writes (revises Part A's existing assertion).
-18. No-op path returns current registry component tiers with originally-stamped `effectiveTier` (verifies the documented divergence semantic).
+New `describe("SP4 additive contract deltas — stamped tier world", ...)` block:
+
+16. Returns `productTierAtResolution` and `creatorTierAtResolution` in the full-attach path (derived from registry `qualityTier` mapping at resolution time and persisted via `attachIdentityRefs`).
+17. No-op path returns the resolved context entirely from the job row — `findOrCreateForJobCalls === 0`, `findOrCreateStockForDeploymentCalls === 0`, `attachIdentityRefsCalls === 0`. (Restores the original SP3 invariant.)
+18. **Malformed-resolved-job invariant:** a job carrying `effectiveTier=2`, `allowedOutputTier=2`, valid IDs, current `shotSpecVersion`, but `productTierAtResolution=null` (or invalid) → `resolvePcdRegistryContext` throws `InvariantViolationError` naming the job ID. Resolver does NOT fall back to registry reads (assert `findOrCreateForJobCalls === 0`).
+19. Malformed case for missing `creatorTierAtResolution` symmetric to #18.
+20. Idempotency guard widening: a job with the original 5 fields stamped but missing the two new fields is NOT considered resolved by `isResolvedPcdJob`. Tested via `resolvePcdRegistryContext` taking the full-attach path on such a job (a stale-version-shaped re-stamp).
+
+### `provider-router.test.ts` (regression test for stamped-world authority — non-negotiable)
+
+Added under a new `describe("regression — stamped-world authority", ...)` block:
+
+R1. **"registry re-tiered after stamping does not change routing for an already-stamped job"** — given a fixed `ResolvedPcdContext` with `productTierAtResolution=3, creatorTierAtResolution=3, effectiveTier=3`, two consecutive `routePcdShot` calls with identical inputs return deep-equal decisions even when the test fakes for `productStore`/`creatorStore` would (if called) return different `qualityTier` values. The fakes record any call; the assertion is that they were never called. This test fails if anyone re-introduces a current-registry tier read inside the router.
+
+R2. **"SP2 gate receives stamped component tiers, not any current value"** — spy on `decidePcdGenerationAccess`; assert `(avatarTier, productTier)` arguments equal `(creatorTierAtResolution, productTierAtResolution)` exactly.
 
 ## Section 5 — Hard guardrails for implementation
 
@@ -765,9 +805,12 @@ New `describe("SP4 additive contract deltas", ...)` block:
 - No backfill of legacy `PcdIdentitySnapshot` rows. No follow-up null-→non-null migration.
 - No identity adapter (Path 1) routing preference logic.
 - No edits to `registry-backfill.ts` body or `tier-policy.ts` body.
-- No edits to `registry-resolver.ts` body except the locked SP3 deltas (additive type fields + no-op-path two-read body change).
-- No edits to any `packages/db/src/stores/*` file other than `prisma-pcd-identity-snapshot-store.ts` (input-type widening + data-spread additions only).
-- No new index on the three new snapshot columns.
+- No edits to `registry-resolver.ts` body except the locked SP3 deltas (stamped-tier context fields + no-op zero-store-call path + malformed-resolved invariant guard).
+- Edits to `packages/db/src/stores/*`: the existing `prisma-pcd-identity-snapshot-store.ts` (snapshot store input-type widening + adapter export) AND `prisma-creative-job-store.ts` (`AttachIdentityRefsInput` widens with two stamped tier fields; `markRegistryBackfilled` writes both as `1`). No other store file modified.
+- No new index on the three new snapshot columns or on the two new `CreativeJob` columns.
+- **Single tier world (binding):** ProviderRouter consumes only stamped fields from `ResolvedPcdContext`. Pre-amend `productTier` / `creatorTier` (current-state) fields are removed from the context type so a routing call site cannot accidentally read them. Zero current-registry tier reads anywhere in the router.
+- **No silent fallback (binding):** the resolver's malformed-resolved-job branch throws `InvariantViolationError` and never falls back to registry reads.
+- **No rename (binding):** existing `effectiveTier` / `allowedOutputTier` columns on `CreativeJob` keep their names; only additive migration.
 - No re-imports of `PCD_SHOT_SPEC_VERSION` inside the writer module (forbidden-imports test enforces).
 - No hardcoded provider names in `provider-router.ts` conditionals.
 - No mutation of `PCD_PROVIDER_CAPABILITY_MATRIX` or `accessDecision` at runtime.
@@ -787,9 +830,12 @@ The six locked acceptance conditions, expanded:
 
 Plus the additive SP3 contract revisions:
 
-7. **`ResolvedPcdContext` carries component tiers** (`productTier`, `creatorTier`). Asserted by SP3 resolver-test deltas.
-8. **No new schema migration beyond the three nullable snapshot columns.** No `CreativeJob` schema change. Verified by: only one new migration directory exists in `packages/db/prisma/migrations/`.
-9. **Build / typecheck / lint green** across all packages: `pnpm install && pnpm db:generate && pnpm typecheck && pnpm test && pnpm lint`. Lint warnings count unchanged from `main`.
+7. **`ResolvedPcdContext` carries stamped component tiers** (`productTierAtResolution`, `creatorTierAtResolution`). Asserted by SP3 resolver-test deltas (#16).
+8. **Two new Prisma migrations** in this slice: one for the three nullable forensic columns on `PcdIdentitySnapshot`, one for the two stamped tier columns on `CreativeJob`. Both purely additive; no rename of existing columns. Verified by: exactly two new migration directories in `packages/db/prisma/migrations/`.
+9. **Single stamped tier world.** Asserted by router regression test R1 ("registry re-tiered after stamping does not change routing") and R2 ("SP2 gate receives stamped component tiers").
+10. **No-op resolver path makes zero store calls.** Asserted by resolver test #17 (restored from the pre-amend SP4 relaxation; matches SP3's original locked invariant).
+11. **Malformed-resolved-job invariant.** Asserted by resolver tests #18 and #19 (resolver throws `InvariantViolationError`; never falls back to registry reads).
+12. **Build / typecheck / lint green** across all packages: `pnpm install && pnpm db:generate && pnpm typecheck && pnpm test && pnpm lint`. Lint warnings count unchanged from `main`.
 
 ## Section 7 — Module file inventory (delta from `main`)
 
@@ -804,6 +850,7 @@ NEW:
   packages/creative-pipeline/src/pcd/pcd-identity-snapshot-writer.ts
   packages/creative-pipeline/src/pcd/pcd-identity-snapshot-writer.test.ts
   packages/db/prisma/migrations/<timestamp>_pcd_snapshot_sp4_versions/migration.sql
+  packages/db/prisma/migrations/<timestamp>_pcd_creative_job_resolution_tiers/migration.sql
 
 MODIFIED:
   packages/schemas/src/pcd-identity.ts
@@ -813,17 +860,36 @@ MODIFIED:
 
   packages/db/prisma/schema.prisma
     + 3 nullable fields on PcdIdentitySnapshot model
+    + 2 nullable fields on CreativeJob model (productTierAtResolution, creatorTierAtResolution)
 
   packages/db/src/stores/prisma-pcd-identity-snapshot-store.ts
     + 3 fields on CreatePcdIdentitySnapshotInput (data-spread already passthrough)
+    + adaptPcdIdentitySnapshotStore export (writer-contract bridge)
+
+  packages/db/src/stores/prisma-creative-job-store.ts
+    + 2 fields on AttachIdentityRefsInput (productTierAtResolution, creatorTierAtResolution)
+    + markRegistryBackfilled writes both as 1 (SP1 conservative compatibility default)
 
   packages/creative-pipeline/src/pcd/registry-resolver.ts
-    + 2 fields on ResolvedPcdContext (productTier, creatorTier)
-    + No-op path body change: two registry reads, zero attachIdentityRefs writes
+    + 2 stamped fields on ResolvedPcdContext (productTierAtResolution, creatorTierAtResolution)
+    + 2 optional fields on PcdResolvableJob (read from job row)
+    + isResolvedPcdJob widens from 5 → 7 fields
+    + Full-attach path stamps both new fields via attachIdentityRefs
+    + No-op path returns from job row alone (zero store calls — restores SP3 invariant)
+    + Malformed-resolved-job InvariantViolationError guard
+    + Removes pre-amend current-state productTier / creatorTier fields from the context
 
   packages/creative-pipeline/src/pcd/registry-resolver.test.ts
-    + Part A delta (no-op path now expects two finder reads, zero attach calls)
-    + 3 SP4-additive tests
+    + Restores original "zero store calls on no-op" idempotency assertion
+    + 5 SP4-additive tests (full-attach stamping, no-op zero-store, two malformed invariants, idempotency-guard widening)
+
+  packages/creative-pipeline/src/pcd/provider-router.ts
+    + Step 1 SP2 gate consumes resolvedContext.creatorTierAtResolution / productTierAtResolution
+    + Zero current-registry tier reads anywhere in the body
+
+  packages/creative-pipeline/src/pcd/provider-router.test.ts
+    + Regression test R1 "registry re-tiered after stamping does not change routing"
+    + Regression test R2 "SP2 gate receives stamped component tiers"
 
   packages/creative-pipeline/src/index.ts
     + SP4 re-exports
@@ -842,8 +908,9 @@ MODIFIED:
 | Q3.1: Rule 3 implementation — real store, stub, or defer? | **C1 — real injected `CampaignTakeStore` contract** (in-tree test fakes only) **+ merge-back ownership note.** | C2 stub-always-false is fake compliance. C3 deferral creates a semantic mismatch with the design's "three Tier 3 rules" language. Production implementer reserved for SP6 ApprovalLifecycle ownership at merge-back. |
 | Q4: Snapshot row schema — reuse SP1 columns or add fields? | **B + B1 — add three nullable columns** (`shotSpecVersion`, `routerVersion`, `routingDecisionReason`). | Acceptance condition #5 (historical snapshots remain interpretable) is the design justification for the migration. Three independent constants → three independent columns; no fusion. Nullable for historical compatibility (no DEFAULT fabrications). |
 | Q5: Layer composition — one fused entry point or two modules? | **A — two separately-callable modules** (`routePcdShot`, `writePcdIdentitySnapshot`). No fused entry point. | Pre-provider routing and post-provider snapshot writing are distinct lifecycle phases; the provider call sits between them and is owned by `apps/api` / merge-back integration, not by `creative-pipeline`. |
-| Q-extension: Component tier passthrough — extend ResolvedPcdContext, push to caller, or new store? | **(a) Extend `ResolvedPcdContext`** with `productTier` + `creatorTier`. | SP3 already computes both. Avoids second registry-read surface in SP4 and avoids pushing registry knowledge back into the orchestration caller. |
-| Q-extension-1: Add `productTier` / `creatorTier` columns to `CreativeJob`? | **No.** Choose (a-ii) variant 3 — keep migration scoped to snapshot columns; no-op path re-fetches component tiers from registry stores. | Registry owns identity-tier truth. `CreativeJob` should not become a shadow cache of registry-derived fields. Two extra reads on a non-hot path is the cleaner trade. |
+| Q-extension: Component tier passthrough — extend ResolvedPcdContext, push to caller, or new store? | **(a) Extend `ResolvedPcdContext`** with stamped component-tier fields. | SP3 already computes both at resolution time. Avoids second registry-read surface in SP4 and avoids pushing registry knowledge back into the orchestration caller. |
+| Q-extension-1: Add stamped component tiers to `CreativeJob`? | **Yes.** Add `productTierAtResolution` and `creatorTierAtResolution` as nullable columns. | **Reversal of the prior decision.** Code-review surfaced a split-brain bug: pre-amend SP4 routed the SP2 gate using current registry component tiers but the matrix/Tier 3 layers using stamped `effectiveTier`. Same shot could be Tier 1 for SP2 and Tier 3 for routing. Stamping component tiers at resolution time gives SP4 a single coherent decision world: stamped tier context governs SP2, matrix lookup, Tier 3 activation, provider selection, and snapshot interpretation uniformly. As a bonus, this also restores SP3's original "zero store calls on no-op" idempotency invariant (relaxed by the pre-amend SP4 design and now re-locked). The migration is purely additive (two nullable columns) and existing `effectiveTier` / `allowedOutputTier` columns are NOT renamed (avoiding merge-back churn). Backfill stays conservative at Tier 1 per SP1 semantic. |
+| Q-extension-2: What if a resolved job is missing the stamped component tiers? | **Throw `InvariantViolationError`. Never fall back to registry reads.** | Silent fallback would silently reintroduce dual-authority routing. Unreachable inside corrected SP4 (every SP4 resolution stamps both); the guard is regression protection for any future code that forgets to stamp. |
 | Section 3.1: Empty matrix candidates — fake tier-policy denial or distinguished? | **Distinguished.** Two `denialKind`s — `ACCESS_POLICY` and `NO_PROVIDER_CAPABILITY`. `accessDecision` unmutated in the second case. | Tier policy *allowed* the shot; provider routing failed because no provider satisfies required capability constraints. Different failure modes; do not collapse. |
 | Section 3.3: `shotSpecVersion` — re-import current or carry from input? | **Carry from input** (SP3-stamped). Writer must not import `PCD_SHOT_SPEC_VERSION`. | Snapshot must record the spec version the job was planned under, not the current value at write time. Re-importing creates forensic drift. Forbidden-imports test enforces. |
 | Review redline 1: should the writer enforce Tier 3 rules from `tier3RulesApplied`? | **No.** Enforcement derives required-rule set from pure recomputes (rules 1, 2) plus the explicit `editOverRegenerateRequired` boolean (rule 3). `tier3RulesApplied` is forensic metadata, validated for set equality only via `Tier3RoutingMetadataMismatchError`. | Forensic metadata is caller-controlled and can be falsified. Letting it drive enforcement creates a bypass. Recompute + explicit boolean closes the bypass; metadata mismatch is its own distinct error so forensic-record bugs don't masquerade as capability violations. |
