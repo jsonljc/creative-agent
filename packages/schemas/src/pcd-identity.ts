@@ -93,8 +93,10 @@ export const ConsentRecordSchema = z.object({
 });
 export type ConsentRecord = z.infer<typeof ConsentRecordSchema>;
 
-// SP5: QC gate schemas — gate keys, statuses, modes, verdicts, applicability.
-// Defined before ProductQcResultSchema so the widened schema can reference them directly.
+// SP5: QC gate schemas — gate keys, statuses, aggregate statuses, modes, verdicts.
+// Note: PcdQcGateApplicabilitySchema is defined further down in this file
+// (it depends on PcdShotTypeSchema, which is positioned after ProductQcResultSchema
+// per the SP4-era layout). Keep this comment in sync if either schema moves.
 
 export const PcdQcGateKeySchema = z.enum([
   "face_similarity",

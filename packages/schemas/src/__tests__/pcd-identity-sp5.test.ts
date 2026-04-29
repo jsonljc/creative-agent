@@ -208,5 +208,10 @@ describe("SP5 ProductQcResultSchema widening", () => {
     });
     expect(row.qcEvaluationVersion).toBe("pcd-qc-evaluation@1.0.0");
     expect(row.gateVerdicts?.aggregateStatus).toBe("pass");
+    expect(row.creatorIdentityId).toBe("creator_1");
+    expect(row.pcdIdentitySnapshotId).toBe("snap_1");
+    expect(row.faceSimilarityScore).toBe(0.91);
+    expect(row.gatesRan).toEqual(["face_similarity"]);
+    expect(row.qcGateMatrixVersion).toBe("pcd-qc-gate-matrix@1.0.0");
   });
 });
