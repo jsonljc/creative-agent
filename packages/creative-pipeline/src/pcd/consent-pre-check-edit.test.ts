@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { ConsentRevokedRefusalError } from "./consent-revocation-error.js";
 import { assertConsentNotRevokedForEdit } from "./consent-pre-check-edit.js";
 import { InvariantViolationError } from "./invariant-violation-error.js";
-import type {
-  ConsentRecordReader,
-  PcdIdentitySnapshotReader,
-} from "./lifecycle-readers.js";
+import type { ConsentRecordReader, PcdIdentitySnapshotReader } from "./lifecycle-readers.js";
 
-const reader = <T>(row: T) => async () => row;
+const reader =
+  <T>(row: T) =>
+  async () =>
+    row;
 
 describe("assertConsentNotRevokedForEdit", () => {
   it("returns silently when no PcdIdentitySnapshot exists (non-PCD asset)", async () => {

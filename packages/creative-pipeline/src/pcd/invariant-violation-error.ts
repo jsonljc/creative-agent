@@ -20,9 +20,7 @@ export class InvariantViolationError extends Error {
     if (typeof arg2 === "string") {
       // Legacy (jobId, fieldName) form — preserve a useful message for the
       // existing registry-resolver call sites.
-      super(
-        `InvariantViolationError: job "${arg1}" — field "${arg2}" is NULL or invalid`,
-      );
+      super(`InvariantViolationError: job "${arg1}" — field "${arg2}" is NULL or invalid`);
       this.context = Object.freeze({ jobId: arg1, fieldName: arg2 });
     } else {
       // Generic (reason, context?) form

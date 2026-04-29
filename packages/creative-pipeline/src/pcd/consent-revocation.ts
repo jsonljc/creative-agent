@@ -61,14 +61,15 @@ export async function propagateConsentRevocation(
     throw new InvariantViolationError("consent record not found", { consentRecordId });
   }
   if (consent.revoked !== true) {
-    throw new InvariantViolationError(
-      "propagateConsentRevocation called for non-revoked record",
-      { consentRecordId },
-    );
+    throw new InvariantViolationError("propagateConsentRevocation called for non-revoked record", {
+      consentRecordId,
+    });
   }
 
-  const assetIds = await stores.consentRevocationStore.findAssetIdsByRevokedConsent(consentRecordId);
-  const partition = await stores.consentRevocationStore.markAssetsConsentRevokedAfterGeneration(assetIds);
+  const assetIds =
+    await stores.consentRevocationStore.findAssetIdsByRevokedConsent(consentRecordId);
+  const partition =
+    await stores.consentRevocationStore.markAssetsConsentRevokedAfterGeneration(assetIds);
 
   return {
     consentRecordId,

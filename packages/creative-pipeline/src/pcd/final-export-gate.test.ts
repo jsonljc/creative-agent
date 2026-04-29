@@ -11,12 +11,24 @@ import type {
 } from "./lifecycle-readers.js";
 import { InvariantViolationError } from "./invariant-violation-error.js";
 
-const reader = <T>(row: T) => async () => row;
+const reader =
+  <T>(row: T) =>
+  async () =>
+    row;
 
-const baseAsset = { id: "asset_1", jobId: "job_1", creatorId: "creator_1", approvalState: "approved" };
+const baseAsset = {
+  id: "asset_1",
+  jobId: "job_1",
+  creatorId: "creator_1",
+  approvalState: "approved",
+};
 const baseJob = { id: "job_1", effectiveTier: 2 as const };
 const baseQc = { assetRecordId: "asset_1", passFail: "pass" as const };
-const baseSnapshot = { assetRecordId: "asset_1", creatorIdentityId: "creator_1", consentRecordId: null };
+const baseSnapshot = {
+  assetRecordId: "asset_1",
+  creatorIdentityId: "creator_1",
+  consentRecordId: null,
+};
 const baseConsentNotRevoked = { id: "consent_1", revoked: false, revokedAt: null };
 const closedExportGate: ExportGateState = {
   async isOpen() {
@@ -114,7 +126,11 @@ describe("decidePcdFinalExportGate", () => {
     const d = await decidePcdFinalExportGate(
       { assetRecordId: "asset_1" },
       stores({
-        snapshot: { assetRecordId: "asset_1", creatorIdentityId: "c", consentRecordId: "consent_1" },
+        snapshot: {
+          assetRecordId: "asset_1",
+          creatorIdentityId: "c",
+          consentRecordId: "consent_1",
+        },
         consent: { id: "consent_1", revoked: true, revokedAt: new Date() },
       }),
     );
@@ -129,7 +145,11 @@ describe("decidePcdFinalExportGate", () => {
         asset: { ...baseAsset, approvalState: "pending" },
         job: { id: "job_1", effectiveTier: 1 },
         qc: { assetRecordId: "asset_1", passFail: "fail" },
-        snapshot: { assetRecordId: "asset_1", creatorIdentityId: "c", consentRecordId: "consent_1" },
+        snapshot: {
+          assetRecordId: "asset_1",
+          creatorIdentityId: "c",
+          consentRecordId: "consent_1",
+        },
         consent: { id: "consent_1", revoked: true, revokedAt: new Date() },
         exportGateState: closedExportGate,
       }),
@@ -177,7 +197,11 @@ describe("decidePcdFinalExportGate", () => {
       decidePcdFinalExportGate(
         { assetRecordId: "asset_1" },
         stores({
-          snapshot: { assetRecordId: "asset_1", creatorIdentityId: "c", consentRecordId: "consent_1" },
+          snapshot: {
+            assetRecordId: "asset_1",
+            creatorIdentityId: "c",
+            consentRecordId: "consent_1",
+          },
           consent: null,
         }),
       ),

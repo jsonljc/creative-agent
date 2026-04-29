@@ -53,8 +53,10 @@ describe("SP6 anti-pattern grep", () => {
     const offenders: string[] = [];
     for (const file of SP6_SOURCE_FILES) {
       const src = stripComments(readSource(file));
-      if (/if\s*\(\s*[a-zA-Z_$][\w$]*\.?intent\s*===/.test(src)) offenders.push(`if-intent: ${file}`);
-      if (/switch\s*\(\s*[a-zA-Z_$][\w$]*\.?intent\s*\)/.test(src)) offenders.push(`switch-intent: ${file}`);
+      if (/if\s*\(\s*[a-zA-Z_$][\w$]*\.?intent\s*===/.test(src))
+        offenders.push(`if-intent: ${file}`);
+      if (/switch\s*\(\s*[a-zA-Z_$][\w$]*\.?intent\s*\)/.test(src))
+        offenders.push(`switch-intent: ${file}`);
     }
     expect(offenders).toEqual([]);
   });

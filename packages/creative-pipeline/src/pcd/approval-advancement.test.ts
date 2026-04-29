@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PCD_APPROVAL_LIFECYCLE_VERSION } from "./approval-lifecycle-version.js";
 import { decidePcdApprovalAdvancement } from "./approval-advancement.js";
-import type {
-  AssetRecordReader,
-  ProductQcResultReader,
-} from "./lifecycle-readers.js";
+import type { AssetRecordReader, ProductQcResultReader } from "./lifecycle-readers.js";
 
 const makeAssetReader = (
   row: Awaited<ReturnType<AssetRecordReader["findById"]>> | null,

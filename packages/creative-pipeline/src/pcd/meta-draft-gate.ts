@@ -94,10 +94,10 @@ export async function decidePcdMetaDraftGate(
   if (snapshot !== null && snapshot.consentRecordId !== null) {
     const consent = await stores.consentRecordReader.findById(snapshot.consentRecordId);
     if (consent === null) {
-      throw new InvariantViolationError(
-        "consent record referenced by snapshot does not exist",
-        { assetRecordId, consentRecordId: snapshot.consentRecordId },
-      );
+      throw new InvariantViolationError("consent record referenced by snapshot does not exist", {
+        assetRecordId,
+        consentRecordId: snapshot.consentRecordId,
+      });
     }
     if (consent.revoked === true) {
       consentRevoked = true;

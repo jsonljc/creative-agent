@@ -16,11 +16,23 @@ import type {
   PcdIdentitySnapshotReader,
 } from "./lifecycle-readers.js";
 
-const reader = <T>(row: T) => async () => row;
+const reader =
+  <T>(row: T) =>
+  async () =>
+    row;
 
-const baseAsset = { id: "asset_1", jobId: "job_1", creatorId: "creator_1", approvalState: "approved" };
+const baseAsset = {
+  id: "asset_1",
+  jobId: "job_1",
+  creatorId: "creator_1",
+  approvalState: "approved",
+};
 const baseJob = { id: "job_1", effectiveTier: 2 as const };
-const baseSnapshot = { assetRecordId: "asset_1", creatorIdentityId: "creator_1", consentRecordId: null };
+const baseSnapshot = {
+  assetRecordId: "asset_1",
+  creatorIdentityId: "creator_1",
+  consentRecordId: null,
+};
 
 class SpyComplianceCheck implements ComplianceCheck {
   calls: ComplianceCheckInput[] = [];
@@ -96,7 +108,11 @@ describe("decidePcdMetaDraftGate", () => {
     const d = await decidePcdMetaDraftGate(
       { assetRecordId: "asset_1", shotType },
       stores({
-        snapshot: { assetRecordId: "asset_1", creatorIdentityId: "c", consentRecordId: "consent_1" },
+        snapshot: {
+          assetRecordId: "asset_1",
+          creatorIdentityId: "c",
+          consentRecordId: "consent_1",
+        },
         consent: { id: "consent_1", revoked: true, revokedAt: new Date() },
       }),
     );
@@ -155,7 +171,11 @@ describe("decidePcdMetaDraftGate", () => {
       decidePcdMetaDraftGate(
         { assetRecordId: "asset_1", shotType },
         stores({
-          snapshot: { assetRecordId: "asset_1", creatorIdentityId: "c", consentRecordId: "consent_1" },
+          snapshot: {
+            assetRecordId: "asset_1",
+            creatorIdentityId: "c",
+            consentRecordId: "consent_1",
+          },
           consent: null,
         }),
       ),
@@ -163,12 +183,18 @@ describe("decidePcdMetaDraftGate", () => {
   });
 
   it("AssetRecord missing → asset_not_found single refusal", async () => {
-    const d = await decidePcdMetaDraftGate({ assetRecordId: "asset_1", shotType }, stores({ asset: null }));
+    const d = await decidePcdMetaDraftGate(
+      { assetRecordId: "asset_1", shotType },
+      stores({ asset: null }),
+    );
     expect(d.refusalReasons).toEqual(["asset_not_found"]);
   });
 
   it("CreativeJob missing → creative_job_not_found", async () => {
-    const d = await decidePcdMetaDraftGate({ assetRecordId: "asset_1", shotType }, stores({ job: null }));
+    const d = await decidePcdMetaDraftGate(
+      { assetRecordId: "asset_1", shotType },
+      stores({ job: null }),
+    );
     expect(d.refusalReasons).toContain("creative_job_not_found");
   });
 });

@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { ConsentRevokedRefusalError } from "./consent-revocation-error.js";
 import { assertConsentNotRevokedForGeneration } from "./consent-pre-check-generation.js";
 import { InvariantViolationError } from "./invariant-violation-error.js";
-import type {
-  ConsentRecordReader,
-  CreatorIdentityReader,
-} from "./lifecycle-readers.js";
+import type { ConsentRecordReader, CreatorIdentityReader } from "./lifecycle-readers.js";
 
-const reader = <T>(row: T) => async () => row;
+const reader =
+  <T>(row: T) =>
+  async () =>
+    row;
 
 describe("assertConsentNotRevokedForGeneration", () => {
   it("returns silently when CreatorIdentity has no consentRecordId (Tier 1/2)", async () => {

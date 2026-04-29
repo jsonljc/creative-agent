@@ -8,7 +8,9 @@ import { PrismaCreatorIdentityReader } from "./prisma-creator-identity-reader.js
 
 const fakePrisma = (rows: Record<string, unknown>) =>
   ({
-    assetRecord: { findUnique: async ({ where }: { where: { id: string } }) => rows[`asset:${where.id}`] ?? null },
+    assetRecord: {
+      findUnique: async ({ where }: { where: { id: string } }) => rows[`asset:${where.id}`] ?? null,
+    },
     productQcResult: {
       findFirst: async ({ where }: { where: { assetRecordId: string } }) =>
         rows[`qc:${where.assetRecordId}`] ?? null,
@@ -17,19 +19,39 @@ const fakePrisma = (rows: Record<string, unknown>) =>
       findUnique: async ({ where }: { where: { assetRecordId: string } }) =>
         rows[`snapshot:${where.assetRecordId}`] ?? null,
     },
-    consentRecord: { findUnique: async ({ where }: { where: { id: string } }) => rows[`consent:${where.id}`] ?? null },
-    creativeJob: { findUnique: async ({ where }: { where: { id: string } }) => rows[`job:${where.id}`] ?? null },
-    creatorIdentity: { findUnique: async ({ where }: { where: { id: string } }) => rows[`creator:${where.id}`] ?? null },
+    consentRecord: {
+      findUnique: async ({ where }: { where: { id: string } }) =>
+        rows[`consent:${where.id}`] ?? null,
+    },
+    creativeJob: {
+      findUnique: async ({ where }: { where: { id: string } }) => rows[`job:${where.id}`] ?? null,
+    },
+    creatorIdentity: {
+      findUnique: async ({ where }: { where: { id: string } }) =>
+        rows[`creator:${where.id}`] ?? null,
+    },
   }) as never;
 
 describe("PrismaAssetRecordReader", () => {
   it("returns the documented narrow shape", async () => {
     const r = new PrismaAssetRecordReader(
       fakePrisma({
-        "asset:a1": { id: "a1", jobId: "j1", creatorId: "c1", approvalState: "pending", consentRevokedAfterGeneration: false, lockedDerivativeOf: null },
+        "asset:a1": {
+          id: "a1",
+          jobId: "j1",
+          creatorId: "c1",
+          approvalState: "pending",
+          consentRevokedAfterGeneration: false,
+          lockedDerivativeOf: null,
+        },
       }),
     );
-    expect(await r.findById("a1")).toEqual({ id: "a1", jobId: "j1", creatorId: "c1", approvalState: "pending" });
+    expect(await r.findById("a1")).toEqual({
+      id: "a1",
+      jobId: "j1",
+      creatorId: "c1",
+      approvalState: "pending",
+    });
   });
   it("returns null when the row is missing", async () => {
     const r = new PrismaAssetRecordReader(fakePrisma({}));
@@ -60,7 +82,11 @@ describe("PrismaPcdIdentitySnapshotReader", () => {
   it("returns the narrow shape", async () => {
     const r = new PrismaPcdIdentitySnapshotReader(
       fakePrisma({
-        "snapshot:a1": { assetRecordId: "a1", creatorIdentityId: "c1", consentRecordId: "consent_1" },
+        "snapshot:a1": {
+          assetRecordId: "a1",
+          creatorIdentityId: "c1",
+          consentRecordId: "consent_1",
+        },
       }),
     );
     expect(await r.findByAssetRecordId("a1")).toEqual({

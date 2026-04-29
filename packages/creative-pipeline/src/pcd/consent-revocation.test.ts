@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { PCD_CONSENT_REVOCATION_VERSION } from "./consent-revocation-version.js";
-import {
-  propagateConsentRevocation,
-  type ConsentRevocationStore,
-} from "./consent-revocation.js";
+import { propagateConsentRevocation, type ConsentRevocationStore } from "./consent-revocation.js";
 import { InvariantViolationError } from "./invariant-violation-error.js";
 import type { ConsentRecordReader } from "./lifecycle-readers.js";
 
-const reader = <T>(row: T) => async () => row;
+const reader =
+  <T>(row: T) =>
+  async () =>
+    row;
 
 class MemoryConsentRevocationStore implements ConsentRevocationStore {
   constructor(
@@ -33,7 +33,11 @@ class MemoryConsentRevocationStore implements ConsentRevocationStore {
   }
 }
 
-const revokedConsent = (id: string) => ({ id, revoked: true, revokedAt: new Date("2026-04-29T00:00:00Z") });
+const revokedConsent = (id: string) => ({
+  id,
+  revoked: true,
+  revokedAt: new Date("2026-04-29T00:00:00Z"),
+});
 
 describe("propagateConsentRevocation", () => {
   it("flags all matching assets when none yet flagged", async () => {
@@ -41,7 +45,9 @@ describe("propagateConsentRevocation", () => {
     const result = await propagateConsentRevocation(
       { consentRecordId: "consent_1" },
       {
-        consentRecordReader: { findById: reader(revokedConsent("consent_1")) } as ConsentRecordReader,
+        consentRecordReader: {
+          findById: reader(revokedConsent("consent_1")),
+        } as ConsentRecordReader,
         consentRevocationStore: store,
       },
     );
@@ -59,7 +65,9 @@ describe("propagateConsentRevocation", () => {
     const result = await propagateConsentRevocation(
       { consentRecordId: "consent_1" },
       {
-        consentRecordReader: { findById: reader(revokedConsent("consent_1")) } as ConsentRecordReader,
+        consentRecordReader: {
+          findById: reader(revokedConsent("consent_1")),
+        } as ConsentRecordReader,
         consentRevocationStore: store,
       },
     );
@@ -72,14 +80,18 @@ describe("propagateConsentRevocation", () => {
     await propagateConsentRevocation(
       { consentRecordId: "consent_1" },
       {
-        consentRecordReader: { findById: reader(revokedConsent("consent_1")) } as ConsentRecordReader,
+        consentRecordReader: {
+          findById: reader(revokedConsent("consent_1")),
+        } as ConsentRecordReader,
         consentRevocationStore: store,
       },
     );
     const second = await propagateConsentRevocation(
       { consentRecordId: "consent_1" },
       {
-        consentRecordReader: { findById: reader(revokedConsent("consent_1")) } as ConsentRecordReader,
+        consentRecordReader: {
+          findById: reader(revokedConsent("consent_1")),
+        } as ConsentRecordReader,
         consentRevocationStore: store,
       },
     );
@@ -95,7 +107,9 @@ describe("propagateConsentRevocation", () => {
     const r = await propagateConsentRevocation(
       { consentRecordId: "consent_1" },
       {
-        consentRecordReader: { findById: reader(revokedConsent("consent_1")) } as ConsentRecordReader,
+        consentRecordReader: {
+          findById: reader(revokedConsent("consent_1")),
+        } as ConsentRecordReader,
         consentRevocationStore: store,
       },
     );
@@ -108,7 +122,9 @@ describe("propagateConsentRevocation", () => {
     const r = await propagateConsentRevocation(
       { consentRecordId: "consent_1" },
       {
-        consentRecordReader: { findById: reader(revokedConsent("consent_1")) } as ConsentRecordReader,
+        consentRecordReader: {
+          findById: reader(revokedConsent("consent_1")),
+        } as ConsentRecordReader,
         consentRevocationStore: store,
       },
     );

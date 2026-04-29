@@ -36,10 +36,10 @@ export async function assertConsentNotRevokedForEdit(
   if (snapshot.consentRecordId === null) return;
   const consent = await stores.consentRecordReader.findById(snapshot.consentRecordId);
   if (consent === null) {
-    throw new InvariantViolationError(
-      "consent record referenced by snapshot does not exist",
-      { priorAssetRecordId, consentRecordId: snapshot.consentRecordId },
-    );
+    throw new InvariantViolationError("consent record referenced by snapshot does not exist", {
+      priorAssetRecordId,
+      consentRecordId: snapshot.consentRecordId,
+    });
   }
   if (consent.revoked === true) {
     throw new ConsentRevokedRefusalError({

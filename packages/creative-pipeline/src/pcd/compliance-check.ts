@@ -22,9 +22,7 @@ export type ComplianceCheckInput = {
   // Future merge-back fields: scriptClaimsPath, testimonialFlags, voiceConsentRecordId.
 };
 
-export type ComplianceCheckResult =
-  | { pass: true }
-  | { pass: false; reason: string };
+export type ComplianceCheckResult = { pass: true } | { pass: false; reason: string };
 
 export interface ComplianceCheck {
   checkMetaDraftCompliance(input: ComplianceCheckInput): Promise<ComplianceCheckResult>;

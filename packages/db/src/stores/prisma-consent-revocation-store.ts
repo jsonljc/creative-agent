@@ -46,9 +46,7 @@ export class PrismaConsentRevocationStore implements ConsentRevocationStore {
       where: { id: { in: assetRecordIds } },
       select: { id: true, consentRevokedAfterGeneration: true },
     });
-    const newlyFlaggedIds = before
-      .filter((r) => !r.consentRevokedAfterGeneration)
-      .map((r) => r.id);
+    const newlyFlaggedIds = before.filter((r) => !r.consentRevokedAfterGeneration).map((r) => r.id);
     const alreadyFlaggedIds = before
       .filter((r) => r.consentRevokedAfterGeneration)
       .map((r) => r.id);
