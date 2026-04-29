@@ -48,3 +48,53 @@ export {
   type Tier3Rule,
   type Tier3RoutingRuleStores,
 } from "./pcd/tier3-routing-rules.js";
+
+// SP5: QC gates
+export { PCD_QC_EVALUATION_VERSION } from "./pcd/qc-evaluation-version.js";
+
+export {
+  PCD_QC_GATE_MATRIX,
+  PCD_QC_GATE_MATRIX_VERSION,
+  getPcdQcGateApplicability,
+} from "./pcd/qc-gate-matrix.js";
+
+export type {
+  SimilarityProvider,
+  OcrProvider,
+  GeometryProvider,
+  PcdQcProviders,
+} from "./pcd/qc-providers.js";
+
+export {
+  runFaceSimilarityGate,
+  FACE_SIMILARITY_THRESHOLD,
+  type FaceSimilarityGateInput,
+} from "./pcd/qc-face-similarity.js";
+
+export {
+  runLogoSimilarityGate,
+  LOGO_SIMILARITY_THRESHOLD,
+  type LogoSimilarityGateInput,
+} from "./pcd/qc-logo-similarity.js";
+
+export {
+  runOcrPackageTextGate,
+  OCR_EDIT_DISTANCE_THRESHOLD,
+  type OcrPackageTextGateInput,
+} from "./pcd/qc-ocr-match.js";
+
+export {
+  runGeometryScaleGate,
+  GEOMETRY_SCORE_THRESHOLD,
+  SCALE_CONFIDENCE_THRESHOLD,
+  type GeometryScaleGateInput,
+} from "./pcd/qc-geometry.js";
+
+export { applyPcdQcGateMode, aggregatePcdQcGateVerdicts } from "./pcd/qc-aggregator.js";
+
+export {
+  evaluatePcdQcResult,
+  type EvaluatePcdQcResultInput,
+  type EvaluatePcdQcResultStores,
+  type PcdQcLedgerStore,
+} from "./pcd/qc-evaluator.js";
