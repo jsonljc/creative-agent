@@ -307,7 +307,7 @@ export const PcdSp5QcLedgerInputSchema = z
   .refine(
     (v) =>
       v.gatesRan.length === v.gateVerdicts.gates.length &&
-      v.gatesRan.every((g, i) => g === v.gateVerdicts.gates[i]!.gate),
+      v.gatesRan.every((g, i) => g === v.gateVerdicts.gates[i]?.gate),
     { message: "gatesRan must equal gateVerdicts.gates[*].gate (same order)" },
   );
 export type PcdSp5QcLedgerInput = z.infer<typeof PcdSp5QcLedgerInputSchema>;

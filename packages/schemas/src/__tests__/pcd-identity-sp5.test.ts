@@ -349,6 +349,20 @@ describe("PcdSp5QcLedgerInputSchema refines", () => {
     expect(() => PcdSp5QcLedgerInputSchema.parse(bad)).toThrow(/same order/);
   });
 
+  it("rejects gatesRan length != gateVerdicts.gates length", () => {
+    const bad = happy();
+    bad.gatesRan = ["face_similarity", "logo_similarity"];
+    bad.gateVerdicts = {
+      gates: [
+        { gate: "face_similarity", status: "pass", score: 0.9, threshold: 0.78, reason: "ok" },
+      ],
+      aggregateStatus: "pass",
+    };
+    bad.creatorIdentityId = "creator_1";
+    bad.faceSimilarityScore = 0.9;
+    expect(() => PcdSp5QcLedgerInputSchema.parse(bad)).toThrow(/same order/);
+  });
+
   it("accepts face in gatesRan + creatorIdentityId + faceSimilarityScore present", () => {
     const ok = happy();
     ok.gatesRan = ["face_similarity"];
