@@ -32,3 +32,10 @@ export { StubTrendsStageRunner } from "./stages/stub-trends-stage-runner.js";
 export { StubMotivatorsStageRunner } from "./stages/stub-motivators-stage-runner.js";
 export { StubHooksStageRunner } from "./stages/stub-hooks-stage-runner.js";
 export { StubCreatorScriptsStageRunner } from "./stages/stub-creator-scripts-stage-runner.js";
+
+// Stub stage-runner fanout constants (SP8). Exposed for tests + future
+// SP10 tree-budget enforcement.
+export { STUB_TRENDS_FANOUT } from "./stages/stub-trends-stage-runner.js";
+export { STUB_MOTIVATORS_PER_TREND } from "./stages/stub-motivators-stage-runner.js";
+export { STUB_HOOKS_PER_MOTIVATOR } from "./stages/stub-hooks-stage-runner.js";
+export { STUB_SCRIPTS_PER_HOOK } from "./stages/stub-creator-scripts-stage-runner.js";
