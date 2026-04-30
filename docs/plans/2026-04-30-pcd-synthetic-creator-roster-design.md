@@ -3,7 +3,7 @@
 **Date:** 2026-04-30
 **Status:** Draft (awaiting user review)
 **Authors:** Jason + Claude (brainstorming session)
-**Target slices:** SP10+ (synthetic-creator track), additive to SP1–SP9 already shipped
+**Target slices:** SP11+ (synthetic-creator track; SP10A/B namespace held by parallel cost-forecast track), additive to SP1–SP9 already shipped
 
 ---
 
@@ -434,27 +434,29 @@ Strictly additive at every layer:
 6. **Treatment-class taxonomy stability** — the four-class enum is tight enough for v1 but might fragment as the roster grows (e.g. "med_spa" → "fillers" / "skin_boosters" / "laser"). Keep as a single enum for now; plan a hierarchical migration if/when it stops fitting.
 7. **Lease default duration** — 30 days per §3.3 is the v1 default. Shorter (14 days) reduces lockup risk further but increases renewal churn for the clinic. Likely needs A/B observation post-launch.
 8. **Retry-rate alert thresholds** — 30% (§8.2) is a guess; real number depends on per-character drift behaviour observed in pilot.
-9. **CAPI / conversion-signal feed** — when does the `PcdPerformanceSnapshot` schema gain a `conversionMetric` dimension fed from Alex / CAPI rather than ad-platform CTR/ROAS? This is the key "wedge anchoring" hookup (§1) and is out of scope for v1, but the integration shape should be sketched before SP10 ships so the schema doesn't need a backwards-incompatible migration.
+9. **CAPI / conversion-signal feed** — when does the `PcdPerformanceSnapshot` schema gain a `conversionMetric` dimension fed from Alex / CAPI rather than ad-platform CTR/ROAS? This is the key "wedge anchoring" hookup (§1) and is out of scope for v1, but the integration shape should be sketched before SP18 ships (the slice that introduces `PcdPerformanceSnapshot`) so the schema doesn't need a backwards-incompatible migration.
 
 ---
 
 ## 13. Implementation Slicing (preview, not a plan)
 
-Likely slice ordering for the writing-plans phase. Each slice is independently shippable:
+Likely slice ordering for the writing-plans phase. Each slice is independently shippable.
 
-- **SP10** — `CreativeBrief` schema + `CreatorIdentity.kind` column + `CreatorIdentitySynthetic` table + 10-character seed data
-- **SP11** — `CreatorIdentityLicense` table + license-gate module
-- **SP12** — `DisclosureTemplate` registry + disclosure-resolver module
-- **SP13** — `SyntheticCreatorSelector` (compatible-set only, no overlay)
-- **SP14** — `ScriptTemplate` table + `ScriptSelector` (deterministic, vibe-matched)
-- **SP15** — Provider routing extension for `kind: synthetic` (locked DALL-E + Kling)
-- **SP16** — SP9 provenance extension (new fields + zod schema additions)
-- **SP17** — `PcdPerformanceSnapshot` + `MetricsAggregator` job
-- **SP18** — Performance overlay in selector
-- **SP19** — SP5 QC face-match for synthetic
-- **SP20** — End-to-end integration tests + first clinic onboarding
+**Numbering note:** SP10 namespace is occupied by the parallel cost-forecast track (SP10A=cost-forecast, SP10B=budget — see `2026-04-30-pcd-cost-forecast-sp10a-design.md`). Synthetic-creator slices start at SP11.
 
-Sequencing TBD in the implementation plan. SP10–SP14 are largely parallelisable.
+- **SP11** — `CreativeBrief` schema + `CreatorIdentity.kind` column + `CreatorIdentitySynthetic` table + 10-character seed data
+- **SP12** — `CreatorIdentityLicense` table + license-gate module
+- **SP13** — `DisclosureTemplate` registry + disclosure-resolver module
+- **SP14** — `SyntheticCreatorSelector` (compatible-set only, no overlay)
+- **SP15** — `ScriptTemplate` table + `ScriptSelector` (deterministic, vibe-matched)
+- **SP16** — Provider routing extension for `kind: synthetic` (locked DALL-E + Kling)
+- **SP17** — SP9 provenance extension (new fields + zod schema additions)
+- **SP18** — `PcdPerformanceSnapshot` + `MetricsAggregator` job
+- **SP19** — Performance overlay in selector
+- **SP20** — SP5 QC face-match for synthetic
+- **SP21** — End-to-end integration tests + first clinic onboarding
+
+Sequencing TBD in the implementation plan. SP11–SP15 are largely parallelisable.
 
 ---
 
