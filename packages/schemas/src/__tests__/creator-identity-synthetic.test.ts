@@ -7,6 +7,7 @@ import {
   EthnicityFamilySchema,
   AgeBandSchema,
   PricePositioningSchema,
+  SyntheticStatusSchema,
   CreatorIdentitySyntheticPayloadSchema,
   type CreatorIdentitySyntheticPayload,
 } from "../creator-identity-synthetic.js";
@@ -69,6 +70,49 @@ describe("AgeBandSchema", () => {
 
   it("rejects mid_35s_plus (was a transcription typo)", () => {
     expect(() => AgeBandSchema.parse("mid_35s_plus")).toThrow();
+  });
+});
+
+describe("EthnicityFamilySchema", () => {
+  it("accepts the six v1 ethnicity families", () => {
+    for (const e of [
+      "sg_chinese",
+      "my_chinese",
+      "thai_chinese",
+      "filipino_sg",
+      "my_malay",
+      "hk_chinese",
+    ]) {
+      expect(EthnicityFamilySchema.parse(e)).toBe(e);
+    }
+  });
+
+  it("rejects unknown ethnicity values", () => {
+    expect(() => EthnicityFamilySchema.parse("sg_indian")).toThrow();
+    expect(() => EthnicityFamilySchema.parse("")).toThrow();
+  });
+});
+
+describe("PricePositioningSchema", () => {
+  it("accepts entry, standard, premium", () => {
+    for (const p of ["entry", "standard", "premium"]) {
+      expect(PricePositioningSchema.parse(p)).toBe(p);
+    }
+  });
+
+  it("rejects unknown positioning values", () => {
+    expect(() => PricePositioningSchema.parse("luxury")).toThrow();
+  });
+});
+
+describe("SyntheticStatusSchema", () => {
+  it("accepts active and retired", () => {
+    expect(SyntheticStatusSchema.parse("active")).toBe("active");
+    expect(SyntheticStatusSchema.parse("retired")).toBe("retired");
+  });
+
+  it("rejects deleted (caller must use isActive on parent CreatorIdentity)", () => {
+    expect(() => SyntheticStatusSchema.parse("deleted")).toThrow();
   });
 });
 
