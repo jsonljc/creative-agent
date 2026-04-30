@@ -46,10 +46,10 @@ The eventual learning loop pulls from **conversion outcomes**, not just ad-platf
 | # | Decision | Rationale |
 |---|---|---|
 | Q1 | **Market-exclusive leasing** (B), with a path to a hybrid free-core tier (D) once volume justifies it. **v1 ships with time-boxed leases (default 30 days, renewable) and a softer `priority_access` lock type** to avoid early-stage supply lockup. Hard exclusivity is the eventual shape, not the launch shape. | Synthetic personas burn out through over-exposure (early HeyGen problem). Per-(market × treatment-class) exclusivity preserves differentiation; maps cleanly onto the existing PCD `tier` concept. **Early-stage friction risk:** with a 10-character roster, hard locks would surface "no creator available" failures during clinic onboarding — fatal for product feel. Time-boxing + soft tiers de-risks this without abandoning the long-term model. |
-| Q2 | **Single `Pcd` table with `kind: "real" \| "synthetic"` discriminator** + extension tables for kind-specific fields. | Mechanical merge-back to Switchboard (additive only, no renames). SP2 tier policy and SP4 routing work unchanged. |
+| Q2 | **Single `CreatorIdentity` table with `kind: "real" \| "synthetic"` discriminator** + extension tables for kind-specific fields. (Codebase note: PCD spans `ProductIdentity` + `CreatorIdentity`; synthetic personas are creators, so the discriminator lands on `CreatorIdentity`.) | Mechanical merge-back to Switchboard (additive only, no renames). SP2 tier policy and SP4 routing work unchanged. |
 | Q3 | **`DisclosureTemplate` registry**, keyed by (jurisdiction × platform × treatment-class), platform-owned and version-controlled. Snapshot resolved text into provenance. | Only model where SP9 can attest to disclosure compliance per asset. Centralised templates scale; per-clinic copy creates silent compliance drift. |
-| Q4 | **Two-stage selection**: LLM `PreproductionAnalysis` emits a typed `CreativeBrief`; pure deterministic `SyntheticCreatorSelector` emits `(pcdId, fallbacks[])`. | Mirrors `PcdTierPolicy` shape from SP2. Required for SP9 forensic guarantee — same brief + same versions → same creator, every time. |
-| Q5 | **Two-tier deterministic selection with versioned performance snapshots.** Static compatible-set filter + optional overlay re-ranks using a frozen `PcdPerformanceSnapshot`. The selector never reads live mutable metrics. | Preserves replayability. `(brief, selectorVersion, metricsSnapshotVersion)` always yields the same `pcdId`. Enables learning loop without breaking governance. |
+| Q4 | **Two-stage selection**: LLM `PreproductionAnalysis` emits a typed `CreativeBrief`; pure deterministic `SyntheticCreatorSelector` emits `(creatorIdentityId, fallbacks[])`. | Mirrors `PcdTierPolicy` shape from SP2. Required for SP9 forensic guarantee — same brief + same versions → same creator, every time. |
+| Q5 | **Two-tier deterministic selection with versioned performance snapshots.** Static compatible-set filter + optional overlay re-ranks using a frozen `PcdPerformanceSnapshot`. The selector never reads live mutable metrics. | Preserves replayability. `(brief, selectorVersion, metricsSnapshotVersion)` always yields the same `creatorIdentityId`. Enables learning loop without breaking governance. |
 | Q6 | **Scripts are first-class records** (`ScriptTemplate` table), addressable by ID, reusable across briefs. | Without script-level identity, performance attribution stops at the creator and you can't disambiguate "Cheryl worked" from "the skeptic-hook script worked". |
 
 The core architectural principle that follows from Q4 + Q5:
@@ -78,7 +78,7 @@ SyntheticCreatorSelector (pure, deterministic)
 SyntheticCreatorSelectionDecision
         │
         ▼
-License Gate ── PcdLicense active for (pcdId, clinicId, market, treatmentClass)?
+License Gate ── CreatorIdentityLicense active for (creatorIdentityId, clinicId, market, treatmentClass)?
         │   on miss → walk fallbacks → exhaust → fail LICENSE_UNAVAILABLE
         ▼
 Disclosure Resolution ── DisclosureTemplate for (jurisdiction, platform, treatmentClass)?
@@ -86,7 +86,7 @@ Disclosure Resolution ── DisclosureTemplate for (jurisdiction, platform, tre
         │   on hit → snapshot text into job
         ▼
 ScriptSelector (pure, deterministic) → scriptId
-        │   compatible ScriptTemplate where compatibleCreatorIds CONTAINS pcdId
+        │   compatible ScriptTemplate where compatibleCreatorIdentityIds CONTAINS creatorIdentityId
         │   AND vibe = brief.vibe
         ▼
 Provider Routing (SP4 — locked DALL-E + Kling per character)
@@ -108,42 +108,46 @@ Every box upstream of Generation is pure or pure-at-the-edges. Determinism is pr
 
 ## 3. Data Model (additive only)
 
-### 3.1 Existing `Pcd` table — one new column
+### Codebase anchoring note
+
+This codebase has no unified `Pcd` table — PCD is the conjunction of two existing models, `ProductIdentity` and `CreatorIdentity`, paired into `PcdIdentitySnapshot` at job time. Synthetic personas are *creators*, so all `kind: "real" | "synthetic"` discrimination and synthetic-only fields land on `CreatorIdentity`. References below use `creatorIdentityId` (FK to `CreatorIdentity.id`) — the standard FK in this repo.
+
+### 3.1 Existing `CreatorIdentity` table — one new column
 
 ```
-Pcd.kind: enum("real", "synthetic")  default "real"
+CreatorIdentity.kind: enum("real", "synthetic")  default "real"
 ```
 
-Zero impact on existing rows. Real PCDs continue to flow through SP6 consent enforcement; synthetic PCDs flow through the parallel license gate.
+Zero impact on existing rows. Real `CreatorIdentity` rows continue to flow through SP6 consent enforcement (via existing `consentRecordId`); synthetic `CreatorIdentity` rows flow through the parallel license gate (§3.3). Existing fields like `voice`, `personality`, `appearanceRules`, and `environmentSet` remain meaningful for both kinds — synthetic rows populate them from the locked persona spec rather than from real-creator intake.
 
-### 3.2 `PcdSynthetic` — extension table
+### 3.2 `CreatorIdentitySynthetic` — extension table
 
-Extension table for synthetic-only fields. One row per synthetic `Pcd`.
+Extension table for synthetic-only fields. One row per synthetic `CreatorIdentity`. (Real-kind rows have no row in this table.)
 
 | Column | Type | Notes |
 |---|---|---|
-| `pcdId` | FK → `Pcd.id` | Primary key |
+| `creatorIdentityId` | FK → `CreatorIdentity.id` | Primary key |
 | `treatmentClass` | enum | `med_spa`, `dental`, `anti_ageing`, `halal_wellness` (no `slimming` in v1) |
 | `vibe` | enum | `omg_look`, `quiet_confidence`, `telling_her_friend`, `seven_days_later`, `just_left_clinic`, `softly_glowing` |
 | `market` | enum | `SG`, `MY`, `HK` |
 | `ethnicityFamily` | enum | `sg_chinese`, `my_chinese`, `thai_chinese`, `filipino_sg`, `my_malay`, `hk_chinese` |
 | `ageBand` | enum | `gen_z` (≤24), `mid_20s` (25–29), `early_30s` (30–34), `mid_30s_plus` (35+) |
 | `pricePositioning` | enum | `entry`, `standard`, `premium` |
-| `physicalDescriptors` | JSONB | Locked descriptor set (face shape, skin tone, eye shape, hair, build, age read) |
+| `physicalDescriptors` | JSONB | Locked descriptor set (face shape, skin tone, eye shape, hair, build, age read). Distinct from existing `CreatorIdentity.appearanceRules` — descriptors here are the immutable spec; `appearanceRules` may carry generation-time annotations. |
 | `dallePromptLocked` | text | Verbatim prompt; never paraphrased at job time |
 | `klingDirection` | JSONB | Setting / motion / energy / lighting / NO list |
-| `voiceCaptionStyle` | JSONB | Voice cadence + caption style descriptors |
-| `mutuallyExclusiveWith` | FK[] → `Pcd.id` | Same-campaign exclusion (e.g., Nana ↔ Bua) |
-| `status` | enum | `active`, `retired` (soft-kill from selector compatible-set) |
+| `voiceCaptionStyle` | JSONB | Voice cadence + caption style descriptors. Co-exists with existing `CreatorIdentity.voice`; this column captures synthetic-specific caption style (lowercase / fragments / Gen Z slang) that doesn't fit the real-creator voice schema. |
+| `mutuallyExclusiveWithIds` | FK[] → `CreatorIdentity.id` | Same-campaign exclusion (e.g., Nana ↔ Bua) |
+| `status` | enum | `active`, `retired` — selector compatible-set filter. (Existing `CreatorIdentity.isActive: Boolean` remains the global on/off; this column captures synthetic-specific lifecycle states without overloading `isActive`.) |
 
-### 3.3 `PcdLicense` — leasing record
+### 3.3 `CreatorIdentityLicense` — leasing record
 
-The Q1=B gate, with v1-friendly soft tiers to avoid early supply lockup. One row per active lease.
+The Q1=B gate, with v1-friendly soft tiers to avoid early supply lockup. One row per active lease. Although structurally usable for any `CreatorIdentity`, the license gate runs only when `CreatorIdentity.kind = "synthetic"` — real creators continue to flow through `consentRecordId` and SP6.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | uuid | |
-| `pcdId` | FK → `Pcd.id` | |
+| `creatorIdentityId` | FK → `CreatorIdentity.id` | |
 | `clinicId` | FK → `Clinic.id` | |
 | `market` | enum | Lease scope |
 | `treatmentClass` | enum | Lease scope |
@@ -160,7 +164,7 @@ The Q1=B gate, with v1-friendly soft tiers to avoid early supply lockup. One row
 - `priority_access` — multiple clinics can hold leases concurrently; selector prefers the lowest `priorityRank` holder when generating, but other holders still get the creator if the primary is at capacity or unavailable. **v1 default for new clinics.**
 - `soft_exclusive` — single primary holder, but other clinics can request usage with a flag (`isSoftExclusivityOverride: true`) recorded in provenance for transparency. Useful when one clinic wants exclusivity but the platform can't yet honour it strictly.
 
-License gate at job-creation time: find the strongest applicable lease for `(pcdId, clinicId, market, treatmentClass)` with current time in window. Hard locks block; priority locks order; soft locks emit warnings but pass.
+License gate at job-creation time: find the strongest applicable lease for `(creatorIdentityId, clinicId, market, treatmentClass)` with current time in window. Hard locks block; priority locks order; soft locks emit warnings but pass.
 
 ### 3.4 `DisclosureTemplate` — registry
 
@@ -171,7 +175,7 @@ Append-only, version-controlled.
 | `id` | uuid | |
 | `jurisdictionCode` | enum | `SG`, `MY`, `HK` |
 | `platform` | enum | `meta`, `tiktok`, `red`, `youtube_shorts` |
-| `treatmentClass` | enum | Joins `PcdSynthetic.treatmentClass` |
+| `treatmentClass` | enum | Joins `CreatorIdentitySynthetic.treatmentClass` |
 | `version` | int | Monotonic per (jurisdiction, platform, treatmentClass) tuple |
 | `text` | text | Disclosure copy |
 | `effectiveFrom` | timestamp | |
@@ -185,7 +189,7 @@ Append-only, version-controlled.
 | `vibe` | enum | Match selector key |
 | `treatmentClass` | enum | |
 | `text` | text | Atomic script body — hook + body + CTA bundled into a single addressable record |
-| `compatibleCreatorIds` | FK[] → `Pcd.id` | Restricts which synthetic creators can voice this script |
+| `compatibleCreatorIdentityIds` | FK[] → `CreatorIdentity.id` | Restricts which synthetic creators can voice this script |
 | `version` | int | |
 | `status` | enum | `active`, `retired` |
 
@@ -210,8 +214,8 @@ One row per job. Referenced by SP9 provenance.
 ```
 {
   briefId: uuid,
-  selectedPcdId: uuid,
-  fallbackPcdIds: uuid[],
+  selectedCreatorIdentityId: uuid,
+  fallbackCreatorIdentityIds: uuid[],
   selectorVersion: string,        // git SHA of selector module
   selectorRank: int,              // 0 = primary, 1+ = fallback walked to
   metricsSnapshotVersion: string | null,
@@ -225,13 +229,13 @@ One row per job. Referenced by SP9 provenance.
 ## 4. Per-Job Flow
 
 1. Pre-production runs LLM analysis on clinic brief → emits typed `CreativeBrief`.
-2. Selector applies compatible-set filter: `treatmentClass`, `market`, `vibe`, `pricePositioning`, `mutuallyExclusiveWith`, hard constraints.
-3. If `metricsSnapshotVersion` provided, overlay re-ranks compatible set. Otherwise default order is by `(PcdSynthetic.pricePositioning DESC, Pcd.id ASC)` — deterministic and content-blind, and gives premium-positioned creators primary preference when no performance signal is available.
+2. Selector applies compatible-set filter: `treatmentClass`, `market`, `vibe`, `pricePositioning`, `mutuallyExclusiveWithIds`, hard constraints. Operates over `CreatorIdentity` rows joined to `CreatorIdentitySynthetic` where `kind = "synthetic"`.
+3. If `metricsSnapshotVersion` provided, overlay re-ranks compatible set. Otherwise default order is by `(CreatorIdentitySynthetic.pricePositioning DESC, CreatorIdentity.id ASC)` — deterministic and content-blind, and gives premium-positioned creators primary preference when no performance signal is available.
 4. Emit `SyntheticCreatorSelectionDecision`. `selectorRank: 0` = primary; `1..n` = fallback chain.
-5. License gate: find active `PcdLicense` for `(selectedPcdId, clinicId, market, treatmentClass)`. On miss, advance `selectorRank`, retry. On chain exhaustion, hard-fail `LICENSE_UNAVAILABLE`.
+5. License gate: find active `CreatorIdentityLicense` for `(selectedCreatorIdentityId, clinicId, market, treatmentClass)`. On miss, advance `selectorRank`, retry. On chain exhaustion, hard-fail `LICENSE_UNAVAILABLE`.
 6. Disclosure gate: resolve `DisclosureTemplate` for `(jurisdictionCode, platform, treatmentClass)`. On miss, hard-fail `DISCLOSURE_UNRESOLVABLE`. On hit, snapshot text + version into job.
-7. Script selection: deterministic pick from `ScriptTemplate` where `compatibleCreatorIds CONTAINS selectedPcdId AND vibe = brief.vibe AND treatmentClass = brief.treatmentClass AND status = 'active'`. Tie-break by `(version DESC, id ASC)` — newest version wins, then deterministic by id. The selected script's `id` and `version` are recorded in provenance.
-8. SP4 routes to character's locked DALL-E + Kling pairing using `PcdSynthetic.dallePromptLocked` verbatim.
+7. Script selection: deterministic pick from `ScriptTemplate` where `compatibleCreatorIdentityIds CONTAINS selectedCreatorIdentityId AND vibe = brief.vibe AND treatmentClass = brief.treatmentClass AND status = 'active'`. Tie-break by `(version DESC, id ASC)` — newest version wins, then deterministic by id. The selected script's `id` and `version` are recorded in provenance.
+8. SP4 routes to character's locked DALL-E + Kling pairing using `CreatorIdentitySynthetic.dallePromptLocked` verbatim.
 9. Generation produces asset.
 10. SP5 QC runs face-descriptor match against `physicalDescriptors`. On drift > threshold, bounded retry (default 3). On retry exhaustion, fail `QC_DRIFT_UNRESOLVED`.
 11. SP9 provenance written.
@@ -243,13 +247,13 @@ One row per job. Referenced by SP9 provenance.
 Existing 12 pinned constants from `617a5a2` and lineage zod schemas from `f9f33ea` are unchanged. New keys appended:
 
 ```
-pcdKind:                     "synthetic"
-pcdId:                       <selected creator>
+creatorIdentityKind:         "synthetic"
+creatorIdentityId:           <selected creator>
 selectorVersion:             <git SHA>
 selectorRank:                0..n
 metricsSnapshotVersion:      <snap version or null>
 performanceOverlayApplied:   bool
-licenseId:                   <PcdLicense.id at job time>
+licenseId:                   <CreatorIdentityLicense.id at job time>
 disclosureTemplateId:        <DisclosureTemplate.id>
 disclosureTemplateVersion:   <version at resolution>
 resolvedDisclosureText:      <snapshot text, not live ref>
@@ -258,6 +262,8 @@ scriptVersion:               <version at selection>
 modelVersions:               { dalle: "...", kling: "..." }
 promptHash:                  sha256(dallePromptLocked)
 ```
+
+These are additive to the existing SP9 lineage chain (`briefId → trendId → motivatorId → hookId → scriptId`) — `creatorIdentityId` slots between `briefId` and `scriptId` as the new identity-bound rung. Pre-SP10 rows continue to read fine (all new columns nullable, no FK constraints required).
 
 Replay guarantee: given identical `(briefId, selectorVersion, metricsSnapshotVersion, scriptSelectorVersion)`, the selector and script-selector are pure functions and produce identical outputs. Generation is non-deterministic at the model layer, but the *decision lineage* up to generation is exactly reproducible.
 
@@ -301,9 +307,9 @@ Job creation pins the latest snapshot version into the brief's `metricsSnapshotV
 
 ### 6.5 Evolution operations
 
-- **Kill bad creators:** set `Pcd.status = "retired"` (or `PcdSynthetic.status`). Selector excludes from future compatible sets. Existing assets and their provenance are unaffected.
-- **Clone high performers:** create a new `Pcd` row + `PcdSynthetic` row with derivative `physicalDescriptors` and a fresh `dallePromptLocked`. New ID = new lineage; clone relationship lives in metadata, not the lineage chain.
-- **Evolve vibes:** add a new `vibe` enum value + new `ScriptTemplate`s scoped to specific creators via `compatibleCreatorIds`.
+- **Kill bad creators:** set `CreatorIdentitySynthetic.status = "retired"` (synthetic-specific lifecycle) or `CreatorIdentity.isActive = false` (global on/off). Selector excludes from future compatible sets. Existing assets and their provenance are unaffected.
+- **Clone high performers:** create a new `CreatorIdentity` row (`kind: "synthetic"`) + `CreatorIdentitySynthetic` row with derivative `physicalDescriptors` and a fresh `dallePromptLocked`. New ID = new lineage; clone relationship lives in metadata, not the lineage chain.
+- **Evolve vibes:** add a new `vibe` enum value + new `ScriptTemplate`s scoped to specific creators via `compatibleCreatorIdentityIds`.
 - **Performance overlay weighting:** the overlay's weighting logic is itself versioned (part of `selectorVersion`). Tuning weights (including the script vs creator bias from §6.3) = bumping `selectorVersion`.
 
 ### 6.6 Why this preserves governance
@@ -311,7 +317,7 @@ Job creation pins the latest snapshot version into the brief's `metricsSnapshotV
 The loop is `selection → variation → evaluation → feedback`. Feedback enters only through:
 1. New snapshot versions (selector reads frozen data, never live)
 2. New `selectorVersion` (selector logic, including weighting and cadence, can be tuned)
-3. New `Pcd` / `ScriptTemplate` rows (catalogue evolution)
+3. New `CreatorIdentity` (`kind: "synthetic"`) / `ScriptTemplate` rows (catalogue evolution)
 4. Status changes on existing rows (retirement)
 
 Each is auditable, reversible, and traceable in provenance. No knob mutates assets retroactively.
@@ -324,10 +330,10 @@ Each is auditable, reversible, and traceable in provenance. No knob mutates asse
 |---|---|
 | **Slimming missing from roster** | Excluded from v1 with documented rationale: slimming is the most heavily regulated of the four candidate verticals (MY MCMC + Healthcare Act, SG HSA, HK Trade Description Ordinance). Re-evaluate in Phase 2 once `DisclosureTemplate` registry is battle-tested on lower-risk verticals. |
 | **Disclosure strategy unspecified** | `DisclosureTemplate` registry (Q3=A) — jurisdiction × platform × treatment-class, mandatory gate at job creation, snapshotted into provenance. |
-| **PCD architecture lane** | Single `Pcd` table + `kind` discriminator + extension tables (Q2=A). Zero structural change to shipped SP1–SP9 surface. |
+| **PCD architecture lane** | Single `CreatorIdentity` table + `kind` discriminator + `CreatorIdentitySynthetic` extension table (Q2=A, anchored on the actual codebase model). Zero structural change to shipped SP1–SP9 surface. |
 | **Drift control beyond prompt-locking** | Two-layer: (a) `dallePromptLocked` verbatim per character; (b) per-character ID-anchor reference image set (DALL-E variation seed or Midjourney `--cref`-equivalent), used both at generation and as the QC gate's reference. SP5 face-match enforces. Bounded regeneration retries on drift fail. |
 | **Skeptic-converted vibe missing** | Documented Phase 3 addition. Highest-converting med spa creative often pairs a skeptic frame with a result; worth adding a creator + scripts for it once v1 is in market. Not v1 scope. |
-| **Nana / Bua substitutability** | `PcdSynthetic.mutuallyExclusiveWith[]` enforced in selector compatible-set filter. Same-campaign deduplication is a selector concern, not a downstream one. |
+| **Nana / Bua substitutability** | `CreatorIdentitySynthetic.mutuallyExclusiveWithIds[]` enforced in selector compatible-set filter. Same-campaign deduplication is a selector concern, not a downstream one. |
 
 ---
 
@@ -337,7 +343,7 @@ Locked descriptors reduce drift but don't eliminate it. v1 stack covers **identi
 
 ### 8.1 v1 — identity-level QC
 
-1. **Prompt locking** — `PcdSynthetic.dallePromptLocked` is the single source of truth. Generation pipeline pastes verbatim; never paraphrases or templates.
+1. **Prompt locking** — `CreatorIdentitySynthetic.dallePromptLocked` is the single source of truth. Generation pipeline pastes verbatim; never paraphrases or templates.
 2. **ID anchor** — each character has a reference image set committed at character creation (DALL-E seed image, Midjourney character reference, or a small per-character LoRA). Provider routing layer (SP4) injects the anchor into every generation call.
 3. **Face-descriptor match (SP5)** — between generated asset and reference set. Threshold tunable per character (premium positioning = stricter).
 4. **Bounded retry** — 3 retries default. After exhaustion, hard-fail and surface to human review queue. No silent fallback to "best of N drift" assets.
@@ -362,7 +368,7 @@ Performance depends on perceptual + emotional consistency, not just facial geome
 
 - **Vibe-tag classification** on generated assets (separate model run; classify into `omg_look | quiet_confidence | …`); reject if mismatched against `brief.vibe`.
 - **Setting/lighting heuristics** — caption-the-image, check for keywords matching the locked Kling direction's "Setting" / "Lighting" fields.
-- These checks are deferred to a later slice; the schema here intentionally has room (`PcdSynthetic.klingDirection` is structured) so v2 work is additive.
+- These checks are deferred to a later slice; the schema here intentionally has room (`CreatorIdentitySynthetic.klingDirection` is structured) so v2 work is additive.
 
 ### 8.4 Cost & rationale
 
@@ -374,11 +380,11 @@ A reference-image regeneration run is cheaper than the cumulative campaign damag
 
 - **Pure modules unit-tested with fixtures:**
   - `SyntheticCreatorSelector(brief, snapshot)` — table-driven cases covering compatible-set filter, overlay re-ranking, `mutuallyExclusiveWith`, fallback ordering.
-  - `ScriptSelector(brief, pcdId)` — table-driven across vibe × treatment.
+  - `ScriptSelector(brief, creatorIdentityId)` — table-driven across vibe × treatment.
   - `DisclosureResolver(jurisdiction, platform, treatmentClass)` — coverage matrix per supported jurisdiction × platform × treatment-class.
-  - `LicenseGate(pcdId, clinicId, market, treatmentClass, now)` — active / suspended / expired / out-of-window.
+  - `LicenseGate(creatorIdentityId, clinicId, market, treatmentClass, now)` — active / suspended / expired / out-of-window.
 - **SP9 attestation tests:**
-  - For a frozen brief + frozen `selectorVersion` + frozen `metricsSnapshotVersion`, the same `pcdId` is chosen across N runs.
+  - For a frozen brief + frozen `selectorVersion` + frozen `metricsSnapshotVersion`, the same `creatorIdentityId` is chosen across N runs.
   - Provenance records contain all required new fields and pass the lineage zod schemas.
 - **Integration tests:**
   - End-to-end: brief in → asset metadata + provenance out, with stubbed model calls.
@@ -393,9 +399,9 @@ Co-located `*.test.ts` per CLAUDE.md.
 
 Strictly additive at every layer:
 
-- **Schema changes:** one nullable column on existing `Pcd` (`kind`, default `"real"`). Six new tables. Zero renames, zero column drops, zero data backfills against tables already on Switchboard `main`.
+- **Schema changes:** one column on existing `CreatorIdentity` (`kind`, default `"real"`). Six new tables: `CreatorIdentitySynthetic`, `CreatorIdentityLicense`, `DisclosureTemplate`, `ScriptTemplate`, `PcdPerformanceSnapshot`, `SyntheticCreatorSelectionDecision`. Additive provenance columns on existing `PcdIdentitySnapshot`. Zero renames, zero column drops, zero data backfills against tables already on Switchboard `main`.
 - **Provenance:** additive fields only. Existing 12 pinned constants and lineage zod schemas keep their meaning.
-- **Package boundaries unchanged:** `packages/schemas/` gets new files for `creative-brief.ts`, `synthetic-creator.ts`, `disclosure-template.ts`, `pcd-license.ts`, `script-template.ts`, `performance-snapshot.ts`. `packages/db/` gets corresponding stores. `packages/creative-pipeline/` gets `synthetic-creator-selector/`, `script-selector/`, `disclosure-resolver/`, `license-gate/`, `metrics-aggregator/`.
+- **Package boundaries unchanged:** `packages/schemas/` gets new files for `creative-brief.ts`, `creator-identity-synthetic.ts`, `disclosure-template.ts`, `creator-identity-license.ts`, `script-template.ts`, `pcd-performance-snapshot.ts`. `packages/db/` gets corresponding stores. `packages/creative-pipeline/` gets `synthetic-creator-selector/`, `script-selector/`, `disclosure-resolver/`, `license-gate/`, `metrics-aggregator/`.
 - **Sed-pass for `@creativeagent/*` → `@switchboard/*`** still works mechanically.
 - **No imports from outside the PCD scope** introduced (per `CLAUDE.md` merge-back rules). If selector logic eventually needs Switchboard-side concepts (e.g. a `Clinic` type richer than the local stub), define a minimal local contract; let Switchboard supply the real one at merge time.
 
@@ -436,8 +442,8 @@ Strictly additive at every layer:
 
 Likely slice ordering for the writing-plans phase. Each slice is independently shippable:
 
-- **SP10** — `CreativeBrief` schema + `PcdSynthetic` table + 10-character seed data
-- **SP11** — `PcdLicense` table + license-gate module
+- **SP10** — `CreativeBrief` schema + `CreatorIdentity.kind` column + `CreatorIdentitySynthetic` table + 10-character seed data
+- **SP11** — `CreatorIdentityLicense` table + license-gate module
 - **SP12** — `DisclosureTemplate` registry + disclosure-resolver module
 - **SP13** — `SyntheticCreatorSelector` (compatible-set only, no overlay)
 - **SP14** — `ScriptTemplate` table + `ScriptSelector` (deterministic, vibe-matched)
