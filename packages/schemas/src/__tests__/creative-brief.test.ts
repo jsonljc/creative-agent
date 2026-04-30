@@ -10,6 +10,10 @@ describe("JurisdictionCodeSchema", () => {
   it("accepts SG, MY, HK", () => {
     for (const j of ["SG", "MY", "HK"]) expect(JurisdictionCodeSchema.parse(j)).toBe(j);
   });
+
+  it("rejects unknown jurisdiction codes", () => {
+    expect(() => JurisdictionCodeSchema.parse("US")).toThrow();
+  });
 });
 
 describe("PlatformSchema", () => {
@@ -51,7 +55,7 @@ describe("CreativeBriefSchema", () => {
 
   it("allows market !== jurisdictionCode in principle (operator override)", () => {
     expect(
-      CreativeBriefSchema.parse({ ...valid, market: "MY", jurisdictionCode: "MY" }),
+      CreativeBriefSchema.parse({ ...valid, market: "MY", jurisdictionCode: "HK" }),
     ).toBeDefined();
   });
 
