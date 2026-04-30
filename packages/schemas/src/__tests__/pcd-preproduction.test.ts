@@ -385,8 +385,10 @@ describe("PcdProductionFanoutDecisionSchema", () => {
     preproductionChainVersion: "preproduction-chain@1.0.0",
     identityContextVersion: "identity-context@1.0.0",
     approvalLifecycleVersion: "approval-lifecycle@1.0.0",
+    preproductionFanoutVersion: "preproduction-fanout@1.0.0",
     decidedAt: "2026-04-29T12:00:00.000Z",
     decidedBy: null,
+    decisionNote: null,
     costForecast: null,
   };
 

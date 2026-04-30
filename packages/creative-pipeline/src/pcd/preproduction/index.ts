@@ -1,6 +1,8 @@
 export { PCD_PREPRODUCTION_CHAIN_VERSION } from "./preproduction-chain-version.js";
 export { PCD_IDENTITY_CONTEXT_VERSION } from "./identity-context-version.js";
+export { PCD_PREPRODUCTION_FANOUT_VERSION } from "./preproduction-fanout-version.js";
 export { PreproductionChainError } from "./preproduction-chain-error.js";
+export { deepFreeze } from "./deep-freeze.js";
 export type { Sp7ProductRegistryReader, Sp7CreatorRegistryReader } from "./sp7-readers.js";
 
 export {
@@ -9,7 +11,7 @@ export {
 } from "./build-pcd-identity-context.js";
 
 export {
-  AutoApproveOnlyScriptGate,
+  AutoApproveAllScriptsGate,
   type ProductionFanoutGate,
   type RequestSelectionInput,
 } from "./production-fanout-gate.js";

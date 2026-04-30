@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { PCD_APPROVAL_LIFECYCLE_VERSION } from "../approval-lifecycle-version.js";
-import { InvariantViolationError } from "../invariant-violation-error.js";
-import { PcdProductionFanoutDecisionSchema } from "@creativeagent/schemas";
-import { AutoApproveOnlyScriptGate, type RequestSelectionInput } from "./production-fanout-gate.js";
-import { PCD_PREPRODUCTION_CHAIN_VERSION } from "./preproduction-chain-version.js";
+import {
+  ProductionFanoutGateOperatorDecisionSchema,
+  type PcdIdentityContext,
+} from "@creativeagent/schemas";
+import { AutoApproveAllScriptsGate, type RequestSelectionInput } from "./production-fanout-gate.js";
 import { PCD_IDENTITY_CONTEXT_VERSION } from "./identity-context-version.js";
 
-const fixedClock = () => new Date("2026-04-29T12:00:00.000Z");
+const fixedClock = () => new Date("2026-04-30T12:00:00.000Z");
 
 const baseScript = {
   id: "script-1",
@@ -22,13 +22,13 @@ const baseScript = {
   talkingPoints: ["x"],
 };
 
-const baseCtx = {
+const baseCtx: PcdIdentityContext = {
   creatorIdentityId: "creator-1",
   productIdentityId: "product-1",
   consentRecordId: null,
-  effectiveTier: 2 as const,
-  productTierAtResolution: 2 as const,
-  creatorTierAtResolution: 2 as const,
+  effectiveTier: 2,
+  productTierAtResolution: 2,
+  creatorTierAtResolution: 2,
   allowedShotTypes: ["simple_ugc"],
   allowedOutputIntents: ["draft", "preview", "final_export"],
   tier3Rules: {
@@ -50,67 +50,100 @@ const baseCtx = {
   consentRevoked: false,
   treeBudget: null,
   identityContextVersion: PCD_IDENTITY_CONTEXT_VERSION,
-} as const;
+};
 
-describe("AutoApproveOnlyScriptGate", () => {
-  const gate = new AutoApproveOnlyScriptGate();
+describe("AutoApproveAllScriptsGate", () => {
+  const gate = new AutoApproveAllScriptsGate();
 
-  it("selects the only script and returns a forensic decision struct", async () => {
+  it("with one script, selects it and returns operator-decision tuple", async () => {
     const input: RequestSelectionInput = {
       scripts: [baseScript],
       identityContext: baseCtx,
       briefId: "brief-1",
       clock: fixedClock,
     };
-    const decision = await gate.requestSelection(input);
-
-    expect(PcdProductionFanoutDecisionSchema.safeParse(decision).success).toBe(true);
-    expect(decision.briefId).toBe("brief-1");
-    expect(decision.creatorIdentityId).toBe("creator-1");
-    expect(decision.productIdentityId).toBe("product-1");
-    expect(decision.consentRecordId).toBe(null);
-    expect(decision.effectiveTier).toBe(2);
-    expect(decision.selectedScriptIds).toEqual(["script-1"]);
-    expect(decision.availableScriptIds).toEqual(["script-1"]);
-    expect(decision.preproductionChainVersion).toBe(PCD_PREPRODUCTION_CHAIN_VERSION);
-    expect(decision.identityContextVersion).toBe(PCD_IDENTITY_CONTEXT_VERSION);
-    expect(decision.approvalLifecycleVersion).toBe(PCD_APPROVAL_LIFECYCLE_VERSION);
-    expect(decision.decidedAt).toBe("2026-04-29T12:00:00.000Z");
-    expect(decision.decidedBy).toBe(null);
-    expect(decision.costForecast).toBe(null);
+    const out = await gate.requestSelection(input);
+    expect(out.selectedScriptIds).toEqual(["script-1"]);
+    expect(out.decidedBy).toBe(null);
+    expect(out.decidedAt).toBe("2026-04-30T12:00:00.000Z");
   });
 
-  it("throws InvariantViolationError on zero scripts", async () => {
+  it("with three scripts, selects all three sorted ascending", async () => {
+    const input: RequestSelectionInput = {
+      scripts: [
+        { ...baseScript, id: "script-c" },
+        { ...baseScript, id: "script-a" },
+        { ...baseScript, id: "script-b" },
+      ],
+      identityContext: baseCtx,
+      briefId: "brief-1",
+      clock: fixedClock,
+    };
+    const out = await gate.requestSelection(input);
+    expect(out.selectedScriptIds).toEqual(["script-a", "script-b", "script-c"]);
+  });
+
+  it("returned shape parses cleanly via the operator-decision schema", async () => {
+    const input: RequestSelectionInput = {
+      scripts: [baseScript],
+      identityContext: baseCtx,
+      briefId: "brief-1",
+      clock: fixedClock,
+    };
+    const out = await gate.requestSelection(input);
+    expect(ProductionFanoutGateOperatorDecisionSchema.safeParse(out).success).toBe(true);
+  });
+
+  it("returned object contains exactly the three operator-decision keys", async () => {
+    const input: RequestSelectionInput = {
+      scripts: [baseScript],
+      identityContext: baseCtx,
+      briefId: "brief-1",
+      clock: fixedClock,
+    };
+    const out = await gate.requestSelection(input);
+    expect(Object.keys(out).sort()).toEqual(["decidedAt", "decidedBy", "selectedScriptIds"]);
+  });
+
+  it("does NOT include any pinned-version field on the return shape", async () => {
+    const input: RequestSelectionInput = {
+      scripts: [baseScript],
+      identityContext: baseCtx,
+      briefId: "brief-1",
+      clock: fixedClock,
+    };
+    const out = await gate.requestSelection(input);
+    expect(out).not.toHaveProperty("preproductionChainVersion");
+    expect(out).not.toHaveProperty("identityContextVersion");
+    expect(out).not.toHaveProperty("approvalLifecycleVersion");
+    expect(out).not.toHaveProperty("preproductionFanoutVersion");
+  });
+
+  it("does NOT echo identity carry-through fields on the return shape", async () => {
+    const input: RequestSelectionInput = {
+      scripts: [baseScript],
+      identityContext: baseCtx,
+      briefId: "brief-1",
+      clock: fixedClock,
+    };
+    const out = await gate.requestSelection(input);
+    expect(out).not.toHaveProperty("briefId");
+    expect(out).not.toHaveProperty("creatorIdentityId");
+    expect(out).not.toHaveProperty("productIdentityId");
+    expect(out).not.toHaveProperty("consentRecordId");
+    expect(out).not.toHaveProperty("effectiveTier");
+  });
+
+  it("with empty scripts, returns an empty selectedScriptIds (parse-fails upstream)", async () => {
     const input: RequestSelectionInput = {
       scripts: [],
       identityContext: baseCtx,
       briefId: "brief-1",
       clock: fixedClock,
     };
-    await expect(gate.requestSelection(input)).rejects.toThrow(InvariantViolationError);
-  });
-
-  it("throws InvariantViolationError on two scripts (SP7 invariant: single-script)", async () => {
-    const input: RequestSelectionInput = {
-      scripts: [baseScript, { ...baseScript, id: "script-2" }],
-      identityContext: baseCtx,
-      briefId: "brief-1",
-      clock: fixedClock,
-    };
-    await expect(gate.requestSelection(input)).rejects.toThrow(InvariantViolationError);
-  });
-
-  it("returned selectedScriptIds and availableScriptIds are sorted ascending", async () => {
-    // With one script in SP7, sortedness is trivial; the assertion locks
-    // the contract for SP8's N-script world.
-    const input: RequestSelectionInput = {
-      scripts: [baseScript],
-      identityContext: baseCtx,
-      briefId: "brief-1",
-      clock: fixedClock,
-    };
-    const decision = await gate.requestSelection(input);
-    expect(decision.selectedScriptIds).toEqual([...decision.selectedScriptIds].sort());
-    expect(decision.availableScriptIds).toEqual([...decision.availableScriptIds].sort());
+    const out = await gate.requestSelection(input);
+    expect(out.selectedScriptIds).toEqual([]);
+    // Schema rejects empty selectedScriptIds — composer's runStageWrapped catches.
+    expect(ProductionFanoutGateOperatorDecisionSchema.safeParse(out).success).toBe(false);
   });
 });

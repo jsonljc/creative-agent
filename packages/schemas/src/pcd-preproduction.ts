@@ -219,20 +219,26 @@ export const PcdProductionFanoutDecisionSchema = z.object({
   consentRecordId: z.string().nullable(),
   effectiveTier: IdentityTierSchema,
 
-  // Selection (sorted ascending; the gate adapter enforces sort)
-  selectedScriptIds: z.array(z.string().min(1)).min(1),
-  availableScriptIds: z.array(z.string().min(1)).min(1),
+  // Selection (sorted ascending; the composer enforces sort)
+  selectedScriptIds: z.array(z.string().min(1)).min(1).readonly(),
+  availableScriptIds: z.array(z.string().min(1)).min(1).readonly(),
 
-  // Pinned versions (caller cannot override; pinned by import)
+  // Pinned versions (caller cannot override; pinned by composer from import)
   preproductionChainVersion: z.string(),
   identityContextVersion: z.string(),
   approvalLifecycleVersion: z.string(),
+  preproductionFanoutVersion: z.string(),
 
   // Gate metadata
   decidedAt: z.string().datetime(),
   decidedBy: z.string().nullable(),
 
-  // SP10 forward-compat (always null in SP7)
+  // SP8 — operator commentary seam; SP8 composer always emits null.
+  // SP9+: bound this field — max length, operator-only writeable, never used
+  // by stubs / never read for control flow / never copied into runner prompts.
+  decisionNote: z.string().nullable(),
+
+  // SP10 forward-compat (always null in SP8).
   costForecast: PcdCostForecastSchema.nullable(),
 });
 export type PcdProductionFanoutDecision = z.infer<typeof PcdProductionFanoutDecisionSchema>;
