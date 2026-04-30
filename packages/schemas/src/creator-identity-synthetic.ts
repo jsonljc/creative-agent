@@ -41,7 +41,7 @@ export const EthnicityFamilySchema = z.enum([
 ]);
 export type EthnicityFamily = z.infer<typeof EthnicityFamilySchema>;
 
-export const AgeBandSchema = z.enum(["gen_z", "mid_20s", "early_30s", "mid_35s_plus"]);
+export const AgeBandSchema = z.enum(["gen_z", "mid_20s", "early_30s", "mid_30s_plus"]);
 export type AgeBand = z.infer<typeof AgeBandSchema>;
 
 export const PricePositioningSchema = z.enum(["entry", "standard", "premium"]);

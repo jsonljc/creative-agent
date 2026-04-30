@@ -60,6 +60,18 @@ describe("MarketSchema", () => {
   });
 });
 
+describe("AgeBandSchema", () => {
+  it("accepts the four v1 age bands", () => {
+    for (const a of ["gen_z", "mid_20s", "early_30s", "mid_30s_plus"]) {
+      expect(AgeBandSchema.parse(a)).toBe(a);
+    }
+  });
+
+  it("rejects mid_35s_plus (was a transcription typo)", () => {
+    expect(() => AgeBandSchema.parse("mid_35s_plus")).toThrow();
+  });
+});
+
 describe("CreatorIdentitySyntheticPayloadSchema", () => {
   const valid: CreatorIdentitySyntheticPayload = {
     creatorIdentityId: "cid_test_01",
