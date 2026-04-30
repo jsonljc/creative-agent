@@ -95,8 +95,6 @@ describe("SP7 forbidden imports", () => {
       "crypto",
     ];
     for (const file of allSources) {
-      // The anti-pattern test itself imports node:fs to walk the tree; skip it.
-      if (file.endsWith("sp7-anti-patterns.test.ts")) continue;
       const src = readFileSync(file, "utf8");
       for (const tok of forbidden) {
         const re = new RegExp(`from\\s+['"]${tok}['"]`);
