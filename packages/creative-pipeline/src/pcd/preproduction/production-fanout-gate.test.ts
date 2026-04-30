@@ -48,6 +48,7 @@ const baseCtx = {
     "no_invented_product_claims",
   ],
   consentRevoked: false,
+  treeBudget: null,
   identityContextVersion: PCD_IDENTITY_CONTEXT_VERSION,
 } as const;
 

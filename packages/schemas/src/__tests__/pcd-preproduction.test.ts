@@ -111,6 +111,7 @@ describe("PcdIdentityContextSchema", () => {
       "no_invented_product_claims",
     ],
     consentRevoked: false,
+    treeBudget: null,
     identityContextVersion: "identity-context@1.0.0",
   };
 

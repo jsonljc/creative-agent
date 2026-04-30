@@ -19,6 +19,7 @@ import {
   type AssertConsentNotRevokedForGenerationStores,
 } from "../consent-pre-check-generation.js";
 import { PCD_IDENTITY_CONTEXT_VERSION } from "./identity-context-version.js";
+import { deepFreeze } from "./deep-freeze.js";
 import type { Sp7CreatorRegistryReader, Sp7ProductRegistryReader } from "./sp7-readers.js";
 
 export type BuildPcdIdentityContextStores = {
@@ -177,9 +178,11 @@ export async function buildPcdIdentityContext(
     ugcStyleConstraints,
 
     consentRevoked: false, // SP6 pre-check throws on revoked, so reaching here means false
+    // treeBudget is reserved for SP10 enforcement; SP8 always emits null.
+    treeBudget: null,
     identityContextVersion: PCD_IDENTITY_CONTEXT_VERSION,
   };
 
   // MERGE-BACK: emit WorkTrace here after PcdIdentityContext is built.
-  return Object.freeze(context);
+  return deepFreeze(context);
 }

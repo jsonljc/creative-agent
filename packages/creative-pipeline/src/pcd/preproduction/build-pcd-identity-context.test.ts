@@ -173,4 +173,25 @@ describe("buildPcdIdentityContext", () => {
     const ctx = await buildPcdIdentityContext(validBrief, fakeStores());
     expect(ctx.consentRevoked).toBe(false);
   });
+
+  it("returns a deep-frozen context (arrays + sub-objects are also frozen)", async () => {
+    const ctx = await buildPcdIdentityContext(validBrief, fakeStores());
+    expect(Object.isFrozen(ctx)).toBe(true);
+    expect(Object.isFrozen(ctx.allowedShotTypes)).toBe(true);
+    expect(Object.isFrozen(ctx.allowedOutputIntents)).toBe(true);
+    expect(Object.isFrozen(ctx.ugcStyleConstraints)).toBe(true);
+    expect(Object.isFrozen(ctx.tier3Rules)).toBe(true);
+  });
+
+  it("treeBudget is null in SP8 (reserved for SP10 enforcement)", async () => {
+    const ctx = await buildPcdIdentityContext(validBrief, fakeStores());
+    expect(ctx.treeBudget).toBe(null);
+  });
+
+  it("mutation-via-cast on a frozen array throws TypeError in strict mode", async () => {
+    const ctx = await buildPcdIdentityContext(validBrief, fakeStores());
+    expect(() => {
+      (ctx.allowedShotTypes as unknown as string[]).push("simple_ugc");
+    }).toThrow(TypeError);
+  });
 });
