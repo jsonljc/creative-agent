@@ -86,7 +86,12 @@ export async function writePcdIdentitySnapshotWithProvenance(
   });
 
   // Step 4 — Pin version constants from imports + carry shotSpecVersion
-  // (SP3 stamp). Mirrors SP4 writer body byte-for-byte.
+  // (SP3 stamp). Same four imports + same allowlist payload shape as the SP4
+  // writer's version-pinning step. Step ordering differs intentionally — SP9
+  // runs the Tier 3 assert before the Zod parse so the cheaper invariant
+  // check fails fast on the common path. The anti-pattern test enforces
+  // structural equivalence (same constants imported + same six-arg
+  // assertTier3RoutingDecisionCompliant call), not source-line ordering.
   const payload = {
     assetRecordId: parsed.assetRecordId,
     productIdentityId: parsed.productIdentityId,

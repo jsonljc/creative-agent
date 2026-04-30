@@ -144,7 +144,9 @@ describe("SP9 anti-pattern grep", () => {
       if (file.startsWith("packages/db/prisma/migrations/")) continue;
       if (file.endsWith(".prisma")) continue;
       if (file.startsWith("docs/")) continue;
-      if (file.startsWith("packages/db/src/stores/prisma-pcd-identity-snapshot-store.")) continue;
+      // Allowed db edits — exact-match to prevent sibling files
+      // (e.g. *-store.helpers.ts) from slipping through unnoticed.
+      if (file === "packages/db/src/stores/prisma-pcd-identity-snapshot-store.ts") continue;
       if (file === "packages/db/src/stores/__tests__/prisma-pcd-identity-snapshot-store.test.ts")
         continue;
       if (file === "packages/schemas/src/pcd-provenance.ts") continue;
