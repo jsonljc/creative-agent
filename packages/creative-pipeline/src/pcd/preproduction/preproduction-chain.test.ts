@@ -11,10 +11,19 @@ import { PreproductionChainError } from "./preproduction-chain-error.js";
 import { PCD_IDENTITY_CONTEXT_VERSION } from "./identity-context-version.js";
 import { PCD_PREPRODUCTION_CHAIN_VERSION } from "./preproduction-chain-version.js";
 import { PCD_PREPRODUCTION_FANOUT_VERSION } from "./preproduction-fanout-version.js";
-import { StubTrendsStageRunner } from "./stages/stub-trends-stage-runner.js";
-import { StubMotivatorsStageRunner } from "./stages/stub-motivators-stage-runner.js";
-import { StubHooksStageRunner } from "./stages/stub-hooks-stage-runner.js";
-import { StubCreatorScriptsStageRunner } from "./stages/stub-creator-scripts-stage-runner.js";
+import { StubTrendsStageRunner, STUB_TRENDS_FANOUT } from "./stages/stub-trends-stage-runner.js";
+import {
+  StubMotivatorsStageRunner,
+  STUB_MOTIVATORS_PER_TREND,
+} from "./stages/stub-motivators-stage-runner.js";
+import {
+  StubHooksStageRunner,
+  STUB_HOOKS_PER_MOTIVATOR,
+} from "./stages/stub-hooks-stage-runner.js";
+import {
+  StubCreatorScriptsStageRunner,
+  STUB_SCRIPTS_PER_HOOK,
+} from "./stages/stub-creator-scripts-stage-runner.js";
 import { AutoApproveAllScriptsGate } from "./production-fanout-gate.js";
 
 const fixedClock = () => new Date("2026-04-30T12:00:00.000Z");
@@ -400,14 +409,13 @@ describe("runIdentityAwarePreproductionChain — composer-only assembly hardenin
   });
 
   it("composer re-sorts selectedScriptIds even if gate returns unsorted", async () => {
-    const stores = happyStores();
-    // Get the SP7-shape stub scripts (length-1) so we know the available ID.
     const baselineResult = await runIdentityAwarePreproductionChain(validBrief, happyStores());
     const ids = [...baselineResult.decision.availableScriptIds];
-    // TODO(Task 10): remove this guard once stub fanout >= 2 (Tasks 6-9 widen the stubs).
-    if (ids.length < 2) return;
+    expect(ids.length).toBe(24);
     const reversed = [...ids].reverse();
+    expect(reversed).not.toEqual([...reversed].sort());
 
+    const stores = happyStores();
     stores.productionFanoutGate = {
       async requestSelection(_input) {
         return {
@@ -419,5 +427,54 @@ describe("runIdentityAwarePreproductionChain — composer-only assembly hardenin
     };
     const { decision } = await runIdentityAwarePreproductionChain(validBrief, stores);
     expect(decision.selectedScriptIds).toEqual([...decision.selectedScriptIds].sort());
+    // Composer's defensive sort produced ascending output even though gate returned reversed.
+    expect(decision.selectedScriptIds).toEqual(ids);
+  });
+});
+
+describe("runIdentityAwarePreproductionChain — heterogeneous fanout (SP8 tree shape)", () => {
+  it("produces a 2-2-3-2 tree (= 24 scripts) under the default stubs", async () => {
+    const result = await runIdentityAwarePreproductionChain(validBrief, happyStores());
+    expect(result.stageOutputs.trends.signals.length).toBe(STUB_TRENDS_FANOUT); // 2
+    expect(result.stageOutputs.motivators.motivators.length).toBe(
+      STUB_TRENDS_FANOUT * STUB_MOTIVATORS_PER_TREND,
+    ); // 4
+    expect(result.stageOutputs.hooks.hooks.length).toBe(
+      STUB_TRENDS_FANOUT * STUB_MOTIVATORS_PER_TREND * STUB_HOOKS_PER_MOTIVATOR,
+    ); // 12
+    expect(result.stageOutputs.scripts.scripts.length).toBe(
+      STUB_TRENDS_FANOUT *
+        STUB_MOTIVATORS_PER_TREND *
+        STUB_HOOKS_PER_MOTIVATOR *
+        STUB_SCRIPTS_PER_HOOK,
+    ); // 24
+  });
+
+  it("AutoApproveAllScriptsGate selects all 24 scripts; selectedScriptIds matches availableScriptIds", async () => {
+    const { decision } = await runIdentityAwarePreproductionChain(validBrief, happyStores());
+    expect(decision.selectedScriptIds.length).toBe(24);
+    expect(decision.availableScriptIds.length).toBe(24);
+    expect(decision.selectedScriptIds).toEqual(decision.availableScriptIds);
+  });
+
+  it("tree shape is structurally joinable: every parent*Id resolves to a real parent", async () => {
+    const { stageOutputs } = await runIdentityAwarePreproductionChain(validBrief, happyStores());
+    const trendIds = new Set(stageOutputs.trends.signals.map((t) => t.id));
+    const motivatorIds = new Set(stageOutputs.motivators.motivators.map((m) => m.id));
+    const hookIds = new Set(stageOutputs.hooks.hooks.map((h) => h.id));
+
+    for (const m of stageOutputs.motivators.motivators) {
+      expect(trendIds.has(m.parentTrendId)).toBe(true);
+    }
+    const motivatorById = new Map(stageOutputs.motivators.motivators.map((m) => [m.id, m]));
+    for (const h of stageOutputs.hooks.hooks) {
+      expect(motivatorIds.has(h.parentMotivatorId)).toBe(true);
+      expect(trendIds.has(h.parentTrendId)).toBe(true);
+      // Transitive: hook's parentTrendId equals its parent motivator's parentTrendId.
+      expect(h.parentTrendId).toBe(motivatorById.get(h.parentMotivatorId)!.parentTrendId);
+    }
+    for (const s of stageOutputs.scripts.scripts) {
+      expect(hookIds.has(s.parentHookId)).toBe(true);
+    }
   });
 });
