@@ -172,6 +172,28 @@ export const CreatorScriptsStageOutputSchema = z.object({
 });
 export type CreatorScriptsStageOutput = z.infer<typeof CreatorScriptsStageOutputSchema>;
 
+// SP8 — tree-budget schema. Reserved for SP10 enforcement; SP8 always emits
+// null on PcdIdentityContext.treeBudget. Both fields required when budget exists.
+export const PreproductionTreeBudgetSchema = z
+  .object({
+    maxBranchFanout: z.number().int().positive(),
+    maxTreeSize: z.number().int().positive(),
+  })
+  .readonly();
+export type PreproductionTreeBudget = z.infer<typeof PreproductionTreeBudgetSchema>;
+
+// SP8 — narrow gate-return tuple. Validated by composer at runtime to defend
+// against malformed merge-back Inngest payload. Composer assembles the full
+// PcdProductionFanoutDecision from this + identity context + brief.
+export const ProductionFanoutGateOperatorDecisionSchema = z.object({
+  selectedScriptIds: z.array(z.string().min(1)).min(1).readonly(),
+  decidedBy: z.string().nullable(),
+  decidedAt: z.string().datetime(),
+});
+export type ProductionFanoutGateOperatorDecision = z.infer<
+  typeof ProductionFanoutGateOperatorDecisionSchema
+>;
+
 export const PcdCostForecastSchema = z.object({
   estimatedUsd: z.number().nonnegative(),
   currency: z.string().min(1),
