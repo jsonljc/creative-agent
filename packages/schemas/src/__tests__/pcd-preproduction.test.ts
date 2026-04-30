@@ -499,3 +499,57 @@ describe("ProductionFanoutGateOperatorDecisionSchema", () => {
     ).toBe(true);
   });
 });
+
+describe("PcdProductionFanoutDecisionSchema decisionNote bounding (SP9)", () => {
+  const baseValidDecision = {
+    briefId: "brf_1",
+    creatorIdentityId: "cre_1",
+    productIdentityId: "prd_1",
+    consentRecordId: null,
+    effectiveTier: 1,
+    selectedScriptIds: ["scr_1"],
+    availableScriptIds: ["scr_1"],
+    preproductionChainVersion: "preproduction-chain@1.0.0",
+    identityContextVersion: "identity-context@1.0.0",
+    approvalLifecycleVersion: "approval-lifecycle@1.0.0",
+    preproductionFanoutVersion: "preproduction-fanout@1.0.0",
+    decidedAt: "2026-04-30T12:00:00.000Z",
+    decidedBy: null,
+    costForecast: null,
+  };
+
+  it("accepts null decisionNote", () => {
+    const ok = PcdProductionFanoutDecisionSchema.parse({
+      ...baseValidDecision,
+      decisionNote: null,
+    });
+    expect(ok.decisionNote).toBe(null);
+  });
+
+  it("accepts a 2000-character decisionNote", () => {
+    const note = "x".repeat(2000);
+    const ok = PcdProductionFanoutDecisionSchema.parse({
+      ...baseValidDecision,
+      decisionNote: note,
+    });
+    expect(ok.decisionNote?.length).toBe(2000);
+  });
+
+  it("rejects a 2001-character decisionNote", () => {
+    const note = "x".repeat(2001);
+    expect(() =>
+      PcdProductionFanoutDecisionSchema.parse({
+        ...baseValidDecision,
+        decisionNote: note,
+      }),
+    ).toThrow();
+  });
+
+  it("accepts an empty string decisionNote", () => {
+    const ok = PcdProductionFanoutDecisionSchema.parse({
+      ...baseValidDecision,
+      decisionNote: "",
+    });
+    expect(ok.decisionNote).toBe("");
+  });
+});
