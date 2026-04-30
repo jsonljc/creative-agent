@@ -233,10 +233,10 @@ export const PcdProductionFanoutDecisionSchema = z.object({
   decidedAt: z.string().datetime(),
   decidedBy: z.string().nullable(),
 
-  // SP8 — operator commentary seam; SP8 composer always emits null.
-  // SP9+: bound this field — max length, operator-only writeable, never used
-  // by stubs / never read for control flow / never copied into runner prompts.
-  decisionNote: z.string().nullable(),
+  // SP9 — bounded operator commentary. Operator-only writeable; never read by
+  // stub stage runners; never substringed into runner-prompt text.
+  // sp9-anti-patterns.test.ts enforces these invariants structurally.
+  decisionNote: z.string().max(2000).nullable(),
 
   // SP10 forward-compat (always null in SP8).
   costForecast: PcdCostForecastSchema.nullable(),

@@ -3,6 +3,7 @@ import type { PrismaDbClient } from "../prisma-db.js";
 import type {
   IdentityTier,
   PcdIdentitySnapshot,
+  PcdProvenanceDecisionReason,
   PcdRoutingDecisionReason,
 } from "@creativeagent/schemas";
 
@@ -30,6 +31,17 @@ export interface CreatePcdIdentitySnapshotInput {
   routingDecisionReason: PcdRoutingDecisionReason | null;
 }
 
+// SP9 — wider input. Same shape as SP4's input, plus five lineage ids and
+// the lineage decision reason. Used only by createForShotWithProvenance.
+export interface CreatePcdIdentitySnapshotWithProvenanceInput extends CreatePcdIdentitySnapshotInput {
+  briefId: string;
+  trendId: string;
+  motivatorId: string;
+  hookId: string;
+  scriptId: string;
+  lineageDecisionReason: PcdProvenanceDecisionReason;
+}
+
 export class PrismaPcdIdentitySnapshotStore {
   constructor(private prisma: PrismaDbClient) {}
 
@@ -41,6 +53,24 @@ export class PrismaPcdIdentitySnapshotStore {
         routingDecisionReason: routingDecisionReason
           ? (routingDecisionReason as object)
           : Prisma.JsonNull,
+      },
+    }) as unknown as PcdIdentitySnapshot;
+  }
+
+  // SP9 — additive persistence path. Writes the 19-field SP4 shape PLUS the
+  // five lineage ids and the lineage decision reason. Legacy create() is
+  // preserved unchanged for callsites that have no lineage to stamp.
+  async createForShotWithProvenance(
+    input: CreatePcdIdentitySnapshotWithProvenanceInput,
+  ): Promise<PcdIdentitySnapshot> {
+    const { routingDecisionReason, lineageDecisionReason, ...rest } = input;
+    return this.prisma.pcdIdentitySnapshot.create({
+      data: {
+        ...rest,
+        routingDecisionReason: routingDecisionReason
+          ? (routingDecisionReason as object)
+          : Prisma.JsonNull,
+        lineageDecisionReason: lineageDecisionReason as unknown as object,
       },
     }) as unknown as PcdIdentitySnapshot;
   }
@@ -68,5 +98,22 @@ export function adaptPcdIdentitySnapshotStore(
 ): PcdIdentitySnapshotStoreAdapter {
   return {
     createForShot: (input) => store.create(input),
+  };
+}
+
+// SP9 adapter — bridges the SP9 orchestrator's PcdSp9IdentitySnapshotStore
+// contract to the Prisma createForShotWithProvenance() method. Production
+// wiring at merge-back consumes this adapter from the apps/api layer.
+export type PcdSp9IdentitySnapshotStoreAdapter = {
+  createForShotWithProvenance(
+    input: CreatePcdIdentitySnapshotWithProvenanceInput,
+  ): Promise<PcdIdentitySnapshot>;
+};
+
+export function adaptPcdSp9IdentitySnapshotStore(
+  store: PrismaPcdIdentitySnapshotStore,
+): PcdSp9IdentitySnapshotStoreAdapter {
+  return {
+    createForShotWithProvenance: (input) => store.createForShotWithProvenance(input),
   };
 }

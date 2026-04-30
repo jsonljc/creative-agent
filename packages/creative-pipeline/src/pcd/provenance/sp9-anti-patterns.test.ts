@@ -1,0 +1,159 @@
+import { execSync } from "node:child_process";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+
+const PROVENANCE_DIR = join(import.meta.dirname);
+const PCD_DIR = join(PROVENANCE_DIR, "..");
+const PREPRODUCTION_DIR = join(PCD_DIR, "preproduction");
+
+function listSourceFiles(root: string): string[] {
+  const out: string[] = [];
+  function walk(dir: string) {
+    for (const entry of readdirSync(dir)) {
+      const full = join(dir, entry);
+      const s = statSync(full);
+      if (s.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (full.endsWith(".test.ts")) continue;
+      if (!full.endsWith(".ts")) continue;
+      out.push(full);
+    }
+  }
+  walk(root);
+  return out;
+}
+
+const provenanceSources = listSourceFiles(PROVENANCE_DIR);
+const stagesDir = join(PREPRODUCTION_DIR, "stages");
+const stageStubFiles = readdirSync(stagesDir)
+  .filter((f) => f.startsWith("stub-") && f.endsWith(".ts") && !f.endsWith(".test.ts"))
+  .map((f) => join(stagesDir, f));
+// Real-runner implementations end in `-stage-runner.ts` but are NOT stubs.
+// Interface files end the same — exclude them by checking for `class` keyword in body.
+const stageRunnerImplFiles = readdirSync(stagesDir)
+  .filter((f) => f.endsWith("-stage-runner.ts") && !f.endsWith(".test.ts"))
+  .map((f) => join(stagesDir, f))
+  .filter((file) => /\bclass\b/.test(readFileSync(file, "utf8")));
+
+describe("SP9 anti-pattern grep", () => {
+  it("PCD_PROVENANCE_VERSION literal lives only in provenance-version.ts (composer-only pinning)", () => {
+    const allowed = join(PROVENANCE_DIR, "provenance-version.ts");
+    for (const file of provenanceSources) {
+      if (file === allowed) continue;
+      const src = readFileSync(file, "utf8");
+      expect(src, `${file} contains PCD_PROVENANCE_VERSION literal`).not.toMatch(
+        /"pcd-provenance@/,
+      );
+    }
+    // Sanity — provenance-version.ts itself does contain the literal.
+    expect(readFileSync(allowed, "utf8")).toContain('"pcd-provenance@1.0.0"');
+  });
+
+  it("stamp-pcd-provenance.ts literally calls assertConsentNotRevokedForGeneration(", () => {
+    const path = join(PROVENANCE_DIR, "stamp-pcd-provenance.ts");
+    const src = readFileSync(path, "utf8");
+    expect(src).toContain("assertConsentNotRevokedForGeneration(");
+  });
+
+  it("no decisionNote substring in stub stage runners (SP8 bounding)", () => {
+    for (const file of stageStubFiles) {
+      const src = readFileSync(file, "utf8");
+      expect(src, `${file} reads decisionNote`).not.toMatch(/decisionNote/);
+    }
+  });
+
+  it("no decisionNote substring in real stage-runner implementer source bodies", () => {
+    for (const file of stageRunnerImplFiles) {
+      const src = readFileSync(file, "utf8");
+      expect(src, `${file} reads decisionNote`).not.toMatch(/decisionNote/);
+    }
+  });
+
+  it("orchestrator imports the same four version constants as SP4 writer", () => {
+    const sp4 = readFileSync(join(PCD_DIR, "pcd-identity-snapshot-writer.ts"), "utf8");
+    const sp9 = readFileSync(
+      join(PROVENANCE_DIR, "write-pcd-identity-snapshot-with-provenance.ts"),
+      "utf8",
+    );
+    for (const constant of [
+      "PCD_TIER_POLICY_VERSION",
+      "PCD_PROVIDER_CAPABILITY_VERSION",
+      "PCD_PROVIDER_ROUTER_VERSION",
+    ]) {
+      expect(sp4, `SP4 should reference ${constant}`).toContain(constant);
+      expect(sp9, `SP9 orchestrator should reference ${constant}`).toContain(constant);
+    }
+    // SP9 orchestrator must also call the same Tier 3 invariant assertion
+    // with the six-argument shape. Drift between SP4 and SP9 logic is a
+    // structural defect.
+    expect(sp4).toContain("assertTier3RoutingDecisionCompliant({");
+    expect(sp9).toContain("assertTier3RoutingDecisionCompliant({");
+  });
+
+  it("forbidden imports — SP9 source must not import db, prisma, inngest, node:fs/http/https, crypto", () => {
+    for (const file of provenanceSources) {
+      const src = readFileSync(file, "utf8");
+      expect(src, `${file} imports @creativeagent/db`).not.toMatch(
+        /from\s+["']@creativeagent\/db["']/,
+      );
+      expect(src, `${file} imports @prisma/client`).not.toMatch(/from\s+["']@prisma\/client["']/);
+      expect(src, `${file} imports inngest`).not.toMatch(/from\s+["']inngest["']/);
+      expect(src, `${file} imports node:fs`).not.toMatch(/from\s+["']node:fs["']/);
+      expect(src, `${file} imports node:http`).not.toMatch(/from\s+["']node:http["']/);
+      expect(src, `${file} imports node:https`).not.toMatch(/from\s+["']node:https["']/);
+      expect(src, `${file} imports crypto`).not.toMatch(/from\s+["']crypto["']/);
+    }
+  });
+
+  it("SP1–SP8 source bodies are unchanged since the SP8 baseline (allowlist edits only)", () => {
+    const allowedEdits = new Set([
+      "packages/creative-pipeline/src/pcd/preproduction/index.ts",
+      "packages/creative-pipeline/src/index.ts",
+      "packages/schemas/src/pcd-preproduction.ts",
+      "packages/schemas/src/index.ts",
+    ]);
+
+    let sp8Sha = "";
+    try {
+      sp8Sha = execSync('git log --grep="SP8 — branching tree" --max-count=1 --format=%H', {
+        encoding: "utf8",
+      }).trim();
+    } catch {
+      // Shallow clones may not have history. Skip the structural assertion;
+      // it is enforced locally before merge. Same accommodation as SP7's
+      // anti-pattern test for shallow CI environments.
+      return;
+    }
+    if (sp8Sha === "") return;
+
+    let changed: string[] = [];
+    try {
+      changed = execSync(`git diff --name-only ${sp8Sha} HEAD`, { encoding: "utf8" })
+        .split("\n")
+        .filter((line) => line.length > 0);
+    } catch {
+      return;
+    }
+
+    for (const file of changed) {
+      // SP9 net-new files are out of scope.
+      if (file.startsWith("packages/creative-pipeline/src/pcd/provenance/")) continue;
+      if (file.startsWith("packages/db/prisma/migrations/")) continue;
+      if (file.endsWith(".prisma")) continue;
+      if (file.startsWith("docs/")) continue;
+      // Allowed db edits — exact-match to prevent sibling files
+      // (e.g. *-store.helpers.ts) from slipping through unnoticed.
+      if (file === "packages/db/src/stores/prisma-pcd-identity-snapshot-store.ts") continue;
+      if (file === "packages/db/src/stores/__tests__/prisma-pcd-identity-snapshot-store.test.ts")
+        continue;
+      if (file === "packages/schemas/src/pcd-provenance.ts") continue;
+      if (file === "packages/schemas/src/__tests__/pcd-provenance.test.ts") continue;
+      if (file === "packages/schemas/src/__tests__/pcd-preproduction.test.ts") continue;
+
+      expect(allowedEdits.has(file), `SP9 modified disallowed file: ${file}`).toBe(true);
+    }
+  });
+});

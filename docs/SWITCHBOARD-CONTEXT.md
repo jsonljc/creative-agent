@@ -132,6 +132,34 @@ Nothing to stub — entire SP2 lives in `packages/creative-pipeline/src/pcd/tier
 
 **SP7 does not call SP3's `resolvePcdRegistryContext`.** The design doc describes SP7 as "wrapping" SP3, which is structural composition language — in implementation, SP7's `buildPcdIdentityContext` reads product/creator registry directly via two new SP7-specific reader interfaces (`Sp7ProductRegistryReader`, `Sp7CreatorRegistryReader`) and duplicates SP3's pure `qualityTier → IdentityTier` mapping locally. SP3's source is not edited. SP3's resolver expects a `PcdResolvableJob` with `organizationId`/`deploymentId`/`productDescription`/`productImages` and persists via `jobStore.attachIdentityRefs`; SP7's pre-job `PcdBriefInput` doesn't fit that signature, and SP7 must not persist.
 
+### SP8 (branching tree state + production-fanout hardening) — SHIPPED in creativeagent
+
+**SP8 carry-over (`decisionNote` bound) at merge-back:**
+
+`PcdProductionFanoutDecisionSchema.decisionNote` narrows from `z.string().nullable()` to `z.string().max(2000).nullable()` in SP9. Pre-SP9 stored `decisionNote` values that exceed 2000 chars (none anticipated — SP8's stub gate emits null) would fail re-parse. No backfill needed.
+
+### SP9 (creative-source provenance) — SHIPPED in creativeagent
+
+**SP9-declared merge-back surfaces (production wiring at merge-back):**
+
+- `consentRecordReader` + `creatorIdentityReader` (from SP6 — stamper reuses the existing readers). No new contract.
+- The merge-back-time production runner is responsible for calling `writePcdIdentitySnapshotWithProvenance` instead of the bare `writePcdIdentitySnapshot` when generating assets from a fanout-selected script. Both callsites remain valid; legacy callsites (e.g. tests, ad-hoc backfills) may continue to use the bare form and write null lineage.
+- `WorkTrace` emit — every SP9 state transition carries a `// MERGE-BACK: emit WorkTrace here` marker. Three markers in `stamp-pcd-provenance.ts` (after lineage walk, after consent re-check, at payload assembly) plus one in `write-pcd-identity-snapshot-with-provenance.ts` at orchestrator pre-persist. Plus `// MERGE-BACK: pick fanoutDecisionId convention` (Inngest event id vs synth hash) at the orchestrator declaration.
+- `fanoutDecisionId` convention is caller-supplied. SP9 requires only that the value be stable per gate decision and unique across decisions. Two acceptable conventions documented in the design doc: Inngest event id (preferred at merge-back) or `sha256(briefId + decidedAt + sorted(selectedScriptIds))`.
+- `adaptPcdSp9IdentitySnapshotStore(prismaStore)` ships in `packages/db/src/stores/prisma-pcd-identity-snapshot-store.ts` and returns the SP9 contract shape. Wire as `writePcdIdentitySnapshotWithProvenance(input, { pcdSp9IdentitySnapshotStore: adaptPcdSp9IdentitySnapshotStore(prismaStore), … })` at merge-back.
+
+**Schema reconciliation at merge-back:**
+
+- `PcdIdentitySnapshot.briefId/trendId/motivatorId/hookId/scriptId/lineageDecisionReason` — six new columns added by SP9 migration `20260430120000_pcd_identity_snapshot_sp9_provenance`. If Switchboard `main` has not added equivalents independently, the SP9 migration applies cleanly. If Switchboard added same-semantic columns with different names, reconcile by renaming SP9's columns in the migration before merge-back.
+- No FK constraints on the lineage columns. The referenced ids are not Prisma-modeled in this repo or in SP1–SP8 — they're zod-only schema ids in the chain output. Merge-back may add FKs once Switchboard models the chain output as DB rows; SP9 leaves them as plain `TEXT?` with two indexes (`briefId`, `scriptId`) for query performance.
+
+**Architectural seams the merge-back does NOT need to rewrite:**
+
+- The SP9 stamper + orchestrator are pure store-injected. No production wiring inside `packages/creative-pipeline/src/pcd/provenance/` changes at merge-back — only the injected readers swap (Prisma-backed via `adaptPcdSp9IdentitySnapshotStore` from `@creativeagent/db`) and the markers get implementations.
+- `PCD_PROVENANCE_VERSION` is the 12th pinned constant. The PCD slice carries 12 total pinned constants after SP9.
+- SP9 introduces NO circular dependency. `pcd/provenance/` imports from `pcd/preproduction/` (chain output types, chain-version constant) and from `pcd/` top-level (SP4 writer types, SP6 pre-check). Reverse direction does not exist; `sp9-anti-patterns.test.ts` enforces the source-freeze.
+- The SP4 writer body (`writePcdIdentitySnapshot`) is untouched. SP9 added a parallel orchestrator (`writePcdIdentitySnapshotWithProvenance`) that duplicates SP4's invariant-assert + Zod-parse + version-pin logic and calls the new SP9 store method. Anti-pattern test enforces SP4/SP9 invariant logic stays in lock-step (both files import the same four version constants and call `assertTier3RoutingDecisionCompliant` with the same six-argument shape).
+
 ## Conventions inherited from Switchboard
 
 These are already enforced in `CLAUDE.md` but listed here for the merge-back checklist:

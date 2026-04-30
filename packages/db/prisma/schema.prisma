@@ -283,9 +283,21 @@ model PcdIdentitySnapshot {
   routerVersion               String?
   routingDecisionReason       Json?
 
+  // SP9 — creative-source provenance lineage. All columns nullable for
+  // historical compatibility (pre-SP9 rows remain readable). Two indexes
+  // (briefId, scriptId) for the leaf-to-root anchor queries operators run.
+  briefId                     String?
+  trendId                     String?
+  motivatorId                 String?
+  hookId                      String?
+  scriptId                    String?
+  lineageDecisionReason       Json?
+
   createdAt                   DateTime        @default(now())
 
   @@index([productIdentityId])
   @@index([creatorIdentityId])
   @@index([selectedProvider])
+  @@index([briefId])
+  @@index([scriptId])
 }
