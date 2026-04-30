@@ -52,7 +52,11 @@ const scriptsOutput: CreatorScriptsStageOutput = {
       productMoment: "pm",
       cta: "cta",
       complianceNotes: [],
-      identityConstraints: { creatorIdentityId: "cre_1", productIdentityId: "prd_1", voiceId: null },
+      identityConstraints: {
+        creatorIdentityId: "cre_1",
+        productIdentityId: "prd_1",
+        voiceId: null,
+      },
       parentHookId: "hk_1",
       scriptStyle: "spoken_lines",
       spokenLines: ["line1"],
@@ -251,9 +255,7 @@ describe("stampPcdProvenance", () => {
         findById: vi.fn().mockResolvedValue({ id: "cre_1", consentRecordId: "cnt_1" }),
       },
       consentRecordReader: {
-        findById: vi
-          .fn()
-          .mockResolvedValue({ id: "cnt_1", revoked: true, revokedAt: new Date() }),
+        findById: vi.fn().mockResolvedValue({ id: "cnt_1", revoked: true, revokedAt: new Date() }),
       },
       clock: happyPathStores.clock,
     };
