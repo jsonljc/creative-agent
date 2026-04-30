@@ -1,12 +1,8 @@
-import { PCD_APPROVAL_LIFECYCLE_VERSION } from "../approval-lifecycle-version.js";
-import { InvariantViolationError } from "../invariant-violation-error.js";
 import type {
   CreatorScript,
   PcdIdentityContext,
-  PcdProductionFanoutDecision,
+  ProductionFanoutGateOperatorDecision,
 } from "@creativeagent/schemas";
-import { PCD_IDENTITY_CONTEXT_VERSION } from "./identity-context-version.js";
-import { PCD_PREPRODUCTION_CHAIN_VERSION } from "./preproduction-chain-version.js";
 
 export type RequestSelectionInput = {
   scripts: CreatorScript[];
@@ -16,33 +12,36 @@ export type RequestSelectionInput = {
 };
 
 export interface ProductionFanoutGate {
-  requestSelection(input: RequestSelectionInput): Promise<PcdProductionFanoutDecision>;
+  requestSelection(input: RequestSelectionInput): Promise<ProductionFanoutGateOperatorDecision>;
 }
 
-// MERGE-BACK: replace AutoApproveOnlyScriptGate with Switchboard Inngest waitForEvent + dashboard UI.
-export class AutoApproveOnlyScriptGate implements ProductionFanoutGate {
-  async requestSelection(input: RequestSelectionInput): Promise<PcdProductionFanoutDecision> {
-    if (input.scripts.length !== 1) {
-      throw new InvariantViolationError("AutoApproveOnlyScriptGate requires exactly one script", {
-        scriptsLength: input.scripts.length,
-      });
-    }
-    const script = input.scripts[0]!;
-    const sortedIds = [script.id].slice().sort();
+// =============================================================================
+// AutoApproveAllScriptsGate — TEST-ONLY / DEFAULT-LOCAL DEVELOPMENT IMPLEMENTER
+// =============================================================================
+// This gate auto-selects every available script. It is the in-tree default so
+// the chain runs deterministically in tests and local dev.
+//
+// THIS IS NOT THE PRODUCT BEHAVIOR. Real production MUST replace this with a
+// human-in-the-loop selection UX (Inngest waitForEvent → dashboard UI →
+// operator-event payload populates selectedScriptIds + decidedBy + decidedAt).
+// "Auto approve all 24 scripts" is a stub for plumbing, not a UX target.
+//
+// DO NOT use this class in production. DO NOT add config flags to "enable
+// auto-approval in prod". The merge-back swap is by injection, not by flag.
+// =============================================================================
+// MERGE-BACK: replace AutoApproveAllScriptsGate with Switchboard Inngest waitForEvent + dashboard UI.
+export class AutoApproveAllScriptsGate implements ProductionFanoutGate {
+  async requestSelection(
+    input: RequestSelectionInput,
+  ): Promise<ProductionFanoutGateOperatorDecision> {
+    const ids = input.scripts
+      .map((s) => s.id)
+      .slice()
+      .sort();
     return {
-      briefId: input.briefId,
-      creatorIdentityId: input.identityContext.creatorIdentityId,
-      productIdentityId: input.identityContext.productIdentityId,
-      consentRecordId: input.identityContext.consentRecordId,
-      effectiveTier: input.identityContext.effectiveTier,
-      selectedScriptIds: sortedIds,
-      availableScriptIds: sortedIds,
-      preproductionChainVersion: PCD_PREPRODUCTION_CHAIN_VERSION,
-      identityContextVersion: PCD_IDENTITY_CONTEXT_VERSION,
-      approvalLifecycleVersion: PCD_APPROVAL_LIFECYCLE_VERSION,
-      decidedAt: input.clock().toISOString(),
+      selectedScriptIds: ids,
       decidedBy: null,
-      costForecast: null,
+      decidedAt: input.clock().toISOString(),
     };
   }
 }

@@ -1,10 +1,13 @@
 import type {
+  Motivator,
   MotivatorsStageOutput,
   PcdBriefInput,
   PcdIdentityContext,
   TrendStageOutput,
 } from "@creativeagent/schemas";
 import type { MotivatorsStageRunner } from "./motivators-stage-runner.js";
+
+export const STUB_MOTIVATORS_PER_TREND = 2;
 
 // MERGE-BACK: replace stub motivators runner with Switchboard Claude-driven runner.
 export class StubMotivatorsStageRunner implements MotivatorsStageRunner {
@@ -13,17 +16,18 @@ export class StubMotivatorsStageRunner implements MotivatorsStageRunner {
     _ctx: PcdIdentityContext,
     trends: TrendStageOutput,
   ): Promise<MotivatorsStageOutput> {
-    const parentTrendId = trends.signals[0]!.id;
-    return {
-      motivators: [
-        {
-          id: `motivator-${brief.briefId}-1`,
-          frictionOrDesire: `Stub motivator linked to ${parentTrendId}`,
+    const motivators: Motivator[] = [];
+    for (const trend of trends.signals) {
+      for (let i = 1; i <= STUB_MOTIVATORS_PER_TREND; i++) {
+        motivators.push({
+          id: `motivator-${trend.id}-${i}`,
+          frictionOrDesire: `Stub motivator ${i} linked to ${trend.id}`,
           audienceSegment: brief.targetAudience,
           evidenceRefs: [],
-          parentTrendId,
-        },
-      ],
-    };
+          parentTrendId: trend.id,
+        });
+      }
+    }
+    return { motivators };
   }
 }

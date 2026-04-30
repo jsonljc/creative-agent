@@ -1,18 +1,25 @@
-import type {
-  CreatorScriptsStageOutput,
-  HooksStageOutput,
-  MotivatorsStageOutput,
-  PcdBriefInput,
-  PcdPreproductionChainResult,
-  PreproductionChainStage,
-  TrendStageOutput,
+import {
+  ProductionFanoutGateOperatorDecisionSchema,
+  type CreatorScriptsStageOutput,
+  type HooksStageOutput,
+  type MotivatorsStageOutput,
+  type PcdBriefInput,
+  type PcdPreproductionChainResult,
+  type PcdProductionFanoutDecision,
+  type PreproductionChainStage,
+  type TrendStageOutput,
 } from "@creativeagent/schemas";
+import { PCD_APPROVAL_LIFECYCLE_VERSION } from "../approval-lifecycle-version.js";
+import { InvariantViolationError } from "../invariant-violation-error.js";
+// MERGE-BACK: include all four pinned versions (chain, identity-context, approval-lifecycle, fanout) in WorkTrace decision payload.
+import { PCD_IDENTITY_CONTEXT_VERSION } from "./identity-context-version.js";
+import { PCD_PREPRODUCTION_CHAIN_VERSION } from "./preproduction-chain-version.js";
+import { PCD_PREPRODUCTION_FANOUT_VERSION } from "./preproduction-fanout-version.js";
 import {
   buildPcdIdentityContext,
   type BuildPcdIdentityContextStores,
 } from "./build-pcd-identity-context.js";
 import { PreproductionChainError } from "./preproduction-chain-error.js";
-// MERGE-BACK: include PCD_PREPRODUCTION_CHAIN_VERSION in WorkTrace decision payload.
 import type { ProductionFanoutGate } from "./production-fanout-gate.js";
 import type { TrendsStageRunner } from "./stages/trends-stage-runner.js";
 import type { MotivatorsStageRunner } from "./stages/motivators-stage-runner.js";
@@ -74,15 +81,53 @@ export async function runIdentityAwarePreproductionChain(
 
   // 6. Production fanout gate. Composer literally calls
   //    productionFanoutGate.requestSelection(...) — anti-pattern test enforces.
-  const decision = await runStageWrapped("production_fanout_gate", () =>
-    stores.productionFanoutGate.requestSelection({
+  //    Composer parses gate output via ProductionFanoutGateOperatorDecisionSchema.parse
+  //    to defend against malformed merge-back Inngest payload.
+  //    Composer asserts selectedScriptIds ⊆ availableScriptIds.
+  const operatorDecision = await runStageWrapped("production_fanout_gate", async () => {
+    const raw = await stores.productionFanoutGate.requestSelection({
       scripts: scripts.scripts,
       identityContext,
       briefId: brief.briefId,
       clock,
-    }),
-  );
+    });
+    const parsed = ProductionFanoutGateOperatorDecisionSchema.parse(raw);
+    const availableSet = new Set(scripts.scripts.map((s) => s.id));
+    for (const id of parsed.selectedScriptIds) {
+      if (!availableSet.has(id)) {
+        throw new InvariantViolationError("gate selected unknown script id", {
+          scriptId: id,
+        });
+      }
+    }
+    return parsed;
+  });
   // MERGE-BACK: emit WorkTrace here at production fanout gate decision.
+
+  // 7. Composer assembles PcdProductionFanoutDecision — pins versions, identity carry-through.
+  const availableScriptIds = scripts.scripts
+    .map((s) => s.id)
+    .slice()
+    .sort();
+  const selectedScriptIds = [...operatorDecision.selectedScriptIds].sort();
+
+  const decision: PcdProductionFanoutDecision = {
+    briefId: brief.briefId,
+    creatorIdentityId: identityContext.creatorIdentityId,
+    productIdentityId: identityContext.productIdentityId,
+    consentRecordId: identityContext.consentRecordId,
+    effectiveTier: identityContext.effectiveTier,
+    selectedScriptIds,
+    availableScriptIds,
+    preproductionChainVersion: PCD_PREPRODUCTION_CHAIN_VERSION,
+    identityContextVersion: PCD_IDENTITY_CONTEXT_VERSION,
+    approvalLifecycleVersion: PCD_APPROVAL_LIFECYCLE_VERSION,
+    preproductionFanoutVersion: PCD_PREPRODUCTION_FANOUT_VERSION,
+    decidedAt: operatorDecision.decidedAt,
+    decidedBy: operatorDecision.decidedBy,
+    decisionNote: null,
+    costForecast: null,
+  };
 
   // MERGE-BACK: wire UGC production handoff here.
   return {

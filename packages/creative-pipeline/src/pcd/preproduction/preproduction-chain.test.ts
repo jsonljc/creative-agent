@@ -10,13 +10,23 @@ import {
 import { PreproductionChainError } from "./preproduction-chain-error.js";
 import { PCD_IDENTITY_CONTEXT_VERSION } from "./identity-context-version.js";
 import { PCD_PREPRODUCTION_CHAIN_VERSION } from "./preproduction-chain-version.js";
-import { StubTrendsStageRunner } from "./stages/stub-trends-stage-runner.js";
-import { StubMotivatorsStageRunner } from "./stages/stub-motivators-stage-runner.js";
-import { StubHooksStageRunner } from "./stages/stub-hooks-stage-runner.js";
-import { StubCreatorScriptsStageRunner } from "./stages/stub-creator-scripts-stage-runner.js";
-import { AutoApproveOnlyScriptGate } from "./production-fanout-gate.js";
+import { PCD_PREPRODUCTION_FANOUT_VERSION } from "./preproduction-fanout-version.js";
+import { StubTrendsStageRunner, STUB_TRENDS_FANOUT } from "./stages/stub-trends-stage-runner.js";
+import {
+  StubMotivatorsStageRunner,
+  STUB_MOTIVATORS_PER_TREND,
+} from "./stages/stub-motivators-stage-runner.js";
+import {
+  StubHooksStageRunner,
+  STUB_HOOKS_PER_MOTIVATOR,
+} from "./stages/stub-hooks-stage-runner.js";
+import {
+  StubCreatorScriptsStageRunner,
+  STUB_SCRIPTS_PER_HOOK,
+} from "./stages/stub-creator-scripts-stage-runner.js";
+import { AutoApproveAllScriptsGate } from "./production-fanout-gate.js";
 
-const fixedClock = () => new Date("2026-04-29T12:00:00.000Z");
+const fixedClock = () => new Date("2026-04-30T12:00:00.000Z");
 
 const validBrief: PcdBriefInput = {
   briefId: "brief-1",
@@ -66,7 +76,7 @@ function happyStores(): PreproductionChainStores {
     motivatorsRunner: new StubMotivatorsStageRunner(),
     hooksRunner: new StubHooksStageRunner(),
     creatorScriptsRunner: new StubCreatorScriptsStageRunner(),
-    productionFanoutGate: new AutoApproveOnlyScriptGate(),
+    productionFanoutGate: new AutoApproveAllScriptsGate(),
     clock: fixedClock,
   };
 }
@@ -77,29 +87,35 @@ describe("runIdentityAwarePreproductionChain — happy path", () => {
     expect(PcdPreproductionChainResultSchema.safeParse(result).success).toBe(true);
   });
 
-  it("decision pins all three versions from imports", async () => {
+  it("decision pins all four version constants from imports", async () => {
     const { decision } = await runIdentityAwarePreproductionChain(validBrief, happyStores());
     expect(decision.preproductionChainVersion).toBe(PCD_PREPRODUCTION_CHAIN_VERSION);
     expect(decision.identityContextVersion).toBe(PCD_IDENTITY_CONTEXT_VERSION);
     expect(decision.approvalLifecycleVersion).toBe(PCD_APPROVAL_LIFECYCLE_VERSION);
+    expect(decision.preproductionFanoutVersion).toBe(PCD_PREPRODUCTION_FANOUT_VERSION);
   });
 
-  it("decidedAt matches injected clock output exactly", async () => {
+  it("decidedAt flows from the gate's return (not from the composer's clock)", async () => {
     const { decision } = await runIdentityAwarePreproductionChain(validBrief, happyStores());
-    expect(decision.decidedAt).toBe("2026-04-29T12:00:00.000Z");
+    expect(decision.decidedAt).toBe("2026-04-30T12:00:00.000Z");
   });
 
-  it("decidedBy is null with the default AutoApproveOnlyScriptGate", async () => {
+  it("decidedBy is null with the default AutoApproveAllScriptsGate", async () => {
     const { decision } = await runIdentityAwarePreproductionChain(validBrief, happyStores());
     expect(decision.decidedBy).toBe(null);
   });
 
-  it("costForecast is null in SP7", async () => {
+  it("decisionNote is null in SP8", async () => {
+    const { decision } = await runIdentityAwarePreproductionChain(validBrief, happyStores());
+    expect(decision.decisionNote).toBe(null);
+  });
+
+  it("costForecast is null in SP8", async () => {
     const { decision } = await runIdentityAwarePreproductionChain(validBrief, happyStores());
     expect(decision.costForecast).toBe(null);
   });
 
-  it("selectedScriptIds and availableScriptIds are sorted", async () => {
+  it("selectedScriptIds and availableScriptIds are sorted ascending", async () => {
     const { decision } = await runIdentityAwarePreproductionChain(validBrief, happyStores());
     expect(decision.selectedScriptIds).toEqual([...decision.selectedScriptIds].sort());
     expect(decision.availableScriptIds).toEqual([...decision.availableScriptIds].sort());
@@ -108,7 +124,6 @@ describe("runIdentityAwarePreproductionChain — happy path", () => {
   it("calls stages in fixed order: trends, motivators, hooks, creator_scripts", async () => {
     const order: string[] = [];
     const stores = happyStores();
-    // Wrap each runner to record call order
     const origTrends = stores.trendsRunner;
     stores.trendsRunner = {
       async run(...args: Parameters<typeof origTrends.run>) {
@@ -307,6 +322,159 @@ describe("runIdentityAwarePreproductionChain — stage-runner errors wrap", () =
     } catch (err) {
       expect(err).toBeInstanceOf(PreproductionChainError);
       expect((err as PreproductionChainError).stage).toBe("production_fanout_gate");
+    }
+  });
+});
+
+describe("runIdentityAwarePreproductionChain — composer-only assembly hardening (SP7 I-2)", () => {
+  it("composer pins all four versions even if a gate tries to forge them via extra fields", async () => {
+    const stores = happyStores();
+    // Adversarial gate returns extra forged version fields. zod's default parse
+    // strips unknown keys, so the forged values never reach the composer; the
+    // composer pins from imports regardless. This is the structural form of
+    // SP7 I-2 closure: gate is incapable of forging.
+    stores.productionFanoutGate = {
+      async requestSelection(input) {
+        const ids = input.scripts
+          .map((s) => s.id)
+          .slice()
+          .sort();
+        return {
+          selectedScriptIds: ids,
+          decidedBy: null,
+          decidedAt: input.clock().toISOString(),
+          // Extra forged fields below are stripped by Schema.parse.
+          preproductionChainVersion: "FORGED-CHAIN",
+          identityContextVersion: "FORGED-CTX",
+          approvalLifecycleVersion: "FORGED-APPROVAL",
+          preproductionFanoutVersion: "FORGED-FANOUT",
+        } as never;
+      },
+    };
+    const { decision } = await runIdentityAwarePreproductionChain(validBrief, stores);
+    expect(decision.preproductionChainVersion).toBe(PCD_PREPRODUCTION_CHAIN_VERSION);
+    expect(decision.identityContextVersion).toBe(PCD_IDENTITY_CONTEXT_VERSION);
+    expect(decision.approvalLifecycleVersion).toBe(PCD_APPROVAL_LIFECYCLE_VERSION);
+    expect(decision.preproductionFanoutVersion).toBe(PCD_PREPRODUCTION_FANOUT_VERSION);
+    expect(decision.preproductionChainVersion).not.toBe("FORGED-CHAIN");
+  });
+
+  it("composer carries identity from brief + identityContext, not from gate return", async () => {
+    const stores = happyStores();
+    const { decision } = await runIdentityAwarePreproductionChain(validBrief, stores);
+    expect(decision.briefId).toBe(validBrief.briefId);
+    expect(decision.creatorIdentityId).toBe("creator-1");
+    expect(decision.productIdentityId).toBe("product-1");
+  });
+
+  it("subset invariant: gate returning unknown script id wraps as PreproductionChainError", async () => {
+    const stores = happyStores();
+    stores.productionFanoutGate = {
+      async requestSelection(_input) {
+        return {
+          selectedScriptIds: ["unknown-script-id"],
+          decidedBy: null,
+          decidedAt: "2026-04-30T12:00:00.000Z",
+        };
+      },
+    };
+    try {
+      await runIdentityAwarePreproductionChain(validBrief, stores);
+      throw new Error("expected throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(PreproductionChainError);
+      expect((err as PreproductionChainError).stage).toBe("production_fanout_gate");
+      expect((err as PreproductionChainError).cause).toBeInstanceOf(InvariantViolationError);
+    }
+  });
+
+  it("malformed gate output (bad decidedAt) wraps as PreproductionChainError via parse failure", async () => {
+    const stores = happyStores();
+    stores.productionFanoutGate = {
+      async requestSelection(_input) {
+        return {
+          selectedScriptIds: ["any"],
+          decidedBy: null,
+          decidedAt: "not-a-datetime",
+        };
+      },
+    };
+    try {
+      await runIdentityAwarePreproductionChain(validBrief, stores);
+      throw new Error("expected throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(PreproductionChainError);
+      expect((err as PreproductionChainError).stage).toBe("production_fanout_gate");
+    }
+  });
+
+  it("composer re-sorts selectedScriptIds even if gate returns unsorted", async () => {
+    const baselineResult = await runIdentityAwarePreproductionChain(validBrief, happyStores());
+    const ids = [...baselineResult.decision.availableScriptIds];
+    expect(ids.length).toBe(24);
+    const reversed = [...ids].reverse();
+    expect(reversed).not.toEqual([...reversed].sort());
+
+    const stores = happyStores();
+    stores.productionFanoutGate = {
+      async requestSelection(_input) {
+        return {
+          selectedScriptIds: reversed,
+          decidedBy: null,
+          decidedAt: "2026-04-30T12:00:00.000Z",
+        };
+      },
+    };
+    const { decision } = await runIdentityAwarePreproductionChain(validBrief, stores);
+    expect(decision.selectedScriptIds).toEqual([...decision.selectedScriptIds].sort());
+    // Composer's defensive sort produced ascending output even though gate returned reversed.
+    expect(decision.selectedScriptIds).toEqual(ids);
+  });
+});
+
+describe("runIdentityAwarePreproductionChain — heterogeneous fanout (SP8 tree shape)", () => {
+  it("produces a 2-2-3-2 tree (= 24 scripts) under the default stubs", async () => {
+    const result = await runIdentityAwarePreproductionChain(validBrief, happyStores());
+    expect(result.stageOutputs.trends.signals.length).toBe(STUB_TRENDS_FANOUT); // 2
+    expect(result.stageOutputs.motivators.motivators.length).toBe(
+      STUB_TRENDS_FANOUT * STUB_MOTIVATORS_PER_TREND,
+    ); // 4
+    expect(result.stageOutputs.hooks.hooks.length).toBe(
+      STUB_TRENDS_FANOUT * STUB_MOTIVATORS_PER_TREND * STUB_HOOKS_PER_MOTIVATOR,
+    ); // 12
+    expect(result.stageOutputs.scripts.scripts.length).toBe(
+      STUB_TRENDS_FANOUT *
+        STUB_MOTIVATORS_PER_TREND *
+        STUB_HOOKS_PER_MOTIVATOR *
+        STUB_SCRIPTS_PER_HOOK,
+    ); // 24
+  });
+
+  it("AutoApproveAllScriptsGate selects all 24 scripts; selectedScriptIds matches availableScriptIds", async () => {
+    const { decision } = await runIdentityAwarePreproductionChain(validBrief, happyStores());
+    expect(decision.selectedScriptIds.length).toBe(24);
+    expect(decision.availableScriptIds.length).toBe(24);
+    expect(decision.selectedScriptIds).toEqual(decision.availableScriptIds);
+  });
+
+  it("tree shape is structurally joinable: every parent*Id resolves to a real parent", async () => {
+    const { stageOutputs } = await runIdentityAwarePreproductionChain(validBrief, happyStores());
+    const trendIds = new Set(stageOutputs.trends.signals.map((t) => t.id));
+    const motivatorIds = new Set(stageOutputs.motivators.motivators.map((m) => m.id));
+    const hookIds = new Set(stageOutputs.hooks.hooks.map((h) => h.id));
+
+    for (const m of stageOutputs.motivators.motivators) {
+      expect(trendIds.has(m.parentTrendId)).toBe(true);
+    }
+    const motivatorById = new Map(stageOutputs.motivators.motivators.map((m) => [m.id, m]));
+    for (const h of stageOutputs.hooks.hooks) {
+      expect(motivatorIds.has(h.parentMotivatorId)).toBe(true);
+      expect(trendIds.has(h.parentTrendId)).toBe(true);
+      // Transitive: hook's parentTrendId equals its parent motivator's parentTrendId.
+      expect(h.parentTrendId).toBe(motivatorById.get(h.parentMotivatorId)!.parentTrendId);
+    }
+    for (const s of stageOutputs.scripts.scripts) {
+      expect(hookIds.has(s.parentHookId)).toBe(true);
     }
   });
 });

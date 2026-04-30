@@ -42,6 +42,28 @@ export const PcdBriefInputSchema = z.object({
 });
 export type PcdBriefInput = z.infer<typeof PcdBriefInputSchema>;
 
+// SP8 — tree-budget schema. Reserved for SP10 enforcement; SP8 always emits
+// null on PcdIdentityContext.treeBudget. Both fields required when budget exists.
+export const PreproductionTreeBudgetSchema = z
+  .object({
+    maxBranchFanout: z.number().int().positive(),
+    maxTreeSize: z.number().int().positive(),
+  })
+  .readonly();
+export type PreproductionTreeBudget = z.infer<typeof PreproductionTreeBudgetSchema>;
+
+// SP8 — narrow gate-return tuple. Validated by composer at runtime to defend
+// against malformed merge-back Inngest payload. Composer assembles the full
+// PcdProductionFanoutDecision from this + identity context + brief.
+export const ProductionFanoutGateOperatorDecisionSchema = z.object({
+  selectedScriptIds: z.array(z.string().min(1)).min(1).readonly(),
+  decidedBy: z.string().nullable(),
+  decidedAt: z.string().datetime(),
+});
+export type ProductionFanoutGateOperatorDecision = z.infer<
+  typeof ProductionFanoutGateOperatorDecisionSchema
+>;
+
 // Identity context schema: resolved per-job identity state with tier projection,
 // creative substrate, and UGC-format constraints. Stamped at identity-resolve time
 // and immutable for the entire preproduction chain. Every stage runner consumes
@@ -56,15 +78,17 @@ export const PcdIdentityContextSchema = z.object({
   effectiveTier: IdentityTierSchema,
   productTierAtResolution: IdentityTierSchema,
   creatorTierAtResolution: IdentityTierSchema,
-  allowedShotTypes: z.array(PcdShotTypeSchema),
-  allowedOutputIntents: z.array(OutputIntentSchema),
+  allowedShotTypes: z.array(PcdShotTypeSchema).readonly(),
+  allowedOutputIntents: z.array(OutputIntentSchema).readonly(),
 
   // Tier 3 rule flags
-  tier3Rules: z.object({
-    firstLastFrameRequired: z.boolean(),
-    performanceTransferRequired: z.boolean(),
-    editOverRegenerateRequired: z.boolean(),
-  }),
+  tier3Rules: z
+    .object({
+      firstLastFrameRequired: z.boolean(),
+      performanceTransferRequired: z.boolean(),
+      editOverRegenerateRequired: z.boolean(),
+    })
+    .readonly(),
 
   // Creative substrate
   voiceId: z.string().nullable(),
@@ -73,10 +97,13 @@ export const PcdIdentityContextSchema = z.object({
   brandPositioningText: z.string().nullable(),
 
   // UGC creative-format constraints
-  ugcStyleConstraints: z.array(UgcStyleConstraintSchema),
+  ugcStyleConstraints: z.array(UgcStyleConstraintSchema).readonly(),
 
   // Consent flag
   consentRevoked: z.boolean(),
+
+  // SP8 — tree-budget reserved for SP10 enforcement; SP8 always emits null.
+  treeBudget: PreproductionTreeBudgetSchema.nullable(),
 
   // Version pin
   identityContextVersion: z.string(),
@@ -192,20 +219,26 @@ export const PcdProductionFanoutDecisionSchema = z.object({
   consentRecordId: z.string().nullable(),
   effectiveTier: IdentityTierSchema,
 
-  // Selection (sorted ascending; the gate adapter enforces sort)
-  selectedScriptIds: z.array(z.string().min(1)).min(1),
-  availableScriptIds: z.array(z.string().min(1)).min(1),
+  // Selection (sorted ascending; the composer enforces sort)
+  selectedScriptIds: z.array(z.string().min(1)).min(1).readonly(),
+  availableScriptIds: z.array(z.string().min(1)).min(1).readonly(),
 
-  // Pinned versions (caller cannot override; pinned by import)
+  // Pinned versions (caller cannot override; pinned by composer from import)
   preproductionChainVersion: z.string(),
   identityContextVersion: z.string(),
   approvalLifecycleVersion: z.string(),
+  preproductionFanoutVersion: z.string(),
 
   // Gate metadata
   decidedAt: z.string().datetime(),
   decidedBy: z.string().nullable(),
 
-  // SP10 forward-compat (always null in SP7)
+  // SP8 — operator commentary seam; SP8 composer always emits null.
+  // SP9+: bound this field — max length, operator-only writeable, never used
+  // by stubs / never read for control flow / never copied into runner prompts.
+  decisionNote: z.string().nullable(),
+
+  // SP10 forward-compat (always null in SP8).
   costForecast: PcdCostForecastSchema.nullable(),
 });
 export type PcdProductionFanoutDecision = z.infer<typeof PcdProductionFanoutDecisionSchema>;
