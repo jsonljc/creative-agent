@@ -1,7 +1,4 @@
-import type {
-  PcdIdentitySnapshot,
-  PcdSp9ProvenancePayload,
-} from "@creativeagent/schemas";
+import type { PcdIdentitySnapshot, PcdSp9ProvenancePayload } from "@creativeagent/schemas";
 import type { PcdIdentitySnapshotStoreInput } from "../pcd-identity-snapshot-writer.js";
 
 /**
