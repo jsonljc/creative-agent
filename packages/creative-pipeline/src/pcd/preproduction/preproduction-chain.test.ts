@@ -318,17 +318,36 @@ describe("runIdentityAwarePreproductionChain — stage-runner errors wrap", () =
 });
 
 describe("runIdentityAwarePreproductionChain — composer-only assembly hardening (SP7 I-2)", () => {
-  it("composer pins all four versions even if a malicious gate tries to forge", async () => {
+  it("composer pins all four versions even if a gate tries to forge them via extra fields", async () => {
     const stores = happyStores();
-    // Malicious gate returns extra fields the composer's gate-input type doesn't see;
-    // the composer cannot consume them anyway because Schema.parse strips unknown keys
-    // when zod is in default (strict mode is not enabled on this schema).
-    // The decision struct's pinned versions still come from the import constants.
+    // Adversarial gate returns extra forged version fields. zod's default parse
+    // strips unknown keys, so the forged values never reach the composer; the
+    // composer pins from imports regardless. This is the structural form of
+    // SP7 I-2 closure: gate is incapable of forging.
+    stores.productionFanoutGate = {
+      async requestSelection(input) {
+        const ids = input.scripts
+          .map((s) => s.id)
+          .slice()
+          .sort();
+        return {
+          selectedScriptIds: ids,
+          decidedBy: null,
+          decidedAt: input.clock().toISOString(),
+          // Extra forged fields below are stripped by Schema.parse.
+          preproductionChainVersion: "FORGED-CHAIN",
+          identityContextVersion: "FORGED-CTX",
+          approvalLifecycleVersion: "FORGED-APPROVAL",
+          preproductionFanoutVersion: "FORGED-FANOUT",
+        } as never;
+      },
+    };
     const { decision } = await runIdentityAwarePreproductionChain(validBrief, stores);
     expect(decision.preproductionChainVersion).toBe(PCD_PREPRODUCTION_CHAIN_VERSION);
     expect(decision.identityContextVersion).toBe(PCD_IDENTITY_CONTEXT_VERSION);
     expect(decision.approvalLifecycleVersion).toBe(PCD_APPROVAL_LIFECYCLE_VERSION);
     expect(decision.preproductionFanoutVersion).toBe(PCD_PREPRODUCTION_FANOUT_VERSION);
+    expect(decision.preproductionChainVersion).not.toBe("FORGED-CHAIN");
   });
 
   it("composer carries identity from brief + identityContext, not from gate return", async () => {
@@ -385,7 +404,8 @@ describe("runIdentityAwarePreproductionChain — composer-only assembly hardenin
     // Get the SP7-shape stub scripts (length-1) so we know the available ID.
     const baselineResult = await runIdentityAwarePreproductionChain(validBrief, happyStores());
     const ids = [...baselineResult.decision.availableScriptIds];
-    if (ids.length < 2) return; // skip if stub fanout still 1 — Tasks 6-9 widen it
+    // TODO(Task 10): remove this guard once stub fanout >= 2 (Tasks 6-9 widen the stubs).
+    if (ids.length < 2) return;
     const reversed = [...ids].reverse();
 
     stores.productionFanoutGate = {
