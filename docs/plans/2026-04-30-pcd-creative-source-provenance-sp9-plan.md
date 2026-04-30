@@ -10,6 +10,17 @@
 
 **Source-of-truth design:** `docs/plans/2026-04-30-pcd-creative-source-provenance-sp9-design.md` (committed in `1ec336d`).
 
+## User review (2026-04-30) — known risks accepted
+
+User reviewed both design and plan and signed off. Four risks called out explicitly so the executing agent does not relitigate them mid-implementation:
+
+1. **SP4/SP9 invariant logic duplication is a long-term maintenance smell.** Mitigated by `sp9-anti-patterns.test.ts` Task 11 assertion #5 (both files import identical version constants + call `assertTier3RoutingDecisionCompliant` with identical six-argument shape). If a future slice extracts the shared logic into a pure helper, that's a refactor the test allows; what it forbids is one path drifting from the other silently.
+2. **Denormalized lineage trades flexibility for query speed.** Adding a future rung (e.g. `templateId`) requires another column + migration. Accepted; SP9's premise is forensic queries on the hot path matter more than schema flexibility.
+3. **`fanoutDecisionId` format is caller-supplied.** Long-term we'll need to standardize on Inngest event id at merge-back time. The `// MERGE-BACK: pick fanoutDecisionId convention` marker in the orchestrator is the canonical reminder; SP10 or merge-back is the right place to lock it.
+4. **The bare `writePcdIdentitySnapshot` callsite still exists and writes null lineage.** SP9 does not deprecate it (legacy callsites + tests rely on it). Discipline at merge-back is required: production runner MUST call `writePcdIdentitySnapshotWithProvenance`. Consider promoting to a runtime invariant in SP10+ once we know which callsites legitimately need null-lineage writes.
+
+User also flagged that SP10+ is the natural place to *use* lineage (cost weighting, performance weighting, auto-pruning underperforming branches), not just record it. SP9 is the substrate; SP10+ is the consumer.
+
 ## User-locked priority invariants (do not violate)
 
 User reviewed the design 2026-04-30 and approved with scope discipline. These are non-negotiable:
