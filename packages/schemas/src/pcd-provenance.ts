@@ -31,12 +31,14 @@ export const PcdProvenanceDecisionReasonSchema = z
   .readonly();
 export type PcdProvenanceDecisionReason = z.infer<typeof PcdProvenanceDecisionReasonSchema>;
 
-export const PcdSp9ProvenancePayloadSchema = z.object({
-  briefId: z.string().min(1),
-  trendId: z.string().min(1),
-  motivatorId: z.string().min(1),
-  hookId: z.string().min(1),
-  scriptId: z.string().min(1),
-  lineageDecisionReason: PcdProvenanceDecisionReasonSchema,
-});
+export const PcdSp9ProvenancePayloadSchema = z
+  .object({
+    briefId: z.string().min(1),
+    trendId: z.string().min(1),
+    motivatorId: z.string().min(1),
+    hookId: z.string().min(1),
+    scriptId: z.string().min(1),
+    lineageDecisionReason: PcdProvenanceDecisionReasonSchema,
+  })
+  .readonly();
 export type PcdSp9ProvenancePayload = z.infer<typeof PcdSp9ProvenancePayloadSchema>;

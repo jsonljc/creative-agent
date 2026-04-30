@@ -81,4 +81,22 @@ describe("PcdSp9ProvenancePayloadSchema", () => {
     });
     expect(ok.lineageDecisionReason.provenanceVersion).toBe("pcd-provenance@1.0.0");
   });
+
+  it("rejects payload with malformed lineageDecisionReason", () => {
+    expect(() =>
+      PcdSp9ProvenancePayloadSchema.parse({
+        briefId: "brf_1",
+        trendId: "trd_1",
+        motivatorId: "mot_1",
+        hookId: "hk_1",
+        scriptId: "scr_1",
+        lineageDecisionReason: {
+          decidedAt: "not-an-iso-string",
+          fanoutDecisionId: "fdec_1",
+          chainVersion: "preproduction-chain@1.0.0",
+          provenanceVersion: "pcd-provenance@1.0.0",
+        },
+      }),
+    ).toThrow();
+  });
 });

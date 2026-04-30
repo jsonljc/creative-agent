@@ -6,4 +6,6 @@ export * from "./creative-job.js";
 
 // SP7 — preproduction chain
 export * from "./pcd-preproduction.js";
+
+// SP9 — creative-source provenance
 export * from "./pcd-provenance.js";
