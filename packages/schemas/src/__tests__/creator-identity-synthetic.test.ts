@@ -11,6 +11,7 @@ import {
   CreatorIdentitySyntheticPayloadSchema,
   type CreatorIdentitySyntheticPayload,
 } from "../creator-identity-synthetic.js";
+import * as barrel from "../index.js";
 
 describe("CreatorIdentityKindSchema", () => {
   it("accepts real and synthetic", () => {
@@ -171,5 +172,24 @@ describe("CreatorIdentitySyntheticPayloadSchema", () => {
     expect(() =>
       CreatorIdentitySyntheticPayloadSchema.parse({ ...valid, status: "deleted" }),
     ).toThrow();
+  });
+});
+
+describe("schemas package barrel", () => {
+  it("re-exports SP11 synthetic-creator surface", () => {
+    expect(barrel.CreatorIdentityKindSchema).toBeDefined();
+    expect(barrel.TreatmentClassSchema).toBeDefined();
+    expect(barrel.VibeSchema).toBeDefined();
+    expect(barrel.MarketSchema).toBeDefined();
+    expect(barrel.EthnicityFamilySchema).toBeDefined();
+    expect(barrel.AgeBandSchema).toBeDefined();
+    expect(barrel.PricePositioningSchema).toBeDefined();
+    expect(barrel.CreatorIdentitySyntheticPayloadSchema).toBeDefined();
+  });
+
+  it("re-exports SP11 CreativeBrief surface", () => {
+    expect(barrel.CreativeBriefSchema).toBeDefined();
+    expect(barrel.JurisdictionCodeSchema).toBeDefined();
+    expect(barrel.PlatformSchema).toBeDefined();
   });
 });
