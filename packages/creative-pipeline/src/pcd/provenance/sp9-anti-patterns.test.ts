@@ -130,6 +130,8 @@ describe("SP9 anti-pattern grep", () => {
       "packages/creative-pipeline/src/pcd/synthetic-creator/seed.ts",
       "packages/creative-pipeline/src/pcd/synthetic-creator/seed.test.ts",
       "packages/creative-pipeline/src/pcd/synthetic-creator/index.ts",
+      // SP11 anti-pattern grep tests (Task 8)
+      "packages/creative-pipeline/src/pcd/sp11-anti-patterns.test.ts",
     ]);
 
     let sp8Sha = "";
