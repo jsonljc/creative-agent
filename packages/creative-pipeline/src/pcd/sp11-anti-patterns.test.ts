@@ -6,13 +6,13 @@
 //   5. CreatorIdentity Prisma model body contains only the additive kind column
 //      and no SP11 synthetic-only fields
 import { execSync } from "node:child_process";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { SP11_SYNTHETIC_CREATOR_ROSTER } from "./synthetic-creator/seed.js";
 
-const REPO_ROOT = path.resolve(__dirname, "../../../..");
+const REPO_ROOT = path.resolve(import.meta.dirname, "../../../..");
 
 function grepFiles(pattern: string, scope: string): string[] {
   try {
@@ -46,7 +46,7 @@ describe("SP11 anti-patterns", () => {
 
   it("CreatorIdentity migration adds kind column without dropping anything", () => {
     const migrationsDir = path.join(REPO_ROOT, "packages/db/prisma/migrations");
-    const list = execSync(`ls ${migrationsDir}`, { encoding: "utf8" }).trim().split("\n");
+    const list = readdirSync(migrationsDir);
     const sp11Migration = list.find((d) => /synthetic_sp11/.test(d));
     expect(sp11Migration).toBeDefined();
 
@@ -101,7 +101,7 @@ describe("SP11 anti-patterns", () => {
     const src = readFileSync(schemaPath, "utf8");
 
     // Find the CreatorIdentity block (between "model CreatorIdentity {" and the next "model " or end-of-file)
-    const match = src.match(/model CreatorIdentity \{([\s\S]+?)(?=^model |\z)/m);
+    const match = src.match(/model CreatorIdentity \{([\s\S]+?)(?=^model )/m);
     expect(match, "CreatorIdentity block not found in schema.prisma").toBeDefined();
     const block = match![1] ?? "";
 
