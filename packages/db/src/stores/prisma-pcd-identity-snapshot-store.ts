@@ -5,6 +5,7 @@ import type {
   PcdIdentitySnapshot,
   PcdProvenanceDecisionReason,
   PcdRoutingDecisionReason,
+  PcdSp10CostForecastReason,
 } from "@creativeagent/schemas";
 
 export interface CreatePcdIdentitySnapshotInput {
@@ -42,6 +43,12 @@ export interface CreatePcdIdentitySnapshotWithProvenanceInput extends CreatePcdI
   lineageDecisionReason: PcdProvenanceDecisionReason;
 }
 
+// SP10A — wider input. Same shape as SP9's input, plus the cost forecast
+// reason. Used only by createForShotWithCostForecast.
+export interface CreatePcdIdentitySnapshotWithCostForecastInput extends CreatePcdIdentitySnapshotWithProvenanceInput {
+  costForecastReason: PcdSp10CostForecastReason;
+}
+
 export class PrismaPcdIdentitySnapshotStore {
   constructor(private prisma: PrismaDbClient) {}
 
@@ -71,6 +78,25 @@ export class PrismaPcdIdentitySnapshotStore {
           ? (routingDecisionReason as object)
           : Prisma.JsonNull,
         lineageDecisionReason: lineageDecisionReason as unknown as object,
+      },
+    }) as unknown as PcdIdentitySnapshot;
+  }
+
+  // SP10A — additive persistence path. Writes the SP9 25-field shape PLUS
+  // the SP10A cost forecast reason. Legacy create() and SP9
+  // createForShotWithProvenance() are preserved unchanged.
+  async createForShotWithCostForecast(
+    input: CreatePcdIdentitySnapshotWithCostForecastInput,
+  ): Promise<PcdIdentitySnapshot> {
+    const { routingDecisionReason, lineageDecisionReason, costForecastReason, ...rest } = input;
+    return this.prisma.pcdIdentitySnapshot.create({
+      data: {
+        ...rest,
+        routingDecisionReason: routingDecisionReason
+          ? (routingDecisionReason as object)
+          : Prisma.JsonNull,
+        lineageDecisionReason: lineageDecisionReason as unknown as object,
+        costForecastReason: costForecastReason as unknown as object,
       },
     }) as unknown as PcdIdentitySnapshot;
   }
@@ -115,5 +141,22 @@ export function adaptPcdSp9IdentitySnapshotStore(
 ): PcdSp9IdentitySnapshotStoreAdapter {
   return {
     createForShotWithProvenance: (input) => store.createForShotWithProvenance(input),
+  };
+}
+
+// SP10A adapter — bridges the SP10A orchestrator's PcdSp10IdentitySnapshotStore
+// contract to the Prisma createForShotWithCostForecast() method. Production
+// wiring at merge-back consumes this adapter from the apps/api layer.
+export type PcdSp10IdentitySnapshotStoreAdapter = {
+  createForShotWithCostForecast(
+    input: CreatePcdIdentitySnapshotWithCostForecastInput,
+  ): Promise<PcdIdentitySnapshot>;
+};
+
+export function adaptPcdSp10IdentitySnapshotStore(
+  store: PrismaPcdIdentitySnapshotStore,
+): PcdSp10IdentitySnapshotStoreAdapter {
+  return {
+    createForShotWithCostForecast: (input) => store.createForShotWithCostForecast(input),
   };
 }

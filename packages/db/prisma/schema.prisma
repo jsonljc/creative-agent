@@ -293,6 +293,12 @@ model PcdIdentitySnapshot {
   scriptId                    String?
   lineageDecisionReason       Json?
 
+  // SP10A — per-asset cost forecast forensic record. Nullable for historical
+  // compatibility (pre-SP10A rows remain readable). No flat numeric column
+  // and no new index in SP10A; range queries use Postgres JSON operators.
+  // See docs/plans/2026-04-30-pcd-cost-forecast-sp10a-design.md §0 risk #9.
+  costForecastReason          Json?
+
   createdAt                   DateTime        @default(now())
 
   @@index([productIdentityId])

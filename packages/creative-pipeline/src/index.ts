@@ -111,6 +111,9 @@ export * from "./pcd/preproduction/index.js";
 // SP9: creative-source provenance
 export * from "./pcd/provenance/index.js";
 
+// SP10A — cost forecast
+export * from "./pcd/cost/index.js";
+
 // SP6: lifecycle gates — approval / final-export / meta-draft / consent
 export { PCD_APPROVAL_LIFECYCLE_VERSION } from "./pcd/approval-lifecycle-version.js";
 export { PCD_CONSENT_REVOCATION_VERSION } from "./pcd/consent-revocation-version.js";
