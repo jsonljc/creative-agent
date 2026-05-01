@@ -84,7 +84,12 @@ describe("PrismaCreatorIdentitySyntheticReader", () => {
 
       expect(result).toHaveLength(1);
       const call = prisma.creatorIdentitySynthetic.findMany.mock.calls[0]?.[0];
-      expect(call?.where).toEqual({ market: "SG", treatmentClass: "med_spa", status: "active" });
+      expect(call?.where).toEqual({
+        market: "SG",
+        treatmentClass: "med_spa",
+        status: "active",
+        creatorIdentity: { isActive: true },
+      });
       expect(call?.orderBy).toEqual([{ pricePositioning: "desc" }, { creatorIdentityId: "asc" }]);
     });
 
@@ -92,6 +97,16 @@ describe("PrismaCreatorIdentitySyntheticReader", () => {
       prisma.creatorIdentitySynthetic.findMany.mockResolvedValue([]);
       const result = await reader.findByMarketAndTreatmentClass("HK", "dental");
       expect(result).toEqual([]);
+    });
+
+    it("excludes synthetic rows whose parent CreatorIdentity is inactive (via isActive: true filter)", async () => {
+      prisma.creatorIdentitySynthetic.findMany.mockResolvedValue([]);
+      await reader.findByMarketAndTreatmentClass("SG", "med_spa");
+
+      const call = prisma.creatorIdentitySynthetic.findMany.mock.calls[0]?.[0];
+      expect(call?.where).toMatchObject({
+        creatorIdentity: { isActive: true },
+      });
     });
   });
 

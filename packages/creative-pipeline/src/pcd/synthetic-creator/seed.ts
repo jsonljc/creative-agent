@@ -4,13 +4,13 @@
 // sample hook is copied verbatim from that doc.
 import type { CreatorIdentitySyntheticPayload } from "@creativeagent/schemas";
 
-interface CreatorIdentityStub {
+export interface CreatorIdentityStub {
   id: string;
   name: string;
   kind: "synthetic";
 }
 
-interface RosterEntry {
+export interface RosterEntry {
   creatorIdentity: CreatorIdentityStub;
   synthetic: CreatorIdentitySyntheticPayload;
 }

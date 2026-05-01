@@ -26,13 +26,20 @@ export class PrismaCreatorIdentitySyntheticReader {
     treatmentClass: TreatmentClass,
   ): Promise<CreatorIdentitySyntheticPayload[]> {
     const rows = await this.prisma.creatorIdentitySynthetic.findMany({
-      where: { market, treatmentClass, status: "active" },
+      where: {
+        market,
+        treatmentClass,
+        status: "active",
+        creatorIdentity: { isActive: true },
+      },
       orderBy: [{ pricePositioning: "desc" }, { creatorIdentityId: "asc" }],
     });
     return rows.map((r) => this.parse(r));
   }
 
   async listAll(): Promise<CreatorIdentitySyntheticPayload[]> {
+    // Returns all rows, including retired and parent-deactivated.
+    // Use findByMarketAndTreatmentClass for active-only selector queries.
     const rows = await this.prisma.creatorIdentitySynthetic.findMany({
       orderBy: { creatorIdentityId: "asc" },
     });
