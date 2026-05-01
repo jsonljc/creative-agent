@@ -124,6 +124,8 @@ describe("SP9 anti-pattern grep", () => {
       "packages/db/src/stores/__tests__/prisma-creator-identity-synthetic-store.test.ts",
       "packages/db/src/stores/prisma-creator-identity-synthetic-reader.ts",
       "packages/db/src/stores/__tests__/prisma-creator-identity-synthetic-reader.test.ts",
+      // SP11 db barrel re-export (Task 6)
+      "packages/db/src/index.ts",
     ]);
 
     let sp8Sha = "";
