@@ -5,6 +5,9 @@
 import type { PreproductionTreeBudget } from "@creativeagent/schemas";
 import type { Sp10bBudgetReader, Sp10bBudgetReaderInput } from "./sp10b-budget-reader.js";
 
+// Implementer-version (per-stub), NOT a slice-level pin. The 14th SP10B pin
+// is `PCD_TREE_BUDGET_VERSION`; this string identifies the stub itself and is
+// replaced wholesale at merge-back when Switchboard's real reader swaps in.
 export const STATIC_DEFAULT_BUDGET_READER_VERSION = "static-default-budget-reader@1.0.0";
 
 // Loud-stub values — SP8-stub fanout (2→4→12→24, max-fanout=3, total=42)

@@ -42,9 +42,10 @@ export const PcdBriefInputSchema = z.object({
 });
 export type PcdBriefInput = z.infer<typeof PcdBriefInputSchema>;
 
-// SP8 — tree-budget schema. SP10B widens with maxEstimatedUsd as a forward-
-// declared slot for SP10C (cost-budget enforcement); SP10B always populates
-// it as null. Both fanout/size fields required when budget exists.
+// SP8 (introduced) / SP10B (widened) — tree-budget schema. SP10B widens with
+// maxEstimatedUsd as a forward-declared slot for SP10C (cost-budget
+// enforcement); SP10B always populates it as null. Both fanout/size fields
+// required when budget exists.
 export const PreproductionTreeBudgetSchema = z
   .object({
     maxBranchFanout: z.number().int().positive(),

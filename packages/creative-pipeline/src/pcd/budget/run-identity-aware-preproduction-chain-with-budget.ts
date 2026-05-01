@@ -56,7 +56,10 @@ export async function runIdentityAwarePreproductionChainWithBudget(
   const result = await runIdentityAwarePreproductionChain(brief, stores);
 
   // 4. Skip gate if no budget configured (legacy / pre-rollout paths).
-  if (budget === null) return { result, budgetMeta: null };
+  if (budget === null) {
+    // MERGE-BACK: emit WorkTrace here (budget gate skipped — gated bypass)
+    return { result, budgetMeta: null };
+  }
 
   // 5. Validate tree shape against budget.
   const validation = validateTreeShapeAgainstBudget({ result, budget });
