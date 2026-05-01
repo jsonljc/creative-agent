@@ -185,6 +185,15 @@ describe("SP10A anti-pattern grep", () => {
     for (const file of changed) {
       // SP10A net-new files are out of scope.
       if (file.startsWith("packages/creative-pipeline/src/pcd/cost/")) continue;
+      // SP10B net-new files are out of scope (necessary maintenance — SP10A
+      // test was written before SP10B territory existed; same precedent as
+      // the SP9 allowlist added by SP10A for pcd/cost/).
+      if (file.startsWith("packages/creative-pipeline/src/pcd/budget/")) continue;
+      // SP10B widened pcd-preproduction.ts and its schema test in lock-step
+      // with the schema. Allow as out-of-scope edits; SP10B's own freeze
+      // test (Task 9) is the authoritative gate for SP10B-era changes.
+      if (file === "packages/schemas/src/pcd-preproduction.ts") continue;
+      if (file === "packages/schemas/src/__tests__/pcd-preproduction.test.ts") continue;
       if (file.startsWith("packages/db/prisma/migrations/")) continue;
       if (file.endsWith(".prisma")) continue;
       if (file.startsWith("docs/")) continue;
