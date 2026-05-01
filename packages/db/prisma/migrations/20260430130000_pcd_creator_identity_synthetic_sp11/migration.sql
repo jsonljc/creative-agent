@@ -10,8 +10,8 @@
 -- CreateEnum
 CREATE TYPE "CreatorIdentityKind" AS ENUM ('real', 'synthetic');
 
--- AlterTable: add kind discriminator to CreatorIdentity
-ALTER TABLE "CreatorIdentity" ADD COLUMN "kind" "CreatorIdentityKind" NOT NULL DEFAULT 'real';
+-- AlterTable
+ALTER TABLE "CreatorIdentity" ADD COLUMN     "kind" "CreatorIdentityKind" NOT NULL DEFAULT 'real';
 
 -- CreateTable
 CREATE TABLE "CreatorIdentitySynthetic" (
@@ -35,8 +35,7 @@ CREATE TABLE "CreatorIdentitySynthetic" (
 );
 
 -- AddForeignKey
-ALTER TABLE "CreatorIdentitySynthetic" ADD CONSTRAINT "CreatorIdentitySynthetic_creatorIdentityId_fkey"
-    FOREIGN KEY ("creatorIdentityId") REFERENCES "CreatorIdentity"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "CreatorIdentitySynthetic" ADD CONSTRAINT "CreatorIdentitySynthetic_creatorIdentityId_fkey" FOREIGN KEY ("creatorIdentityId") REFERENCES "CreatorIdentity"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- CreateIndex
 CREATE INDEX "CreatorIdentitySynthetic_treatmentClass_market_idx" ON "CreatorIdentitySynthetic"("treatmentClass", "market");
