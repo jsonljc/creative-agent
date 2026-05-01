@@ -34,3 +34,7 @@ export { PrismaPcdIdentitySnapshotReader } from "./stores/prisma-pcd-identity-sn
 export { PrismaConsentRecordReader } from "./stores/prisma-consent-record-reader.js";
 export { PrismaCreativeJobReader } from "./stores/prisma-creative-job-reader.js";
 export { PrismaCreatorIdentityReader } from "./stores/prisma-creator-identity-reader.js";
+
+// SP11 — synthetic creator foundation
+export { PrismaCreatorIdentitySyntheticStore } from "./stores/prisma-creator-identity-synthetic-store.js";
+export { PrismaCreatorIdentitySyntheticReader } from "./stores/prisma-creator-identity-synthetic-reader.js";
