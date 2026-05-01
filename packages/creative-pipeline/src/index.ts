@@ -179,3 +179,6 @@ export {
   type AssertConsentNotRevokedForEditInput,
   type AssertConsentNotRevokedForEditStores,
 } from "./pcd/consent-pre-check-edit.js";
+
+// SP10B: tree-budget enforcement
+export * from "./pcd/budget/index.js";
