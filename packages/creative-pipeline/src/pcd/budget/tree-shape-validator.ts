@@ -58,23 +58,23 @@ export function validateTreeShapeAgainstBudget(
   // motivators_per_trend → hooks_per_motivator → scripts_per_hook.
   const fanoutLevels: FanoutLevelObservation[] = [
     {
-      level: "motivators_per_trend",
+      level: "motivators_per_trend" as const,
       parentId: motivatorsPerTrend.parentId,
       fanout: motivatorsPerTrend.fanout,
     },
     {
-      level: "hooks_per_motivator",
+      level: "hooks_per_motivator" as const,
       parentId: hooksPerMotivator.parentId,
       fanout: hooksPerMotivator.fanout,
     },
     {
-      level: "scripts_per_hook",
+      level: "scripts_per_hook" as const,
       parentId: scriptsPerHook.parentId,
       fanout: scriptsPerHook.fanout,
     },
   ].sort((a, b) => b.fanout - a.fanout);
 
-  const observedMaxBranchFanout = fanoutLevels[0].fanout;
+  const observedMaxBranchFanout = fanoutLevels[0]!.fanout;
 
   const meta: TreeShapeMeta = {
     treeBudgetVersion: PCD_TREE_BUDGET_VERSION,
