@@ -2,14 +2,14 @@
 // Validates input via the SP11 zod schema before any DB write.
 // Upsert semantics on (creatorIdentityId): the parent CreatorIdentity
 // row must exist and have kind = "synthetic".
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaDbClient } from "../prisma-db.js";
 import {
   CreatorIdentitySyntheticPayloadSchema,
   type CreatorIdentitySyntheticPayload,
 } from "@creativeagent/schemas";
 
 export class PrismaCreatorIdentitySyntheticStore {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(private readonly prisma: PrismaDbClient) {}
 
   async create(input: CreatorIdentitySyntheticPayload): Promise<void> {
     const payload = CreatorIdentitySyntheticPayloadSchema.parse(input);
