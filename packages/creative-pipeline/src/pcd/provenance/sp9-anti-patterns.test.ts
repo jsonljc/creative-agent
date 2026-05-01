@@ -114,6 +114,11 @@ describe("SP9 anti-pattern grep", () => {
       "packages/creative-pipeline/src/index.ts",
       "packages/schemas/src/pcd-preproduction.ts",
       "packages/schemas/src/index.ts",
+      // SP11 net-new schema files (synthetic creator roster foundation)
+      "packages/schemas/src/creative-brief.ts",
+      "packages/schemas/src/__tests__/creative-brief.test.ts",
+      "packages/schemas/src/creator-identity-synthetic.ts",
+      "packages/schemas/src/__tests__/creator-identity-synthetic.test.ts",
     ]);
 
     let sp8Sha = "";
