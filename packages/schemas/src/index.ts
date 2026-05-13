@@ -13,6 +13,9 @@ export * from "./pcd-provenance.js";
 // SP10A — cost forecast
 export * from "./pcd-cost-forecast.js";
 
+// SP10C — cost-budget enforcement
+export * from "./pcd-cost-budget.js";
+
 // SP11 — synthetic creator foundation
 export * from "./creator-identity-synthetic.js";
 export * from "./creative-brief.js";
