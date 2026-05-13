@@ -138,8 +138,13 @@ describe("SP10B anti-pattern grep", () => {
   it("SP1–SP10A source bodies are unchanged since the SP10A baseline (allowlist edits only)", () => {
     const allowedEdits = new Set([
       "packages/creative-pipeline/src/index.ts",
+      "packages/schemas/src/index.ts",
       "packages/schemas/src/pcd-preproduction.ts",
       "packages/schemas/src/__tests__/pcd-preproduction.test.ts",
+      // SP10C added pcd-cost-budget schema in lock-step. Allow as out-of-scope;
+      // SP10C's own freeze test is the authoritative gate.
+      "packages/schemas/src/pcd-cost-budget.ts",
+      "packages/schemas/src/__tests__/pcd-cost-budget.test.ts",
       // SP9 + SP10A anti-pattern tests were widened in this slice to allowlist
       // pcd/budget/ — necessary maintenance per the SP10A precedent that
       // widened the SP9 anti-pattern test to allowlist pcd/cost/.
@@ -184,6 +189,9 @@ describe("SP10B anti-pattern grep", () => {
     for (const file of changed) {
       // SP10B net-new files are out of scope.
       if (file.startsWith("packages/creative-pipeline/src/pcd/budget/")) continue;
+      // SP10C net-new files are out of scope (necessary maintenance — same
+      // precedent as pcd/budget/ allowlist added by SP10B to SP9/SP10A).
+      if (file.startsWith("packages/creative-pipeline/src/pcd/cost-budget/")) continue;
       if (file.startsWith("docs/")) continue;
       // SP11 net-new subdir + migration are out of scope (same precedent as SP10B
       // allowlisting pcd/cost/ in SP9's test).
