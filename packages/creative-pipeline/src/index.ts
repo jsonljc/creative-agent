@@ -185,3 +185,6 @@ export {
 
 // SP10B: tree-budget enforcement
 export * from "./pcd/budget/index.js";
+
+// SP10C — cost-budget enforcement
+export * from "./pcd/cost-budget/index.js";
