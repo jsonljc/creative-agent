@@ -191,6 +191,39 @@ describe("SP10C anti-pattern grep", () => {
       // SP10C net-new files are out of scope.
       if (file.startsWith("packages/creative-pipeline/src/pcd/cost-budget/")) continue;
       if (file.startsWith("docs/")) continue;
+      // SP11 net-new files are out of scope (parallel slice merged ahead of SP10C —
+      // same precedent SP10B established for SP10A's pcd/cost/ allowlist).
+      if (file.startsWith("packages/creative-pipeline/src/pcd/synthetic-creator/")) continue;
+      if (file === "packages/creative-pipeline/src/pcd/sp11-anti-patterns.test.ts") continue;
+      if (file === "packages/schemas/src/creator-identity-synthetic.ts") continue;
+      if (file === "packages/schemas/src/__tests__/creator-identity-synthetic.test.ts") continue;
+      if (file === "packages/schemas/src/creative-brief.ts") continue;
+      if (file === "packages/schemas/src/__tests__/creative-brief.test.ts") continue;
+      if (file === "packages/db/src/stores/prisma-creator-identity-synthetic-store.ts") continue;
+      if (
+        file === "packages/db/src/stores/__tests__/prisma-creator-identity-synthetic-store.test.ts"
+      )
+        continue;
+      if (file === "packages/db/src/stores/prisma-creator-identity-synthetic-reader.ts") continue;
+      if (
+        file === "packages/db/src/stores/__tests__/prisma-creator-identity-synthetic-reader.test.ts"
+      )
+        continue;
+      if (file === "packages/db/src/index.ts") continue;
+      if (file === "packages/db/prisma/schema.prisma") continue;
+      if (file.startsWith("packages/db/prisma/migrations/")) continue;
+      // SP12 net-new files are out of scope (same precedent as SP11).
+      if (file === "packages/creative-pipeline/src/pcd/sp12-anti-patterns.test.ts") continue;
+      if (file === "packages/schemas/src/creator-identity-license.ts") continue;
+      if (file === "packages/schemas/src/__tests__/creator-identity-license.test.ts") continue;
+      if (file === "packages/db/src/stores/prisma-creator-identity-license-store.ts") continue;
+      if (file === "packages/db/src/stores/__tests__/prisma-creator-identity-license-store.test.ts")
+        continue;
+      if (file === "packages/db/src/stores/prisma-creator-identity-license-reader.ts") continue;
+      if (
+        file === "packages/db/src/stores/__tests__/prisma-creator-identity-license-reader.test.ts"
+      )
+        continue;
       if (allowedEdits.has(file)) continue;
 
       expect(allowedEdits.has(file), `SP10C modified disallowed file: ${file}`).toBe(true);
