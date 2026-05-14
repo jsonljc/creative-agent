@@ -103,9 +103,7 @@ describe("CreatorIdentityLicensePayloadSchema", () => {
     expect(() =>
       CreatorIdentityLicensePayloadSchema.parse({ ...valid, creatorIdentityId: "" }),
     ).toThrow();
-    expect(() =>
-      CreatorIdentityLicensePayloadSchema.parse({ ...valid, clinicId: "" }),
-    ).toThrow();
+    expect(() => CreatorIdentityLicensePayloadSchema.parse({ ...valid, clinicId: "" })).toThrow();
   });
 
   it("rejects unknown market / treatmentClass values (delegates to SP11 enums)", () => {

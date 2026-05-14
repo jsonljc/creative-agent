@@ -61,7 +61,9 @@ describe("licenseGate — no_lease", () => {
 
   it("blocks when leases exist on the creator but for other clinics only", () => {
     const decision = licenseGate(
-      baseInput([makeLease({ id: "lic_other", clinicId: "clinic_b", lockType: "priority_access" })]),
+      baseInput([
+        makeLease({ id: "lic_other", clinicId: "clinic_b", lockType: "priority_access" }),
+      ]),
     );
     expect(decision.allowed).toBe(false);
     expect(decision.reason).toBe("no_lease");
@@ -85,9 +87,7 @@ describe("licenseGate — expired / suspended", () => {
   });
 
   it("returns reason='suspended' when this clinic's lease has status='suspended'", () => {
-    const decision = licenseGate(
-      baseInput([makeLease({ id: "lic_susp", status: "suspended" })]),
-    );
+    const decision = licenseGate(baseInput([makeLease({ id: "lic_susp", status: "suspended" })]));
     expect(decision.allowed).toBe(false);
     expect(decision.reason).toBe("suspended");
   });
@@ -169,8 +169,18 @@ describe("licenseGate — hard_exclusive", () => {
 
 describe("licenseGate — priority_access", () => {
   it("allows multiple concurrent priority_access holders (no blocking)", () => {
-    const a = makeLease({ id: "lic_a", clinicId: "clinic_a", lockType: "priority_access", priorityRank: 0 });
-    const b = makeLease({ id: "lic_b", clinicId: "clinic_b", lockType: "priority_access", priorityRank: 1 });
+    const a = makeLease({
+      id: "lic_a",
+      clinicId: "clinic_a",
+      lockType: "priority_access",
+      priorityRank: 0,
+    });
+    const b = makeLease({
+      id: "lic_b",
+      clinicId: "clinic_b",
+      lockType: "priority_access",
+      priorityRank: 1,
+    });
     const decisionA = licenseGate(baseInput([a, b]));
     const decisionB = licenseGate(baseInput([a, b], { clinicId: "clinic_b" }));
     expect(decisionA.allowed).toBe(true);

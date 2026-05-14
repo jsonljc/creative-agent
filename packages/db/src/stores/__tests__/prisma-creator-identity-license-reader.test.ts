@@ -48,9 +48,7 @@ describe("PrismaCreatorIdentityLicenseReader", () => {
     });
 
     it("throws when the row fails zod validation (data corruption guard)", async () => {
-      prisma.creatorIdentityLicense.findUnique.mockResolvedValue(
-        dbRow({ lockType: "garbage" }),
-      );
+      prisma.creatorIdentityLicense.findUnique.mockResolvedValue(dbRow({ lockType: "garbage" }));
       await expect(reader.findById("lic_sp12_test_001")).rejects.toThrow();
     });
   });

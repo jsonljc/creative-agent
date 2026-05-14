@@ -10,11 +10,7 @@
 //
 // The gate never imports @creativeagent/db, @prisma/client, or performs
 // any I/O. Anti-pattern test in `pcd/sp12-anti-patterns.test.ts` enforces.
-import type {
-  CreatorIdentityLicensePayload,
-  Market,
-  TreatmentClass,
-} from "@creativeagent/schemas";
+import type { CreatorIdentityLicensePayload, Market, TreatmentClass } from "@creativeagent/schemas";
 
 export const PCD_LICENSE_GATE_VERSION = "license-gate@1.0.0";
 

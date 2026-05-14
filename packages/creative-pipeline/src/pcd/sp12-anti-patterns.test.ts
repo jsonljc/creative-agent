@@ -62,10 +62,9 @@ describe("SP12 anti-patterns", () => {
       expect(src, `${rel} must not reference performance-snapshot`).not.toMatch(
         /performance-snapshot/i,
       );
-      expect(
-        src,
-        `${rel} must not reference SyntheticCreatorSelectionDecision`,
-      ).not.toMatch(/SyntheticCreatorSelectionDecision/);
+      expect(src, `${rel} must not reference SyntheticCreatorSelectionDecision`).not.toMatch(
+        /SyntheticCreatorSelectionDecision/,
+      );
     }
   });
 

@@ -37,8 +37,7 @@ export const CreatorIdentityLicensePayloadSchema = z
   .readonly()
   .refine(
     (lease) =>
-      lease.effectiveTo === null ||
-      lease.effectiveTo.getTime() > lease.effectiveFrom.getTime(),
+      lease.effectiveTo === null || lease.effectiveTo.getTime() > lease.effectiveFrom.getTime(),
     { message: "effectiveTo must be strictly after effectiveFrom (or null for indefinite leases)" },
   );
 export type CreatorIdentityLicensePayload = z.infer<typeof CreatorIdentityLicensePayloadSchema>;

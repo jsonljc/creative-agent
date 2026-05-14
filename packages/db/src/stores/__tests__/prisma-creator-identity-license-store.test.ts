@@ -57,9 +57,8 @@ describe("PrismaCreatorIdentityLicenseStore", () => {
     });
 
     it("applies the 30-day default for effectiveTo when input.effectiveTo is omitted from the convenience helper", async () => {
-      const { withDefaultLeaseWindow } = await import(
-        "../prisma-creator-identity-license-store.js"
-      );
+      const { withDefaultLeaseWindow } =
+        await import("../prisma-creator-identity-license-store.js");
       const filled = withDefaultLeaseWindow({
         id: "lic_sp12_test_002",
         creatorIdentityId: "cid_synth_cheryl_sg_01",
@@ -76,9 +75,8 @@ describe("PrismaCreatorIdentityLicenseStore", () => {
     });
 
     it("withDefaultLeaseWindow preserves an explicit null effectiveTo (indefinite lease)", async () => {
-      const { withDefaultLeaseWindow } = await import(
-        "../prisma-creator-identity-license-store.js"
-      );
+      const { withDefaultLeaseWindow } =
+        await import("../prisma-creator-identity-license-store.js");
       const filled = withDefaultLeaseWindow({
         id: "lic_sp12_test_003",
         creatorIdentityId: "cid_synth_cheryl_sg_01",
@@ -107,9 +105,7 @@ describe("PrismaCreatorIdentityLicenseStore", () => {
     });
 
     it("rejects an unknown status value via zod", async () => {
-      await expect(
-        store.updateStatus("lic_sp12_test_001", "cancelled" as never),
-      ).rejects.toThrow();
+      await expect(store.updateStatus("lic_sp12_test_001", "cancelled" as never)).rejects.toThrow();
       expect(prisma.creatorIdentityLicense.update).not.toHaveBeenCalled();
     });
   });
