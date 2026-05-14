@@ -1,8 +1,10 @@
-// PCD slice SP15 — reader-only by design. Writer interface deliberately
-// deferred. Future authoring CLI/admin tool should ship explicit
-// createScriptVersion(payload) and retireScript(id) operations — NOT
-// a generic upsert. Generic upsert is the wrong semantics for vetted
-// creative copy: it normalises overwriting reviewed rows.
+// PCD slice SP15 — reader-only by design.
+//
+// MERGE-BACK: Writer interface deliberately deferred. Future authoring
+// CLI/admin tool should ship explicit createScriptVersion(payload) and
+// retireScript(id) operations — NOT a generic upsert. Generic upsert
+// is the wrong semantics for vetted creative copy: it normalises
+// overwriting reviewed rows.
 //
 // Returns ALL rows for (vibe, treatmentClass) — any status, any compat
 // list. Pure selector owns the full filter chain (status='active' +

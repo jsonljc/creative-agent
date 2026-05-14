@@ -47,6 +47,13 @@ export type ScriptSelectionRejectionReason = z.infer<typeof ScriptSelectionRejec
 // decision shape. Same carve-out as SP13's SyntheticCreatorSelectionDecision
 // (packages/schemas/src/pcd-synthetic-selector.ts) and SP14's
 // DisclosureResolutionDecision (packages/schemas/src/pcd-disclosure-template.ts).
+//
+// MERGE-BACK: Decision struct is zod-only in SP15. Persistence is SP17's
+// responsibility (SP9 provenance widen). SP17 will add scriptTemplateId
+// and scriptTemplateVersion to PcdIdentitySnapshot. Whether SP17 also
+// persists scriptText is a separate decision for SP17 to make —
+// persisting templateId + version may be enough, and avoids duplicating
+// ad copy into provenance rows.
 export const ScriptSelectionDecisionSchema = z.union([
   z
     .object({
