@@ -31,10 +31,12 @@ const validRejection = {
 
 describe("SyntheticCreatorSelectorRejectionReasonSchema", () => {
   it("accepts the two SP13 reasons", () => {
-    expect(SyntheticCreatorSelectorRejectionReasonSchema.parse("no_compatible_candidates"))
-      .toBe("no_compatible_candidates");
-    expect(SyntheticCreatorSelectorRejectionReasonSchema.parse("all_blocked_by_license"))
-      .toBe("all_blocked_by_license");
+    expect(SyntheticCreatorSelectorRejectionReasonSchema.parse("no_compatible_candidates")).toBe(
+      "no_compatible_candidates",
+    );
+    expect(SyntheticCreatorSelectorRejectionReasonSchema.parse("all_blocked_by_license")).toBe(
+      "all_blocked_by_license",
+    );
   });
 
   it("rejects unknown reasons", () => {
@@ -75,7 +77,9 @@ describe("SyntheticCreatorSelectionDecisionSchema", () => {
 
   it("metricsSnapshotVersion is strict z.null() in SP13 — rejects any string", () => {
     const withNull = { ...validSuccess, metricsSnapshotVersion: null };
-    expect(SyntheticCreatorSelectionDecisionSchema.parse(withNull).metricsSnapshotVersion).toBeNull();
+    expect(
+      SyntheticCreatorSelectionDecisionSchema.parse(withNull).metricsSnapshotVersion,
+    ).toBeNull();
 
     const withStr = { ...validSuccess, metricsSnapshotVersion: "snap@2026-05-14" };
     expect(() => SyntheticCreatorSelectionDecisionSchema.parse(withStr)).toThrow();
@@ -88,6 +92,8 @@ describe("SyntheticCreatorSelectionDecisionSchema", () => {
 
   it("fallbackCreatorIdentityIds may be empty", () => {
     const empty = { ...validSuccess, fallbackCreatorIdentityIds: [] as const };
-    expect(SyntheticCreatorSelectionDecisionSchema.parse(empty).fallbackCreatorIdentityIds).toEqual([]);
+    expect(SyntheticCreatorSelectionDecisionSchema.parse(empty).fallbackCreatorIdentityIds).toEqual(
+      [],
+    );
   });
 });
