@@ -52,3 +52,50 @@ export function makeTemplate(
     ...overrides,
   };
 }
+
+describe("resolveDisclosure — tuple matching", () => {
+  it("returns success when exactly one row matches the tuple (and is currently active with default window)", () => {
+    const template = makeTemplate();
+    const decision = resolveDisclosure({ brief: baseBrief, now: NOW, templates: [template] });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed === true) {
+      expect(decision.disclosureTemplateId).toBe(template.id);
+      expect(decision.templateVersion).toBe(1);
+      expect(decision.disclosureText).toBe(template.text);
+    }
+  });
+
+  it("returns no_template_for_tuple when the snapshot has zero matching rows", () => {
+    const decision = resolveDisclosure({ brief: baseBrief, now: NOW, templates: [] });
+    expect(decision.allowed).toBe(false);
+    if (decision.allowed === false) {
+      expect(decision.reason).toBe("no_template_for_tuple");
+      expect(decision.inspectedTemplateIds).toEqual([]);
+    }
+  });
+
+  it("returns no_template_for_tuple when only the jurisdiction differs", () => {
+    const wrongJurisdiction = makeTemplate({ jurisdictionCode: "MY" });
+    const decision = resolveDisclosure({
+      brief: baseBrief,
+      now: NOW,
+      templates: [wrongJurisdiction],
+    });
+    expect(decision.allowed).toBe(false);
+    if (decision.allowed === false) expect(decision.reason).toBe("no_template_for_tuple");
+  });
+
+  it("returns no_template_for_tuple when only the platform differs", () => {
+    const wrongPlatform = makeTemplate({ platform: "tiktok" });
+    const decision = resolveDisclosure({ brief: baseBrief, now: NOW, templates: [wrongPlatform] });
+    expect(decision.allowed).toBe(false);
+    if (decision.allowed === false) expect(decision.reason).toBe("no_template_for_tuple");
+  });
+
+  it("returns no_template_for_tuple when only the treatment differs", () => {
+    const wrongTreatment = makeTemplate({ treatmentClass: "dental" });
+    const decision = resolveDisclosure({ brief: baseBrief, now: NOW, templates: [wrongTreatment] });
+    expect(decision.allowed).toBe(false);
+    if (decision.allowed === false) expect(decision.reason).toBe("no_template_for_tuple");
+  });
+});

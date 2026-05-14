@@ -31,16 +31,40 @@ export type ResolveDisclosureInput = {
 };
 
 export function resolveDisclosure(input: ResolveDisclosureInput): DisclosureResolutionDecision {
-  // SP14 task-7 skeleton — fills in over tasks 8–12. For now, every call
-  // returns the "no template for tuple" failure with empty inspection list.
+  // Step 1 — exact-tuple filter
+  const tupleMatched = input.templates.filter(
+    (t) =>
+      t.jurisdictionCode === input.brief.jurisdictionCode &&
+      t.platform === input.brief.platform &&
+      t.treatmentClass === input.brief.treatmentClass,
+  );
+
+  if (tupleMatched.length === 0) {
+    return {
+      allowed: false,
+      briefId: input.brief.briefId,
+      reason: "no_template_for_tuple",
+      jurisdictionCode: input.brief.jurisdictionCode,
+      platform: input.brief.platform,
+      treatmentClass: input.brief.treatmentClass,
+      inspectedTemplateIds: [],
+      resolverVersion: PCD_DISCLOSURE_RESOLVER_VERSION,
+    };
+  }
+
+  // Steps 2 + 3 are placeholders for tasks 9 + 10. For now, naively pick
+  // the first tuple-matched row.
+  const winner = tupleMatched[0]!;
   return {
-    allowed: false,
+    allowed: true,
     briefId: input.brief.briefId,
-    reason: "no_template_for_tuple",
+    disclosureTemplateId: winner.id,
     jurisdictionCode: input.brief.jurisdictionCode,
     platform: input.brief.platform,
     treatmentClass: input.brief.treatmentClass,
-    inspectedTemplateIds: [],
+    templateVersion: winner.version,
+    disclosureText: winner.text,
     resolverVersion: PCD_DISCLOSURE_RESOLVER_VERSION,
+    decisionReason: `tuple_resolved (active=1, total_for_tuple=${tupleMatched.length}, picked_version=${winner.version})`,
   };
 }
