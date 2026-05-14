@@ -20,6 +20,7 @@ import type {
   CreatorIdentityLicensePayload,
   SyntheticCreatorSelectionDecision,
 } from "@creativeagent/schemas";
+import { licenseGate, type LicenseGateDecision } from "../synthetic-creator/license-gate.js";
 import type { RosterEntry } from "../synthetic-creator/seed.js";
 import { PCD_SELECTOR_VERSION } from "./selector-version.js";
 
@@ -47,15 +48,56 @@ export function selectSyntheticCreator(
     };
   }
 
-  // Step 2–4 land in Tasks 5–8. Until then, treat every compatible
-  // candidate as license-blocked so the rejection branch is well-typed.
+  // Step 2 — per-candidate license gate. Keep only allowed:true.
+  const candidateDecisions = compatible.map((entry) => ({
+    entry,
+    gate: licenseGate({
+      creatorIdentityId: entry.creatorIdentity.id,
+      clinicId: input.brief.clinicId,
+      market: input.brief.market,
+      treatmentClass: input.brief.treatmentClass,
+      now: input.now,
+      leases: input.leases,
+    }),
+  }));
+
+  const allowedCandidates: AllowedCandidate[] = candidateDecisions.filter(isAllowed);
+  const blockedCandidates: BlockedCandidate[] = candidateDecisions.filter(isBlocked);
+
+  if (allowedCandidates.length === 0) {
+    return {
+      allowed: false,
+      briefId: input.brief.briefId,
+      reason: "all_blocked_by_license",
+      compatibleCandidateIds: compatible.map((e) => e.creatorIdentity.id),
+      blockedCandidateIds: blockedCandidates.map((c) => c.entry.creatorIdentity.id),
+      selectorVersion: PCD_SELECTOR_VERSION,
+    };
+  }
+
+  // Step 3 — pick the first allowed candidate (Task 6 will rank).
+  const primary = allowedCandidates[0]!;
+  const fallbacks = allowedCandidates.slice(1);
+
+  // Step 4 — emit success decision. The type predicate above narrows
+  // primary.gate to the allowed:true variant, so primary.gate.license and
+  // primary.gate.isSoftExclusivityOverride are statically non-null. No
+  // runtime narrowing aid needed (invariant #4: selector never throws).
   return {
-    allowed: false,
+    allowed: true,
     briefId: input.brief.briefId,
-    reason: "all_blocked_by_license",
-    compatibleCandidateIds: compatible.map((e) => e.creatorIdentity.id),
-    blockedCandidateIds: compatible.map((e) => e.creatorIdentity.id),
+    selectedCreatorIdentityId: primary.entry.creatorIdentity.id,
+    fallbackCreatorIdentityIds: fallbacks.map((c) => c.entry.creatorIdentity.id),
+    selectedLicenseId: primary.gate.license.id,
+    selectedLockType: primary.gate.license.lockType,
+    isSoftExclusivityOverride: primary.gate.isSoftExclusivityOverride,
     selectorVersion: PCD_SELECTOR_VERSION,
+    selectorRank: 0,
+    metricsSnapshotVersion: null,
+    performanceOverlayApplied: false,
+    decisionReason: `primary_compatible (${allowedCandidates.length} survivor${
+      allowedCandidates.length === 1 ? "" : "s"
+    }, ${blockedCandidates.length} license-blocked)`,
   };
 }
 
@@ -70,4 +112,25 @@ function isCompatible(entry: RosterEntry, brief: CreativeBrief): boolean {
     s.ageBand === brief.targetAgeBand &&
     s.pricePositioning === brief.pricePositioning
   );
+}
+
+type AllowedCandidate = {
+  entry: RosterEntry;
+  gate: Extract<LicenseGateDecision, { allowed: true }>;
+};
+
+type BlockedCandidate = {
+  entry: RosterEntry;
+  gate: Extract<LicenseGateDecision, { allowed: false }>;
+};
+
+// Type predicate — narrows c.gate to the success branch, so consumers
+// access primary.gate.license / primary.gate.isSoftExclusivityOverride
+// without any runtime `if (... !== true) throw` narrowing aid.
+function isAllowed(c: { entry: RosterEntry; gate: LicenseGateDecision }): c is AllowedCandidate {
+  return c.gate.allowed === true;
+}
+
+function isBlocked(c: { entry: RosterEntry; gate: LicenseGateDecision }): c is BlockedCandidate {
+  return c.gate.allowed === false;
 }

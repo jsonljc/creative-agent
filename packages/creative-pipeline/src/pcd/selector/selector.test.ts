@@ -173,3 +173,123 @@ export const makeLease = (
   status: "active",
   ...overrides,
 });
+
+describe("selectSyntheticCreator — license-gate composition", () => {
+  it("succeeds when the lone compatible candidate has an active priority_access lease for the requesting clinic", () => {
+    const decision = selectSyntheticCreator({
+      brief: briefForCheryl,
+      now: NOW_FIXTURE,
+      roster: cherylRoster,
+      leases: [makeLease({ id: "lic_cheryl_a", lockType: "priority_access", priorityRank: 0 })],
+    });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed === true) {
+      expect(decision.selectedCreatorIdentityId).toBe("cid_synth_cheryl_sg_01");
+      expect(decision.selectedLicenseId).toBe("lic_cheryl_a");
+      expect(decision.selectedLockType).toBe("priority_access");
+      expect(decision.fallbackCreatorIdentityIds).toEqual([]);
+      expect(decision.selectorRank).toBe(0);
+      expect(decision.metricsSnapshotVersion).toBeNull();
+      expect(decision.performanceOverlayApplied).toBe(false);
+      expect(decision.selectorVersion).toBe(PCD_SELECTOR_VERSION);
+    }
+  });
+
+  it("blocks the lone candidate when no lease exists (all_blocked_by_license)", () => {
+    const decision = selectSyntheticCreator({
+      brief: briefForCheryl,
+      now: NOW_FIXTURE,
+      roster: cherylRoster,
+      leases: [],
+    });
+    expect(decision.allowed).toBe(false);
+    if (decision.allowed === false) {
+      expect(decision.reason).toBe("all_blocked_by_license");
+      expect(decision.compatibleCandidateIds).toEqual(["cid_synth_cheryl_sg_01"]);
+      expect(decision.blockedCandidateIds).toEqual(["cid_synth_cheryl_sg_01"]);
+    }
+  });
+
+  it("blocks when a competing clinic holds an active hard_exclusive on the same scope", () => {
+    const decision = selectSyntheticCreator({
+      brief: briefForCheryl,
+      now: NOW_FIXTURE,
+      roster: cherylRoster,
+      leases: [
+        makeLease({
+          id: "lic_competing_hard",
+          clinicId: "clinic_competitor",
+          lockType: "hard_exclusive",
+        }),
+      ],
+    });
+    expect(decision.allowed).toBe(false);
+    if (decision.allowed === false) {
+      expect(decision.reason).toBe("all_blocked_by_license");
+      expect(decision.blockedCandidateIds).toEqual(["cid_synth_cheryl_sg_01"]);
+    }
+  });
+
+  it("blocks when the candidate's lease has expired", () => {
+    const decision = selectSyntheticCreator({
+      brief: briefForCheryl,
+      now: NOW_FIXTURE,
+      roster: cherylRoster,
+      leases: [
+        makeLease({
+          id: "lic_expired",
+          effectiveFrom: new Date("2026-04-01T00:00:00.000Z"),
+          effectiveTo: new Date("2026-04-30T00:00:00.000Z"),
+          status: "expired",
+        }),
+      ],
+    });
+    expect(decision.allowed).toBe(false);
+    if (decision.allowed === false) {
+      expect(decision.reason).toBe("all_blocked_by_license");
+      expect(decision.blockedCandidateIds).toEqual(["cid_synth_cheryl_sg_01"]);
+    }
+  });
+
+  it("returns all_blocked_by_license when every compatible candidate is gate-rejected", () => {
+    // Synthesize a 2-creator roster, both compatible, neither leased.
+    const cherylA: RosterEntry = cherylRoster[0]!;
+    const cherylB: RosterEntry = {
+      creatorIdentity: { id: "cid_synth_cheryl_sg_dup", name: "Cheryl-Dup", kind: "synthetic" },
+      synthetic: { ...cherylA.synthetic, creatorIdentityId: "cid_synth_cheryl_sg_dup" },
+    };
+    const decision = selectSyntheticCreator({
+      brief: briefForCheryl,
+      now: NOW_FIXTURE,
+      roster: [cherylA, cherylB],
+      leases: [],
+    });
+    expect(decision.allowed).toBe(false);
+    if (decision.allowed === false) {
+      expect(decision.reason).toBe("all_blocked_by_license");
+      expect(decision.compatibleCandidateIds.length).toBe(2);
+      expect(decision.blockedCandidateIds.length).toBe(2);
+    }
+  });
+
+  it("selects the one allowed candidate; blocked siblings do NOT appear in success-branch fallbacks", () => {
+    const cherylA: RosterEntry = cherylRoster[0]!;
+    const cherylB: RosterEntry = {
+      creatorIdentity: { id: "cid_synth_cheryl_sg_dup", name: "Cheryl-Dup", kind: "synthetic" },
+      synthetic: { ...cherylA.synthetic, creatorIdentityId: "cid_synth_cheryl_sg_dup" },
+    };
+    const decision = selectSyntheticCreator({
+      brief: briefForCheryl,
+      now: NOW_FIXTURE,
+      roster: [cherylA, cherylB],
+      // Only the first is leased.
+      leases: [makeLease({ id: "lic_cheryl_a_only", creatorIdentityId: "cid_synth_cheryl_sg_01" })],
+    });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed === true) {
+      expect(decision.selectedCreatorIdentityId).toBe("cid_synth_cheryl_sg_01");
+      // The blocked sibling is NOT a fallback. Success branch has no blocked-candidate field.
+      expect(decision.fallbackCreatorIdentityIds).toEqual([]);
+    }
+  });
+});
