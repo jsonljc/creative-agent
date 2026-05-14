@@ -5,7 +5,7 @@
 //
 // Lock-type semantics (design §3.3):
 //   - hard_exclusive   only the holder can use the creator at job time
-//   - priority_access  multiple holders allowed; selector orders by priorityRank
+//   - priority_access  multiple holders allowed; downstream ordering by priorityRank
 //   - soft_exclusive   single primary, others pass with override flag
 //
 // The gate never imports @creativeagent/db, @prisma/client, or performs

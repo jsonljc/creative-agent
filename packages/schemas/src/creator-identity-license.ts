@@ -2,7 +2,7 @@
 // over (creatorIdentityId, market, treatmentClass) for synthetic creators.
 // Three lock-types per design spec §3.3:
 //   - hard_exclusive   only the holder can use the creator at job time
-//   - priority_access  multiple holders allowed; selector orders by priorityRank
+//   - priority_access  multiple holders allowed; downstream ordering by priorityRank
 //   - soft_exclusive   single primary, others pass with override flag in provenance
 // The pure license-gate (`packages/creative-pipeline/src/pcd/synthetic-creator/
 // license-gate.ts`) consumes this schema as a snapshot input. Real-kind
