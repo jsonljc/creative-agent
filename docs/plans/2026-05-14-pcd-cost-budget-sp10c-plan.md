@@ -91,40 +91,40 @@ Expected: success.
 
 **New files (under `packages/creative-pipeline/src/pcd/cost-budget/`):**
 
-| File                                                                | Responsibility                                                                                                                  |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `cost-budget-version.ts`                                            | Pinned constant `PCD_COST_BUDGET_VERSION`. Sole import site: `cost-budget-validator.ts`.                                        |
-| `coarse-cost-estimator.ts`                                          | `CoarseCostEstimator` interface + input/output types. Type-only.                                                                |
-| `stub-coarse-cost-estimator.ts`                                     | `StubCoarseCostEstimator` + `STUB_COARSE_COST_ESTIMATOR_VERSION`. Deterministic `$1.50 × scriptCount` stub.                     |
-| `cost-budget-exceeded-error.ts`                                     | Error class. Carries `meta: CostBudgetMeta`.                                                                                    |
-| `cost-budget-validator.ts`                                          | Pure validator. Sole importer of `PCD_COST_BUDGET_VERSION`. Assembles `CostBudgetMeta` and returns `{ok, meta}`.                |
-| `run-identity-aware-preproduction-chain-with-cost-budget.ts`        | Orchestrator. Builds identityContext, resolves budget, calls SP10B with stripped budget via wrapper, runs cost gate.            |
-| `index.ts`                                                          | Public surface barrel.                                                                                                          |
-| `cost-budget-version.test.ts`                                       | Constant-equality test (1 test).                                                                                                |
-| `cost-budget-exceeded-error.test.ts`                                | Construction, name, message, meta carry, defensive zod parse (5 tests).                                                         |
-| `stub-coarse-cost-estimator.test.ts`                                | Determinism, scaling, ignored-inputs, currency, version (5-6 tests).                                                            |
-| `cost-budget-validator.test.ts`                                     | Happy + edge thresholds + meta version pin + meta carry-throughs (8-10 tests).                                                  |
-| `run-identity-aware-preproduction-chain-with-cost-budget.test.ts`   | Full orchestrator paths: null bypass, count-only, full enforcement, error propagation, stripping invariant (14-16 tests).       |
-| `sp10c-anti-patterns.test.ts`                                       | 9 structural grep assertions.                                                                                                   |
+| File                                                              | Responsibility                                                                                                            |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `cost-budget-version.ts`                                          | Pinned constant `PCD_COST_BUDGET_VERSION`. Sole import site: `cost-budget-validator.ts`.                                  |
+| `coarse-cost-estimator.ts`                                        | `CoarseCostEstimator` interface + input/output types. Type-only.                                                          |
+| `stub-coarse-cost-estimator.ts`                                   | `StubCoarseCostEstimator` + `STUB_COARSE_COST_ESTIMATOR_VERSION`. Deterministic `$1.50 × scriptCount` stub.               |
+| `cost-budget-exceeded-error.ts`                                   | Error class. Carries `meta: CostBudgetMeta`.                                                                              |
+| `cost-budget-validator.ts`                                        | Pure validator. Sole importer of `PCD_COST_BUDGET_VERSION`. Assembles `CostBudgetMeta` and returns `{ok, meta}`.          |
+| `run-identity-aware-preproduction-chain-with-cost-budget.ts`      | Orchestrator. Builds identityContext, resolves budget, calls SP10B with stripped budget via wrapper, runs cost gate.      |
+| `index.ts`                                                        | Public surface barrel.                                                                                                    |
+| `cost-budget-version.test.ts`                                     | Constant-equality test (1 test).                                                                                          |
+| `cost-budget-exceeded-error.test.ts`                              | Construction, name, message, meta carry, defensive zod parse (5 tests).                                                   |
+| `stub-coarse-cost-estimator.test.ts`                              | Determinism, scaling, ignored-inputs, currency, version (5-6 tests).                                                      |
+| `cost-budget-validator.test.ts`                                   | Happy + edge thresholds + meta version pin + meta carry-throughs (8-10 tests).                                            |
+| `run-identity-aware-preproduction-chain-with-cost-budget.test.ts` | Full orchestrator paths: null bypass, count-only, full enforcement, error propagation, stripping invariant (14-16 tests). |
+| `sp10c-anti-patterns.test.ts`                                     | 9 structural grep assertions.                                                                                             |
 
 **New files (under `packages/schemas/src/`):**
 
-| File                                          | Responsibility                                                                          |
-| --------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `pcd-cost-budget.ts`                          | `CoarseCostEstimatorOutputSchema` + `CostBudgetMetaSchema` + types.                     |
-| `__tests__/pcd-cost-budget.test.ts`           | Schema validation tests (8-10 tests).                                                   |
+| File                                | Responsibility                                                      |
+| ----------------------------------- | ------------------------------------------------------------------- |
+| `pcd-cost-budget.ts`                | `CoarseCostEstimatorOutputSchema` + `CostBudgetMetaSchema` + types. |
+| `__tests__/pcd-cost-budget.test.ts` | Schema validation tests (8-10 tests).                               |
 
 **Modified files (allowlist; deviations fail SP10C anti-pattern test #4):**
 
-| File                                                                                   | Change                                                                                                                |
-| -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `packages/schemas/src/index.ts`                                                        | Re-export `./pcd-cost-budget.js`. (Task 2)                                                                            |
-| `packages/creative-pipeline/src/index.ts`                                              | Re-export `./pcd/cost-budget/index.js`. (Task 8)                                                                      |
-| `packages/creative-pipeline/src/pcd/provenance/sp9-anti-patterns.test.ts`              | Add `pcd/cost-budget/` to freeze allowlist. (Task 9)                                                                  |
-| `packages/creative-pipeline/src/pcd/cost/sp10a-anti-patterns.test.ts`                  | Add `pcd/cost-budget/` to freeze allowlist. (Task 9)                                                                  |
-| `packages/creative-pipeline/src/pcd/budget/sp10b-anti-patterns.test.ts`                | Add `pcd/cost-budget/` to freeze allowlist. (Task 9)                                                                  |
-| `docs/SWITCHBOARD-CONTEXT.md`                                                          | Add SP10C merge-back surface section after SP10B. (Task 10)                                                           |
-| `~/.claude/projects/-Users-jasonli-creativeagent/memory/project_pcd_slice_progress.md` | Add SP10C entry. (Task 10)                                                                                            |
+| File                                                                                   | Change                                                      |
+| -------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `packages/schemas/src/index.ts`                                                        | Re-export `./pcd-cost-budget.js`. (Task 2)                  |
+| `packages/creative-pipeline/src/index.ts`                                              | Re-export `./pcd/cost-budget/index.js`. (Task 8)            |
+| `packages/creative-pipeline/src/pcd/provenance/sp9-anti-patterns.test.ts`              | Add `pcd/cost-budget/` to freeze allowlist. (Task 9)        |
+| `packages/creative-pipeline/src/pcd/cost/sp10a-anti-patterns.test.ts`                  | Add `pcd/cost-budget/` to freeze allowlist. (Task 9)        |
+| `packages/creative-pipeline/src/pcd/budget/sp10b-anti-patterns.test.ts`                | Add `pcd/cost-budget/` to freeze allowlist. (Task 9)        |
+| `docs/SWITCHBOARD-CONTEXT.md`                                                          | Add SP10C merge-back surface section after SP10B. (Task 10) |
+| `~/.claude/projects/-Users-jasonli-creativeagent/memory/project_pcd_slice_progress.md` | Add SP10C entry. (Task 10)                                  |
 
 **Files NOT changed (verified by anti-pattern test #4):**
 
@@ -217,10 +217,7 @@ Two zod schemas ship together: `CoarseCostEstimatorOutputSchema` (validates the 
 ```ts
 // packages/schemas/src/__tests__/pcd-cost-budget.test.ts
 import { describe, expect, it } from "vitest";
-import {
-  CoarseCostEstimatorOutputSchema,
-  CostBudgetMetaSchema,
-} from "../pcd-cost-budget.js";
+import { CoarseCostEstimatorOutputSchema, CostBudgetMetaSchema } from "../pcd-cost-budget.js";
 
 describe("CoarseCostEstimatorOutputSchema", () => {
   const valid = {
@@ -235,21 +232,21 @@ describe("CoarseCostEstimatorOutputSchema", () => {
   });
 
   it("accepts estimatedUsd === 0 (nonnegative)", () => {
-    expect(
-      CoarseCostEstimatorOutputSchema.safeParse({ ...valid, estimatedUsd: 0 }).success,
-    ).toBe(true);
+    expect(CoarseCostEstimatorOutputSchema.safeParse({ ...valid, estimatedUsd: 0 }).success).toBe(
+      true,
+    );
   });
 
   it("rejects negative estimatedUsd", () => {
-    expect(
-      CoarseCostEstimatorOutputSchema.safeParse({ ...valid, estimatedUsd: -1 }).success,
-    ).toBe(false);
+    expect(CoarseCostEstimatorOutputSchema.safeParse({ ...valid, estimatedUsd: -1 }).success).toBe(
+      false,
+    );
   });
 
   it("rejects non-USD currency", () => {
-    expect(
-      CoarseCostEstimatorOutputSchema.safeParse({ ...valid, currency: "EUR" }).success,
-    ).toBe(false);
+    expect(CoarseCostEstimatorOutputSchema.safeParse({ ...valid, currency: "EUR" }).success).toBe(
+      false,
+    );
   });
 
   it("rejects empty estimatorVersion", () => {
@@ -275,9 +272,7 @@ describe("CostBudgetMetaSchema", () => {
   });
 
   it("rejects negative estimatedUsd", () => {
-    expect(
-      CostBudgetMetaSchema.safeParse({ ...valid, estimatedUsd: -1 }).success,
-    ).toBe(false);
+    expect(CostBudgetMetaSchema.safeParse({ ...valid, estimatedUsd: -1 }).success).toBe(false);
   });
 
   it("rejects non-positive threshold (zero excluded)", () => {
@@ -286,9 +281,9 @@ describe("CostBudgetMetaSchema", () => {
   });
 
   it("rejects bad ISO timestamp", () => {
-    expect(
-      CostBudgetMetaSchema.safeParse({ ...valid, estimatedAt: "not-a-date" }).success,
-    ).toBe(false);
+    expect(CostBudgetMetaSchema.safeParse({ ...valid, estimatedAt: "not-a-date" }).success).toBe(
+      false,
+    );
   });
 
   it("rejects missing field", () => {
@@ -775,7 +770,9 @@ import { describe, expect, it } from "vitest";
 import type { CoarseCostEstimatorOutput } from "./coarse-cost-estimator.js";
 import { validateCostAgainstBudget } from "./cost-budget-validator.js";
 
-function sampleEstimate(overrides: Partial<CoarseCostEstimatorOutput> = {}): CoarseCostEstimatorOutput {
+function sampleEstimate(
+  overrides: Partial<CoarseCostEstimatorOutput> = {},
+): CoarseCostEstimatorOutput {
   return {
     estimatedUsd: 50,
     currency: "USD",
@@ -940,9 +937,7 @@ export function validateCostAgainstBudget(
     lineItems: input.estimate.lineItems,
     estimatedAt: input.estimatedAt,
   };
-  return input.estimate.estimatedUsd > input.threshold
-    ? { ok: false, meta }
-    : { ok: true, meta };
+  return input.estimate.estimatedUsd > input.threshold ? { ok: false, meta } : { ok: true, meta };
 }
 ```
 
@@ -995,10 +990,7 @@ Outcome wrapper exposes `{result, budgetMeta, costMeta}` — three-state matrix 
 ```ts
 // packages/creative-pipeline/src/pcd/cost-budget/run-identity-aware-preproduction-chain-with-cost-budget.test.ts
 import { describe, expect, it, vi } from "vitest";
-import type {
-  PcdBriefInput,
-  PreproductionTreeBudget,
-} from "@creativeagent/schemas";
+import type { PcdBriefInput, PreproductionTreeBudget } from "@creativeagent/schemas";
 import { CostBudgetExceededError } from "./cost-budget-exceeded-error.js";
 import { TreeBudgetExceededError } from "../budget/tree-budget-exceeded-error.js";
 import { StaticDefaultBudgetReader } from "../budget/static-default-budget-reader.js";
@@ -1222,9 +1214,9 @@ describe("runIdentityAwarePreproductionChainWithCostBudget", () => {
     expect(capturedIdentityContext).not.toBeNull();
     // identityContext shape sanity (one field is enough to confirm it's the real
     // PcdIdentityContext, not a stub or shim).
-    expect((capturedIdentityContext as { identityContextVersion: string }).identityContextVersion).toBe(
-      "identity-context@1.0.0",
-    );
+    expect(
+      (capturedIdentityContext as { identityContextVersion: string }).identityContextVersion,
+    ).toBe("identity-context@1.0.0");
   });
 
   it("scriptCount in estimator call equals result.stageOutputs.scripts.scripts.length", async () => {
@@ -1782,6 +1774,7 @@ Expected: PASS (9 tests). If the source-freeze assertion (#9) fails because of S
 If any other assertion fails, the SP10C implementation has drifted from the design contract — investigate and fix before proceeding.
 
 Common failure modes:
+
 - Assertion #1 fails: someone imported `PCD_COST_BUDGET_VERSION` outside the validator. Move the import OR (rarely justified) widen the allowlist.
 - Assertion #5 fails: someone widened `PreproductionTreeBudgetSchema`. Revert — SP10C does not edit that schema.
 - Assertion #6 fails: someone edited SP10B's orchestrator. Revert — SP10B is frozen.
@@ -2127,15 +2120,15 @@ After each task commit, do a 30-second sanity check:
 
 **Throw boundaries (no try/catch anywhere):**
 
-| Source of throw                                 | Reaches caller as                  |
-| ----------------------------------------------- | ---------------------------------- |
-| `buildPcdIdentityContext`                       | (raw — InvariantViolationError etc) |
-| `budgetReader.resolveBudget`                    | (raw)                               |
-| SP10B (count gate)                              | `TreeBudgetExceededError` (raw)     |
-| SP10B (chain)                                   | `PreproductionChainError` (raw)     |
-| `coarseCostEstimator.estimate`                  | (raw)                               |
-| `CoarseCostEstimatorOutputSchema.parse`         | `ZodError` (raw)                    |
-| `validateCostAgainstBudget` returns ok: false  | `CostBudgetExceededError` (thrown by orchestrator) |
+| Source of throw                               | Reaches caller as                                  |
+| --------------------------------------------- | -------------------------------------------------- |
+| `buildPcdIdentityContext`                     | (raw — InvariantViolationError etc)                |
+| `budgetReader.resolveBudget`                  | (raw)                                              |
+| SP10B (count gate)                            | `TreeBudgetExceededError` (raw)                    |
+| SP10B (chain)                                 | `PreproductionChainError` (raw)                    |
+| `coarseCostEstimator.estimate`                | (raw)                                              |
+| `CoarseCostEstimatorOutputSchema.parse`       | `ZodError` (raw)                                   |
+| `validateCostAgainstBudget` returns ok: false | `CostBudgetExceededError` (thrown by orchestrator) |
 
 ---
 

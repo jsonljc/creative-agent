@@ -181,12 +181,12 @@ The SP10C orchestrator:
 
 **Why post-chain (not mid-chain decorators, not pre-chain feasibility):**
 
-| Option                      | Choice | Rationale                                                                                                                                                                                                                                                                                                            |
-| --------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Pre-chain feasibility gate  | ❌     | Script count is unknown pre-chain. Real Claude-driven runners produce variable fanout. Pre-chain estimator could only validate `budget.maxEstimatedUsd >= 0` — theater. Same SP10B Q2 rationale.                                                                                                                    |
-| Mid-chain decorator runners | ❌     | Wrapping injected stage runners with cost-aware decorators introduces partial-tree semantics. Same SP10B Q2 rejection.                                                                                                                                                                                              |
-| Post-chain validator        | ✅     | SP10B precedent. Chain runs to completion or not at all (atomic). Validation is pure arithmetic (`estimate.estimatedUsd > threshold`). Composer body untouched.                                                                                                                                                     |
-| Post-SP10B validator        | ✅     | SP10C's actual choice. Composes SP10B's post-chain count gate, then adds a post-SP10B cost gate. Operator sees count violations first (cheaper to surface — no estimator call required); cost violations second (estimator runs only when count passed).                                                            |
+| Option                      | Choice | Rationale                                                                                                                                                                                                                                                |
+| --------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pre-chain feasibility gate  | ❌     | Script count is unknown pre-chain. Real Claude-driven runners produce variable fanout. Pre-chain estimator could only validate `budget.maxEstimatedUsd >= 0` — theater. Same SP10B Q2 rationale.                                                         |
+| Mid-chain decorator runners | ❌     | Wrapping injected stage runners with cost-aware decorators introduces partial-tree semantics. Same SP10B Q2 rejection.                                                                                                                                   |
+| Post-chain validator        | ✅     | SP10B precedent. Chain runs to completion or not at all (atomic). Validation is pure arithmetic (`estimate.estimatedUsd > threshold`). Composer body untouched.                                                                                          |
+| Post-SP10B validator        | ✅     | SP10C's actual choice. Composes SP10B's post-chain count gate, then adds a post-SP10B cost gate. Operator sees count violations first (cheaper to surface — no estimator call required); cost violations second (estimator runs only when count passed). |
 
 **Where SP10C sits in the call chain:**
 
@@ -244,12 +244,12 @@ Documented inline in the orchestrator and tested explicitly.
 
 SP7's composer constructs `PcdProductionFanoutDecision` internally with `costForecast: null` (forward-declared by SP7, untouched since). SP10C runs POST-chain — the decision struct is already constructed by the time SP10C sees `result`. Options:
 
-| Option                                                | Choice | Rationale                                                                                                                                                                                                                                                                                                       |
-| ----------------------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Mutate `result.decision.costForecast` post-hoc        | ❌     | `result` is structurally readonly (zod `.readonly()` and chain composer never mutates). Mutation would break SP9/SP10A invariants that depend on the result being immutable.                                                                                                                                    |
-| Edit SP7 composer to take cost forecast as input      | ❌     | Forbidden by guardrail #2.                                                                                                                                                                                                                                                                                      |
-| Wrap result with augmented decision                   | ❌     | Would diverge from SP7/SP10B return shape; downstream consumers expecting `result.decision.costForecast === null` would break.                                                                                                                                                                                  |
-| Outcome wrapper carries cost data separately          | ✅     | SP10B precedent. SP10C's `RunPreproductionChainWithCostBudgetOutcome.costMeta` is the SP10C-introduced surface for cost data. SP7 decision slot stays null; merge-back consumers read `costMeta` instead. Documented at §0 risk #3.                                                                            |
+| Option                                           | Choice | Rationale                                                                                                                                                                                                                           |
+| ------------------------------------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mutate `result.decision.costForecast` post-hoc   | ❌     | `result` is structurally readonly (zod `.readonly()` and chain composer never mutates). Mutation would break SP9/SP10A invariants that depend on the result being immutable.                                                        |
+| Edit SP7 composer to take cost forecast as input | ❌     | Forbidden by guardrail #2.                                                                                                                                                                                                          |
+| Wrap result with augmented decision              | ❌     | Would diverge from SP7/SP10B return shape; downstream consumers expecting `result.decision.costForecast === null` would break.                                                                                                      |
+| Outcome wrapper carries cost data separately     | ✅     | SP10B precedent. SP10C's `RunPreproductionChainWithCostBudgetOutcome.costMeta` is the SP10C-introduced surface for cost data. SP7 decision slot stays null; merge-back consumers read `costMeta` instead. Documented at §0 risk #3. |
 
 ### Q5 — Pinned constant: `PCD_COST_BUDGET_VERSION` (15th)
 
@@ -299,6 +299,7 @@ The SP10C orchestrator calls SP10B's `runIdentityAwarePreproductionChainWithBudg
 **Why NOT edit SP10B's body to remove the InvariantViolationError assertion (option a):**
 
 Editing SP10B's orchestrator would:
+
 - Violate guardrail #2.
 - Invert SP10B's load-bearing count-only invariant (the assertion documents the SP10B contract).
 - Force `sp10b-anti-patterns.test.ts` test #6 to be removed or inverted — a regression in structural protection.
@@ -367,9 +368,7 @@ const meta: CostBudgetMeta = {
   lineItems: input.estimate.lineItems,
   estimatedAt: input.estimatedAt,
 };
-return input.estimate.estimatedUsd > input.threshold
-  ? { ok: false, meta }
-  : { ok: true, meta };
+return input.estimate.estimatedUsd > input.threshold ? { ok: false, meta } : { ok: true, meta };
 ```
 
 The validator returns a structured result (not throwing directly) so the orchestrator can decide how to surface it. Orchestrator throws `CostBudgetExceededError` on `ok: false` (carrying `meta` for operator forensics). The validator's output shape is testable in isolation.
@@ -387,18 +386,18 @@ Same SP10B precedent. The CostBudgetMeta is forensic record material — dashboa
 
 ### Q11 — Orchestrator failure semantics
 
-| Failure mode                                                  | Throws                                                                                          | Caught by orchestrator?                                            |
-| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `buildPcdIdentityContext()` throws                            | Whatever the builder throws (`InvariantViolationError`, `ConsentRevokedRefusalError`, `ZodError`) | No — propagated raw                                                |
-| `budgetReader.resolveBudget()` throws (top-level)             | Whatever the reader throws                                                                      | No — propagated raw                                                |
-| `budgetReader.resolveBudget()` returns null                   | (no throw — entire SP10C orchestrator bypassed)                                                  | N/A — returns `{result, budgetMeta: null, costMeta: null}`         |
-| SP10B throws `TreeBudgetExceededError`                        | `TreeBudgetExceededError`                                                                       | No — propagated raw                                                |
-| SP10B throws any chain error (forwarded raw)                  | `PreproductionChainError`, `ConsentRevokedRefusalError`, `ZodError`, `InvariantViolationError`   | No — propagated raw                                                |
-| `budget.maxEstimatedUsd === null` (count-only)                | (no throw — cost gate skipped)                                                                   | N/A — returns `{result, budgetMeta, costMeta: null}`                |
-| `coarseCostEstimator.estimate()` throws                       | Whatever the estimator throws                                                                   | No — propagated raw                                                |
-| Estimator output fails zod parse                              | `ZodError`                                                                                      | No — propagated raw                                                |
-| `validateCostAgainstBudget()` returns `ok: false`             | `CostBudgetExceededError` thrown by orchestrator (carries `meta`)                                | N/A — orchestrator throws after pure validator returns false       |
-| `validateCostAgainstBudget()` returns `ok: true`              | (no throw — `{result, budgetMeta, costMeta: validation.meta}` returned)                          | N/A                                                                |
+| Failure mode                                      | Throws                                                                                            | Caught by orchestrator?                                      |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `buildPcdIdentityContext()` throws                | Whatever the builder throws (`InvariantViolationError`, `ConsentRevokedRefusalError`, `ZodError`) | No — propagated raw                                          |
+| `budgetReader.resolveBudget()` throws (top-level) | Whatever the reader throws                                                                        | No — propagated raw                                          |
+| `budgetReader.resolveBudget()` returns null       | (no throw — entire SP10C orchestrator bypassed)                                                   | N/A — returns `{result, budgetMeta: null, costMeta: null}`   |
+| SP10B throws `TreeBudgetExceededError`            | `TreeBudgetExceededError`                                                                         | No — propagated raw                                          |
+| SP10B throws any chain error (forwarded raw)      | `PreproductionChainError`, `ConsentRevokedRefusalError`, `ZodError`, `InvariantViolationError`    | No — propagated raw                                          |
+| `budget.maxEstimatedUsd === null` (count-only)    | (no throw — cost gate skipped)                                                                    | N/A — returns `{result, budgetMeta, costMeta: null}`         |
+| `coarseCostEstimator.estimate()` throws           | Whatever the estimator throws                                                                     | No — propagated raw                                          |
+| Estimator output fails zod parse                  | `ZodError`                                                                                        | No — propagated raw                                          |
+| `validateCostAgainstBudget()` returns `ok: false` | `CostBudgetExceededError` thrown by orchestrator (carries `meta`)                                 | N/A — orchestrator throws after pure validator returns false |
+| `validateCostAgainstBudget()` returns `ok: true`  | (no throw — `{result, budgetMeta, costMeta: validation.meta}` returned)                           | N/A                                                          |
 
 **No try/catch in any SP10C source.** Same propagation rule as SP9, SP10A, SP10B. Style baseline.
 
@@ -493,11 +492,11 @@ export type RunPreproductionChainWithCostBudgetOutcome = {
 
 **Three-state matrix for the outcome wrapper:**
 
-| top-level budget       | maxEstimatedUsd | Outcome (on success path)                                  |
-| ---------------------- | --------------- | ---------------------------------------------------------- |
-| `null`                 | N/A             | `{result, budgetMeta: null, costMeta: null}`               |
-| non-null               | `null`          | `{result, budgetMeta: <SP10B meta>, costMeta: null}`       |
-| non-null               | non-null        | `{result, budgetMeta: <SP10B meta>, costMeta: <SP10C meta>}` |
+| top-level budget | maxEstimatedUsd | Outcome (on success path)                                    |
+| ---------------- | --------------- | ------------------------------------------------------------ |
+| `null`           | N/A             | `{result, budgetMeta: null, costMeta: null}`                 |
+| non-null         | `null`          | `{result, budgetMeta: <SP10B meta>, costMeta: null}`         |
+| non-null         | non-null        | `{result, budgetMeta: <SP10B meta>, costMeta: <SP10C meta>}` |
 
 **Why the wider wrapper (not refactoring SP10B's wrapper):**
 
@@ -665,9 +664,7 @@ import type { Sp10bBudgetReader } from "../budget/sp10b-budget-reader.js";
 import type { TreeShapeMeta } from "../budget/tree-shape-validator.js";
 import type { CoarseCostEstimator } from "./coarse-cost-estimator.js";
 import { CostBudgetExceededError } from "./cost-budget-exceeded-error.js";
-import {
-  validateCostAgainstBudget,
-} from "./cost-budget-validator.js";
+import { validateCostAgainstBudget } from "./cost-budget-validator.js";
 import type { CostBudgetMeta } from "@creativeagent/schemas";
 
 export type RunIdentityAwarePreproductionChainWithCostBudgetStores =
@@ -986,6 +983,7 @@ packages/schemas/src/__tests__/
 **Anti-pattern test baseline coordination with future slices:**
 
 SP10C's `sp10c-anti-patterns.test.ts` baselines against `6ddd736` (SP10B squash, current `main` HEAD at design time). Allowlist includes:
+
 - `packages/creative-pipeline/src/pcd/cost-budget/` (SP10C net-new — always allowed)
 - `packages/schemas/src/pcd-cost-budget.ts` (new schema file)
 - `packages/schemas/src/__tests__/pcd-cost-budget.test.ts` (new schema test)
@@ -1002,12 +1000,12 @@ If SP11 (synthetic-creator roster) lands before SP10C, the rebase swaps the base
 
 ## 9. Estimated work
 
-| Slice     | New source files | New schemas                                       | New tests            | Migration                  | Pinned constants added |
-| --------- | ---------------- | ------------------------------------------------- | -------------------- | -------------------------- | ---------------------- |
-| SP9       | 5                | 1 schema file (3 schemas)                         | 38 net               | 1 (6 cols, 2 indexes)      | 1 (12th)               |
-| SP10A     | 8                | 1 schema file (3 schemas)                         | ~40 net              | 1 (1 col, 0 indexes)       | 1 (13th)               |
-| SP10B     | 7                | 1 field added to existing schema                  | ~46–56               | 0 (pure orchestration)     | 1 (14th)               |
-| **SP10C** | **7**            | **1 new schema file (2 schemas) + 0 widenings**   | **~50–60 estimated** | **0 (pure orchestration)** | **1 (15th)**           |
+| Slice     | New source files | New schemas                                     | New tests            | Migration                  | Pinned constants added |
+| --------- | ---------------- | ----------------------------------------------- | -------------------- | -------------------------- | ---------------------- |
+| SP9       | 5                | 1 schema file (3 schemas)                       | 38 net               | 1 (6 cols, 2 indexes)      | 1 (12th)               |
+| SP10A     | 8                | 1 schema file (3 schemas)                       | ~40 net              | 1 (1 col, 0 indexes)       | 1 (13th)               |
+| SP10B     | 7                | 1 field added to existing schema                | ~46–56               | 0 (pure orchestration)     | 1 (14th)               |
+| **SP10C** | **7**            | **1 new schema file (2 schemas) + 0 widenings** | **~50–60 estimated** | **0 (pure orchestration)** | **1 (15th)**           |
 
 SP10C is structurally similar to SP10B (no Prisma migration, no db-package adapter) plus one new schema file. Surface area is dominated by the orchestrator (~75 LOC including the stripping closure) and the validator (~25 LOC of pure arithmetic).
 
