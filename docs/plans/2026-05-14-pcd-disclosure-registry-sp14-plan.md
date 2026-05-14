@@ -665,17 +665,21 @@ CREATE UNIQUE INDEX "DisclosureTemplate_jurisdictionCode_platform_treatmentClass
 CREATE INDEX "DisclosureTemplate_jurisdictionCode_platform_treatmentClass_e_idx" ON "DisclosureTemplate"("jurisdictionCode", "platform", "treatmentClass", "effectiveFrom");
 ```
 
-- [ ] **Step 4.4: Verify the migration SQL matches Prisma's canonical diff output**
+- [ ] **Step 4.4: Verify the migration SQL matches Prisma's canonical SP13 → SP14 diff**
+
+`--from-empty` would emit SQL for the **entire** database, not just SP14's delta. Diff the SP13 schema baseline (at `dc7b498`) against the current SP14 schema instead:
 
 ```bash
 cd /Users/jasonli/creativeagent/.worktrees/sp14
+git show dc7b498:packages/db/prisma/schema.prisma > /tmp/schema-sp13.prisma
+
 pnpm --filter @creativeagent/db exec prisma migrate diff \
-  --from-empty \
-  --to-schema-datamodel prisma/schema.prisma \
-  --script | tee /tmp/prisma-canonical.sql
+  --from-schema-datamodel /tmp/schema-sp13.prisma \
+  --to-schema-datamodel packages/db/prisma/schema.prisma \
+  --script | tee /tmp/prisma-canonical-sp14.sql
 ```
 
-Compare `/tmp/prisma-canonical.sql` against the migration SQL written above. The two should be byte-identical for the `DisclosureTemplate` CREATE TABLE + indexes. If Prisma's output uses different truncated names, **update the hand-written migration to match Prisma's exact output** — do not edit the schema. Prisma's truncation is the source of truth.
+`/tmp/prisma-canonical-sp14.sql` should be the canonical SP14 delta: one CREATE TABLE for `DisclosureTemplate` plus the unique and regular indexes — and nothing else. Compare it against the hand-written `migration.sql`. The two should be byte-identical for the `DisclosureTemplate` CREATE TABLE + indexes. If Prisma's output uses different truncated names, **update the hand-written migration to match Prisma's exact output** — do not edit the schema. Prisma's truncation is the source of truth.
 
 - [ ] **Step 4.5: Check drift (skips gracefully if no local Postgres)**
 
@@ -752,9 +756,7 @@ function makePrisma(rows: Row[]) {
   // to assert the reader never calls them (read-only enforcement).
   const prisma = {
     disclosureTemplate: { findMany, create, update, upsert, delete: deleteMethod },
-  } as unknown as Parameters<typeof PrismaDisclosureTemplateReader>[0] extends infer _
-    ? ConstructorParameters<typeof PrismaDisclosureTemplateReader>[0]
-    : never;
+  } as unknown as ConstructorParameters<typeof PrismaDisclosureTemplateReader>[0];
   return { prisma, findMany, create, update, upsert, deleteMethod };
 }
 
@@ -803,8 +805,21 @@ describe("PrismaDisclosureTemplateReader", () => {
   });
 
   it("listByTuple throws on a DB row with an invalid enum value (parse-at-the-edges)", async () => {
+    // Direct Prisma mock: findMany returns the bogus row regardless of `where`,
+    // simulating DB drift where a row's stored string is not a valid enum value.
+    // We deliberately bypass makePrisma's filter-by-where behaviour so the
+    // resolver sees the bogus row and the schema.parse throws.
     const bogus: Row = { ...row, jurisdictionCode: "XX" };
-    const { prisma } = makePrisma([bogus]);
+    const findMany = vi.fn(async () => [bogus]);
+    const prisma = {
+      disclosureTemplate: {
+        findMany,
+        create: vi.fn(),
+        update: vi.fn(),
+        upsert: vi.fn(),
+        delete: vi.fn(),
+      },
+    } as unknown as ConstructorParameters<typeof PrismaDisclosureTemplateReader>[0];
     const reader = new PrismaDisclosureTemplateReader(prisma);
     await expect(
       reader.listByTuple({ jurisdictionCode: "SG", platform: "meta", treatmentClass: "med_spa" }),
@@ -825,29 +840,6 @@ describe("PrismaDisclosureTemplateReader", () => {
     expect(deleteMethod).not.toHaveBeenCalled();
   });
 });
-```
-
-Note on the mock-bogus test: the bogus row's `jurisdictionCode: "XX"` should not match `where.jurisdictionCode: "SG"`. To actually force the parse error, adjust the mock setup for that test only:
-
-```ts
-  it("listByTuple throws on a DB row with an invalid enum value (parse-at-the-edges)", async () => {
-    const bogus: Row = { ...row, jurisdictionCode: "XX" };
-    // findMany returns the bogus row regardless of where — simulates DB drift.
-    const findMany = vi.fn(async () => [bogus]);
-    const prisma = {
-      disclosureTemplate: {
-        findMany,
-        create: vi.fn(),
-        update: vi.fn(),
-        upsert: vi.fn(),
-        delete: vi.fn(),
-      },
-    } as unknown as ConstructorParameters<typeof PrismaDisclosureTemplateReader>[0];
-    const reader = new PrismaDisclosureTemplateReader(prisma);
-    await expect(
-      reader.listByTuple({ jurisdictionCode: "SG", platform: "meta", treatmentClass: "med_spa" }),
-    ).rejects.toThrow();
-  });
 ```
 
 - [ ] **Step 5.2: Run the test — verify it fails**
@@ -1639,20 +1631,12 @@ describe("resolveDisclosure — version tiebreak", () => {
       id: "tpl-inactive-v2",
       version: 2,
       effectiveFrom: yearStart,
-      effectiveTo: yearStart, // zero-width window would fail refine; use NOW as the close instant
+      effectiveTo: new Date(NOW.getTime() - 1), // window closes 1ms before NOW
     });
-    // Recompose inactiveV2 with a window that closes before NOW
-    const inactiveV2Real = makeTemplate({
-      id: "tpl-inactive-v2",
-      version: 2,
-      effectiveFrom: yearStart,
-      effectiveTo: new Date(NOW.getTime() - 1),
-    });
-    void inactiveV2;
     const decision = resolveDisclosure({
       brief: baseBrief,
       now: NOW,
-      templates: [activeV1, inactiveV2Real],
+      templates: [activeV1, inactiveV2],
     });
     expect(decision.allowed).toBe(true);
     if (decision.allowed === true) {
@@ -2410,7 +2394,7 @@ I ran the self-review pass against the spec:
   - §9 implementation slicing preview's 16-task scaffold → matches this plan's tasks 0–16 (with Task 0 baseline added).
 - **Placeholder scan:** No "TBD"/"TODO"/"fill in"/"similar to". Every step has either runnable code or a verbatim command. The only "similar to" reference (Task 14's "for each of the 7 files") is followed by the exact code block to add.
 - **Type consistency:** `resolveDisclosure`, `ResolveDisclosureInput`, `DisclosureTemplatePayload`, `DisclosureResolutionDecision`, `PCD_DISCLOSURE_RESOLVER_VERSION`, `PLACEHOLDER_DISCLOSURE_PREFIX`, `isPlaceholderDisclosureText`, `DISCLOSURE_TEMPLATE_SEED`, `PrismaDisclosureTemplateReader.listByTuple` — names match across Task-1 schema definitions, Task-3 / Task-7 imports, and Task-15 barrel re-exports.
-- **Task 9 fix-up applied inline:** Task-10's "active v1 + inactive v2" test case had a refine-violation in an intermediate template (zero-width window); I left the original `inactiveV2` variable in place but constructed a separate `inactiveV2Real` and `void`-discarded the first, so the test compiles. Worth a subagent eye on this when implementing.
+- **Review-cycle fixes applied** (per user pre-execution review): Task 4.4 migration diff now uses SP13→SP14 schema diff (not `--from-empty` which would emit the entire DB); Task 5 mock typing simplified to `ConstructorParameters<typeof PrismaDisclosureTemplateReader>[0]` only; Task 5's invalid-enum test uses a direct `findMany` mock that bypasses where-filter so the bogus row reaches the parse step; Task 10's "active v1 + inactive v2" test no longer carries the dead `inactiveV2` variable.
 
 No regressions, no contradictions detected.
 
