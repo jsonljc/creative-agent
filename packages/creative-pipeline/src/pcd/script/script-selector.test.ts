@@ -222,6 +222,85 @@ describe("selectScript — creator-compat filter + all_filtered_by_creator branc
   });
 });
 
+describe("selectScript — version tie-break (version DESC, id ASC)", () => {
+  it("picks the highest version among 2 active creator-matched rows", () => {
+    const rows = [
+      mkRow({ id: "v1-row", vibe: "omg_look", treatmentClass: "med_spa", version: 1 }),
+      mkRow({ id: "v2-row", vibe: "omg_look", treatmentClass: "med_spa", version: 2 }),
+    ];
+    const d = selectScript({
+      brief: BRIEF_FIXTURE,
+      creatorIdentityId: "cid_synth_cheryl_sg_01",
+      now: NOW_FIXTURE,
+      templates: rows,
+    });
+    expect(d.allowed).toBe(true);
+    if (d.allowed === true) {
+      expect(d.scriptTemplateId).toBe("v2-row");
+      expect(d.scriptTemplateVersion).toBe(2);
+    }
+  });
+
+  it("picks the highest version among 3 (1/2/3)", () => {
+    const rows = [
+      mkRow({ id: "v1-row", vibe: "omg_look", treatmentClass: "med_spa", version: 1 }),
+      mkRow({ id: "v3-row", vibe: "omg_look", treatmentClass: "med_spa", version: 3 }),
+      mkRow({ id: "v2-row", vibe: "omg_look", treatmentClass: "med_spa", version: 2 }),
+    ];
+    const d = selectScript({
+      brief: BRIEF_FIXTURE,
+      creatorIdentityId: "cid_synth_cheryl_sg_01",
+      now: NOW_FIXTURE,
+      templates: rows,
+    });
+    expect(d.allowed).toBe(true);
+    if (d.allowed === true) expect(d.scriptTemplateId).toBe("v3-row");
+  });
+
+  it("picks active v1 over retired v2 (retired filtered earlier)", () => {
+    const rows = [
+      mkRow({
+        id: "active-v1",
+        vibe: "omg_look",
+        treatmentClass: "med_spa",
+        version: 1,
+        status: "active",
+      }),
+      mkRow({
+        id: "retired-v2",
+        vibe: "omg_look",
+        treatmentClass: "med_spa",
+        version: 2,
+        status: "retired",
+      }),
+    ];
+    const d = selectScript({
+      brief: BRIEF_FIXTURE,
+      creatorIdentityId: "cid_synth_cheryl_sg_01",
+      now: NOW_FIXTURE,
+      templates: rows,
+    });
+    expect(d.allowed).toBe(true);
+    if (d.allowed === true) expect(d.scriptTemplateId).toBe("active-v1");
+  });
+
+  it("breaks ties on equal version by id ASC (final tie-break)", () => {
+    const rows = [
+      mkRow({ id: "z-row", vibe: "omg_look", treatmentClass: "med_spa", version: 5 }),
+      mkRow({ id: "a-row", vibe: "omg_look", treatmentClass: "med_spa", version: 5 }),
+      mkRow({ id: "m-row", vibe: "omg_look", treatmentClass: "med_spa", version: 5 }),
+    ];
+    const d = selectScript({
+      brief: BRIEF_FIXTURE,
+      creatorIdentityId: "cid_synth_cheryl_sg_01",
+      now: NOW_FIXTURE,
+      templates: rows,
+    });
+    expect(d.allowed).toBe(true);
+    if (d.allowed === true) expect(d.scriptTemplateId).toBe("a-row");
+  });
+});
+
 // Templates available to later tasks
 export const NOW_FIXTURE = NOW;
 export const BRIEF_FIXTURE = baseBrief;

@@ -78,19 +78,22 @@ export function selectScript(input: SelectScriptInput): ScriptSelectionDecision 
     };
   }
 
-  // STUB — Task 10 adds the version tie-break. For now, return a success
-  // decision using the first creator-matched row.
-  const stub = creatorMatched[0]!;
+  // Step 3 — pick highest version; final tie-break id ASC
+  const ranked = [...creatorMatched].sort((a, b) => {
+    if (b.version !== a.version) return b.version - a.version;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
+  const winner = ranked[0]!;
   return {
     allowed: true,
     briefId: input.brief.briefId,
-    scriptTemplateId: stub.id,
+    scriptTemplateId: winner.id,
     vibe: input.brief.targetVibe,
     treatmentClass: input.brief.treatmentClass,
-    scriptTemplateVersion: stub.version,
+    scriptTemplateVersion: winner.version,
     creatorIdentityId: input.creatorIdentityId,
-    scriptText: stub.text,
+    scriptText: winner.text,
     selectorVersion: PCD_SCRIPT_SELECTOR_VERSION,
-    decisionReason: `script_selected (creator_matched=${creatorMatched.length}, three_way=${threeWayMatched.length}, picked_version=${stub.version})`,
+    decisionReason: `script_selected (creator_matched=${creatorMatched.length}, three_way=${threeWayMatched.length}, picked_version=${winner.version})`,
   };
 }
