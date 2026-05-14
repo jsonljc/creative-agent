@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  type ScriptSelectionDecision,
   ScriptSelectionDecisionSchema,
   ScriptSelectionRejectionReasonSchema,
+  type ScriptTemplatePayload,
   ScriptTemplatePayloadSchema,
   ScriptTemplateStatusSchema,
 } from "../pcd-script-template.js";
 
-const goodRow = {
+const goodRow: ScriptTemplatePayload = {
   id: "script-template-omg_look-med_spa-v1",
   vibe: "omg_look",
   treatmentClass: "med_spa",
@@ -14,7 +16,7 @@ const goodRow = {
   compatibleCreatorIdentityIds: ["cid_synth_cheryl_sg_01"],
   version: 1,
   status: "active",
-} as const;
+};
 
 describe("ScriptTemplatePayloadSchema", () => {
   it("round-trips a well-formed row", () => {
@@ -74,7 +76,7 @@ describe("ScriptSelectionRejectionReasonSchema", () => {
   });
 });
 
-const goodSuccess = {
+const goodSuccess: ScriptSelectionDecision = {
   allowed: true,
   briefId: "brief_01",
   scriptTemplateId: "script-template-omg_look-med_spa-v1",
@@ -85,9 +87,9 @@ const goodSuccess = {
   scriptText: "Hook + body + CTA.",
   selectorVersion: "pcd-script-selector@1.0.0",
   decisionReason: "script_selected (creator_matched=1, three_way=1, picked_version=1)",
-} as const;
+};
 
-const goodFailure = {
+const goodFailure: ScriptSelectionDecision = {
   allowed: false,
   briefId: "brief_01",
   reason: "no_compatible_script",
@@ -96,7 +98,7 @@ const goodFailure = {
   creatorIdentityId: "cid_synth_cheryl_sg_01",
   inspectedTemplateIds: [],
   selectorVersion: "pcd-script-selector@1.0.0",
-} as const;
+};
 
 describe("ScriptSelectionDecisionSchema", () => {
   it("round-trips the success branch", () => {
@@ -115,5 +117,12 @@ describe("ScriptSelectionDecisionSchema", () => {
   it("rejects a failure-shape missing reason", () => {
     const { reason: _drop, ...partial } = goodFailure;
     expect(() => ScriptSelectionDecisionSchema.parse(partial)).toThrow();
+  });
+
+  it("rejects success-branch decisionReason > 2000 chars", () => {
+    const bigReason = "x".repeat(2001);
+    expect(() =>
+      ScriptSelectionDecisionSchema.parse({ ...goodSuccess, decisionReason: bigReason }),
+    ).toThrow();
   });
 });
