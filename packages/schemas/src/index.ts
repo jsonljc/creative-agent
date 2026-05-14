@@ -25,3 +25,6 @@ export * from "./creator-identity-license.js";
 
 // SP13 — synthetic creator selector
 export * from "./pcd-synthetic-selector.js";
+
+// SP14 — disclosure registry
+export * from "./pcd-disclosure-template.js";
