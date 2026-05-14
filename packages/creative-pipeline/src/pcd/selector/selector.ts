@@ -33,15 +33,41 @@ export type SelectSyntheticCreatorInput = {
 export function selectSyntheticCreator(
   input: SelectSyntheticCreatorInput,
 ): SyntheticCreatorSelectionDecision {
-  // Skeleton — Tasks 4–8 fill in compatible-set, gate, ranking, decision.
-  // Until those land, every call returns no_compatible_candidates so the
-  // skeleton test in selector.test.ts passes.
+  // Step 1 — compatible-set filter (hard exact-match on brief targets).
+  const compatible = input.roster.filter((entry) => isCompatible(entry, input.brief));
+
+  if (compatible.length === 0) {
+    return {
+      allowed: false,
+      briefId: input.brief.briefId,
+      reason: "no_compatible_candidates",
+      compatibleCandidateIds: [],
+      blockedCandidateIds: [],
+      selectorVersion: PCD_SELECTOR_VERSION,
+    };
+  }
+
+  // Step 2–4 land in Tasks 5–8. Until then, treat every compatible
+  // candidate as license-blocked so the rejection branch is well-typed.
   return {
     allowed: false,
     briefId: input.brief.briefId,
-    reason: "no_compatible_candidates",
-    compatibleCandidateIds: [],
-    blockedCandidateIds: [],
+    reason: "all_blocked_by_license",
+    compatibleCandidateIds: compatible.map((e) => e.creatorIdentity.id),
+    blockedCandidateIds: compatible.map((e) => e.creatorIdentity.id),
     selectorVersion: PCD_SELECTOR_VERSION,
   };
+}
+
+function isCompatible(entry: RosterEntry, brief: CreativeBrief): boolean {
+  const s = entry.synthetic;
+  return (
+    s.status === "active" &&
+    s.treatmentClass === brief.treatmentClass &&
+    s.market === brief.market &&
+    s.vibe === brief.targetVibe &&
+    s.ethnicityFamily === brief.targetEthnicityFamily &&
+    s.ageBand === brief.targetAgeBand &&
+    s.pricePositioning === brief.pricePositioning
+  );
 }
