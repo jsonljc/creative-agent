@@ -33,10 +33,9 @@ export const DisclosureTemplatePayloadSchema = z
     effectiveTo: z.date().nullable(),
   })
   .readonly()
-  .refine(
-    (t) => t.effectiveTo === null || t.effectiveTo.getTime() > t.effectiveFrom.getTime(),
-    { message: "effectiveTo must be strictly after effectiveFrom (or null for indefinite)" },
-  );
+  .refine((t) => t.effectiveTo === null || t.effectiveTo.getTime() > t.effectiveFrom.getTime(), {
+    message: "effectiveTo must be strictly after effectiveFrom (or null for indefinite)",
+  });
 export type DisclosureTemplatePayload = z.infer<typeof DisclosureTemplatePayloadSchema>;
 
 export const DisclosureResolutionRejectionReasonSchema = z.enum([

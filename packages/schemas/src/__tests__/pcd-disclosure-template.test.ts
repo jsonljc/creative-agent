@@ -69,7 +69,7 @@ describe("DisclosureTemplatePayloadSchema", () => {
         ...validPayload,
         effectiveTo: new Date("2025-12-31T00:00:00Z"),
       }),
-    ).toThrow();
+    ).toThrow(/effectiveTo must be strictly after effectiveFrom/);
   });
 
   it("rejects version: 0", () => {
