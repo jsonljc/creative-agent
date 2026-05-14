@@ -65,27 +65,35 @@ describe("SP14 anti-patterns", () => {
     ).toBe(true);
   });
 
-  it("resolver module is pure — no clock reads, no randomness, no I/O imports", () => {
-    const src = readFileSync(RESOLVER_PATH, "utf8");
-    expect(src).not.toMatch(/Date\.now\(\)/);
-    expect(src).not.toMatch(/new\s+Date\(/);
-    expect(src).not.toMatch(/Math\.random\(/);
-    expect(src).not.toMatch(/from\s+["']@creativeagent\/db["']/);
-    expect(src).not.toMatch(/from\s+["']@prisma\/client["']/);
-    expect(src).not.toMatch(/from\s+["']inngest["']/);
-    expect(src).not.toMatch(/from\s+["']node:fs["']/);
-    expect(src).not.toMatch(/from\s+["']node:http["']/);
-    expect(src).not.toMatch(/from\s+["']node:https["']/);
-    expect(src).not.toMatch(/from\s+["']crypto["']/);
-    expect(src).not.toMatch(/from\s+["']node:crypto["']/);
-    expect(src).not.toMatch(/PrismaClient/);
+  it("non-seed disclosure sources are pure — no clock reads, no randomness, no I/O imports", () => {
+    const pureSources = [VERSION_PATH, PLACEHOLDER_PATH, RESOLVER_PATH];
+    for (const filePath of pureSources) {
+      const src = readFileSync(filePath, "utf8");
+      expect(src, `${filePath}: Date.now()`).not.toMatch(/Date\.now\(\)/);
+      expect(src, `${filePath}: new Date(`).not.toMatch(/new\s+Date\(/);
+      expect(src, `${filePath}: Math.random`).not.toMatch(/Math\.random\(/);
+      expect(src, `${filePath}: @creativeagent/db`).not.toMatch(
+        /from\s+["']@creativeagent\/db["']/,
+      );
+      expect(src, `${filePath}: @prisma/client`).not.toMatch(/from\s+["']@prisma\/client["']/);
+      expect(src, `${filePath}: inngest`).not.toMatch(/from\s+["']inngest["']/);
+      expect(src, `${filePath}: node:fs`).not.toMatch(/from\s+["']node:fs["']/);
+      expect(src, `${filePath}: node:http`).not.toMatch(/from\s+["']node:http["']/);
+      expect(src, `${filePath}: node:https`).not.toMatch(/from\s+["']node:https["']/);
+      expect(src, `${filePath}: crypto`).not.toMatch(/from\s+["']crypto["']/);
+      expect(src, `${filePath}: node:crypto`).not.toMatch(/from\s+["']node:crypto["']/);
+      expect(src, `${filePath}: PrismaClient`).not.toMatch(/PrismaClient/);
+    }
   });
 
-  it("seed file allowlists exactly one new Date(...) literal — the fixed 2026-01-01T00:00:00Z epoch", () => {
+  it("seed file allowlists exactly two new Date(...) literals — the fixed epoch + per-row clone", () => {
     const src = readFileSync(SEED_PATH, "utf8");
     const newDateOccurrences = src.match(/new\s+Date\(/g) ?? [];
-    expect(newDateOccurrences.length).toBe(1);
+    expect(newDateOccurrences.length).toBe(2);
+    // The fixed epoch declaration:
     expect(src).toMatch(/new\s+Date\("2026-01-01T00:00:00Z"\)/);
+    // The per-row clone from the epoch (prevents shared-reference mutation):
+    expect(src).toMatch(/new\s+Date\(SEED_EPOCH\.getTime\(\)\)/);
   });
 
   it("seed values contain no wildcard tokens (programmatic — id / jurisdictionCode / platform / treatmentClass / text)", () => {

@@ -72,4 +72,20 @@ describe("DISCLOSURE_TEMPLATE_SEED", () => {
       }
     }
   });
+
+  it("iteration order is deterministic: index 0 is SG/meta/med_spa, index 47 is HK/youtube_shorts/halal_wellness", () => {
+    const first = DISCLOSURE_TEMPLATE_SEED[0];
+    expect(first).toBeDefined();
+    expect(first?.jurisdictionCode).toBe("SG");
+    expect(first?.platform).toBe("meta");
+    expect(first?.treatmentClass).toBe("med_spa");
+    expect(first?.id).toBe("disclosure-template-SG-meta-med_spa-v1");
+
+    const last = DISCLOSURE_TEMPLATE_SEED[47];
+    expect(last).toBeDefined();
+    expect(last?.jurisdictionCode).toBe("HK");
+    expect(last?.platform).toBe("youtube_shorts");
+    expect(last?.treatmentClass).toBe("halal_wellness");
+    expect(last?.id).toBe("disclosure-template-HK-youtube_shorts-halal_wellness-v1");
+  });
 });

@@ -1,6 +1,7 @@
 // PCD slice SP14 — read surface for DisclosureTemplate.
-// Reader-only by design. Writer interface deliberately deferred. Future
-// legal-authoring CLI/admin tool should ship explicit
+//
+// MERGE-BACK: Reader-only by design. Writer interface deliberately deferred.
+// Future legal-authoring CLI/admin tool should ship explicit
 // createTemplateVersion(payload) and supersedeTemplateVersion(id, supersededAt)
 // operations — NOT a generic upsert. Generic upsert is the wrong semantics
 // for regulated copy: it normalises overwriting legal-approved rows.

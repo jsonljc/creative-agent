@@ -32,7 +32,7 @@ function buildRow(
     treatmentClass,
     version: 1,
     text: `${PLACEHOLDER_DISCLOSURE_PREFIX} ${tag}]`,
-    effectiveFrom: SEED_EPOCH,
+    effectiveFrom: new Date(SEED_EPOCH.getTime()),
     effectiveTo: null,
   };
 }
