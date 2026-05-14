@@ -97,9 +97,7 @@ export function selectSyntheticCreator(
     selectorRank: 0,
     metricsSnapshotVersion: null,
     performanceOverlayApplied: false,
-    decisionReason: `primary_compatible (${ranked.length} survivor${
-      ranked.length === 1 ? "" : "s"
-    }, ${blockedCandidates.length} license-blocked)`,
+    decisionReason: buildDecisionReason(input.brief, ranked.length, blockedCandidates.length),
   };
 }
 
@@ -163,4 +161,27 @@ function compareCandidates(a: AllowedCandidate, b: AllowedCandidate): number {
   const cidA = a.entry.creatorIdentity.id;
   const cidB = b.entry.creatorIdentity.id;
   return cidA < cidB ? -1 : cidA > cidB ? 1 : 0;
+}
+
+// Schema caps decisionReason at 2000 chars. Bound the hardConstraints echo
+// defensively so a pathological brief (many or long constraint strings)
+// can never produce a runtime value that fails schema parse downstream.
+const DECISION_REASON_MAX = 2000;
+
+function buildDecisionReason(
+  brief: CreativeBrief,
+  survivorCount: number,
+  blockedCount: number,
+): string {
+  const survivorWord = survivorCount === 1 ? "survivor" : "survivors";
+  const base = `primary_compatible (${survivorCount} ${survivorWord}, ${blockedCount} license-blocked)`;
+  if (brief.hardConstraints.length === 0) return base;
+  // hardConstraints are opaque strings; echo for forensics but never filter.
+  const echoed = `${base} hardConstraints=${JSON.stringify(brief.hardConstraints)}`;
+  if (echoed.length <= DECISION_REASON_MAX) return echoed;
+  // Truncate the echo (not the base) and append an explicit marker so the
+  // forensic reader sees that data was elided rather than missing.
+  const room = DECISION_REASON_MAX - base.length - " hardConstraints=…(truncated)".length;
+  if (room <= 0) return base;
+  return `${base} hardConstraints=${JSON.stringify(brief.hardConstraints).slice(0, room)}…(truncated)`;
 }

@@ -456,3 +456,47 @@ describe("selectSyntheticCreator — ranking + tie-break", () => {
     }
   });
 });
+
+describe("selectSyntheticCreator — decisionReason builder", () => {
+  it("includes survivor and blocked counts", () => {
+    const decision = selectSyntheticCreator({
+      brief: briefForCheryl,
+      now: NOW_FIXTURE,
+      roster: cherylRoster,
+      leases: [makeLease({ id: "lic_one" })],
+    });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed === true) {
+      expect(decision.decisionReason).toMatch(/1 survivor/);
+      expect(decision.decisionReason).toMatch(/0 license-blocked/);
+    }
+  });
+
+  it("echoes brief.hardConstraints into decisionReason when non-empty", () => {
+    const decision = selectSyntheticCreator({
+      brief: { ...briefForCheryl, hardConstraints: ["no_pregnancy", "halal_only"] as const },
+      now: NOW_FIXTURE,
+      roster: cherylRoster,
+      leases: [makeLease({ id: "lic_one" })],
+    });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed === true) {
+      expect(decision.decisionReason).toContain("hardConstraints=");
+      expect(decision.decisionReason).toContain("no_pregnancy");
+      expect(decision.decisionReason).toContain("halal_only");
+    }
+  });
+
+  it("omits the hardConstraints= prefix when the brief has none", () => {
+    const decision = selectSyntheticCreator({
+      brief: { ...briefForCheryl, hardConstraints: [] as const },
+      now: NOW_FIXTURE,
+      roster: cherylRoster,
+      leases: [makeLease({ id: "lic_one" })],
+    });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed === true) {
+      expect(decision.decisionReason).not.toContain("hardConstraints=");
+    }
+  });
+});
