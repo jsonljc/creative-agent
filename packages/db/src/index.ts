@@ -46,3 +46,4 @@ export {
   type LicenseInputWithOptionalWindow,
 } from "./stores/prisma-creator-identity-license-store.js";
 export { PrismaCreatorIdentityLicenseReader } from "./stores/prisma-creator-identity-license-reader.js";
+export { PrismaDisclosureTemplateReader } from "./stores/prisma-disclosure-template-reader.js";

@@ -191,3 +191,6 @@ export * from "./pcd/cost-budget/index.js";
 
 // SP13 — synthetic creator selector
 export * from "./pcd/selector/index.js";
+
+// SP14 — disclosure registry
+export * from "./pcd/disclosure/index.js";
