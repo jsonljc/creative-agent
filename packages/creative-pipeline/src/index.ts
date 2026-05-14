@@ -188,3 +188,6 @@ export * from "./pcd/budget/index.js";
 
 // SP10C — cost-budget enforcement
 export * from "./pcd/cost-budget/index.js";
+
+// SP13 — synthetic creator selector
+export * from "./pcd/selector/index.js";

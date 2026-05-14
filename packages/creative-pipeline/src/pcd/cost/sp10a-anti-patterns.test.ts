@@ -202,6 +202,10 @@ describe("SP10A anti-pattern grep", () => {
       // SP10C net-new files are out of scope (necessary maintenance — same
       // precedent as pcd/budget/ allowlist added by SP10B).
       if (file.startsWith("packages/creative-pipeline/src/pcd/cost-budget/")) continue;
+      // SP13 net-new selector subdir is out of scope (necessary maintenance —
+      // SP10A test was written before SP13 territory existed; same precedent
+      // as pcd/cost/, pcd/budget/, pcd/cost-budget/ allowlist additions).
+      if (file.startsWith("packages/creative-pipeline/src/pcd/selector/")) continue;
       // SP10B widened pcd-preproduction.ts and its schema test in lock-step
       // with the schema. Allow as out-of-scope edits; SP10B's own freeze
       // test (Task 9) is the authoritative gate for SP10B-era changes.
@@ -211,6 +215,10 @@ describe("SP10A anti-pattern grep", () => {
       // out-of-scope; SP10C's own freeze test is the authoritative gate.
       if (file === "packages/schemas/src/pcd-cost-budget.ts") continue;
       if (file === "packages/schemas/src/__tests__/pcd-cost-budget.test.ts") continue;
+      // SP13 widened schemas with pcd-synthetic-selector.ts. Allow as
+      // out-of-scope; SP13's own freeze test is the authoritative gate.
+      if (file === "packages/schemas/src/pcd-synthetic-selector.ts") continue;
+      if (file === "packages/schemas/src/__tests__/pcd-synthetic-selector.test.ts") continue;
       if (file.startsWith("packages/db/prisma/migrations/")) continue;
       if (file.endsWith(".prisma")) continue;
       if (file.startsWith("docs/")) continue;
