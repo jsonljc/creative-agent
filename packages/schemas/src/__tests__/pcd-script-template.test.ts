@@ -66,9 +66,7 @@ describe("ScriptTemplateStatusSchema", () => {
 
 describe("ScriptSelectionRejectionReasonSchema", () => {
   it('accepts both reasons; rejects "other"', () => {
-    expect(() =>
-      ScriptSelectionRejectionReasonSchema.parse("no_compatible_script"),
-    ).not.toThrow();
+    expect(() => ScriptSelectionRejectionReasonSchema.parse("no_compatible_script")).not.toThrow();
     expect(() =>
       ScriptSelectionRejectionReasonSchema.parse("all_filtered_by_creator"),
     ).not.toThrow();

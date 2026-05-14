@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  isPlaceholderScriptText,
-  PLACEHOLDER_SCRIPT_PREFIX,
-} from "./script-placeholder.js";
+import { isPlaceholderScriptText, PLACEHOLDER_SCRIPT_PREFIX } from "./script-placeholder.js";
 
 describe("PLACEHOLDER_SCRIPT_PREFIX", () => {
   it('is the literal "[SCRIPT_PENDING_CREATIVE_REVIEW:"', () => {

@@ -218,7 +218,10 @@ describe("SP14 anti-patterns", () => {
       if (file === "packages/schemas/src/__tests__/pcd-script-template.test.ts") continue;
       if (file === "packages/db/src/stores/prisma-script-template-reader.ts") continue;
       if (file === "packages/db/src/stores/prisma-script-template-reader.test.ts") continue;
-      if (file === "packages/db/prisma/migrations/20260514160000_pcd_script_template_sp15/migration.sql")
+      if (
+        file ===
+        "packages/db/prisma/migrations/20260514160000_pcd_script_template_sp15/migration.sql"
+      )
         continue;
 
       expect(allowedEdits.has(file), `SP14 modified disallowed file: ${file}`).toBe(true);

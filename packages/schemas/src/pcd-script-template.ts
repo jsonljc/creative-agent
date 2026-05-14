@@ -37,9 +37,7 @@ export const ScriptSelectionRejectionReasonSchema = z.enum([
   "no_compatible_script",
   "all_filtered_by_creator",
 ]);
-export type ScriptSelectionRejectionReason = z.infer<
-  typeof ScriptSelectionRejectionReasonSchema
->;
+export type ScriptSelectionRejectionReason = z.infer<typeof ScriptSelectionRejectionReasonSchema>;
 
 // NB: `z.union` not `z.discriminatedUnion`. Zod 3.x's discriminatedUnion
 // factory does not see literal discriminators on branches wrapped in

@@ -49,9 +49,7 @@ describe("SP15 anti-patterns", () => {
       `expected exactly one non-test source to contain the literal; got: ${[...uniquePaths].join(", ")}`,
     ).toBe(1);
     expect(
-      uniquePaths.has(
-        "packages/creative-pipeline/src/pcd/script/script-selector-version.ts",
-      ),
+      uniquePaths.has("packages/creative-pipeline/src/pcd/script/script-selector-version.ts"),
     ).toBe(true);
   });
 
@@ -63,9 +61,9 @@ describe("SP15 anti-patterns", () => {
       uniquePaths.size,
       `expected exactly one non-test source to contain the literal; got: ${[...uniquePaths].join(", ")}`,
     ).toBe(1);
-    expect(
-      uniquePaths.has("packages/creative-pipeline/src/pcd/script/script-placeholder.ts"),
-    ).toBe(true);
+    expect(uniquePaths.has("packages/creative-pipeline/src/pcd/script/script-placeholder.ts")).toBe(
+      true,
+    );
   });
 
   it("non-test pcd/script sources are pure — no clock reads, no randomness, no I/O imports", () => {
@@ -99,9 +97,10 @@ describe("SP15 anti-patterns", () => {
         expect(value, `wildcard token in seed ${field}: ${value}`).not.toMatch(WILDCARDS);
       }
       for (const cid of r.compatibleCreatorIdentityIds) {
-        expect(cid, `wildcard token in seed compatibleCreatorIdentityIds entry: ${cid}`).not.toMatch(
-          WILDCARDS,
-        );
+        expect(
+          cid,
+          `wildcard token in seed compatibleCreatorIdentityIds entry: ${cid}`,
+        ).not.toMatch(WILDCARDS);
         // Reinforces the zod refine; defense in depth at the seed value layer.
         expect(cid).not.toBe("*");
       }
@@ -202,27 +201,18 @@ describe("SP15 anti-patterns", () => {
       if (file.startsWith("packages/creative-pipeline/src/pcd/script/")) continue;
       if (file.startsWith("docs/")) continue;
       // Allowlist additions to prior SP anti-pattern tests (Task 14)
-      if (
-        file === "packages/creative-pipeline/src/pcd/provenance/sp9-anti-patterns.test.ts"
-      )
+      if (file === "packages/creative-pipeline/src/pcd/provenance/sp9-anti-patterns.test.ts")
         continue;
-      if (file === "packages/creative-pipeline/src/pcd/cost/sp10a-anti-patterns.test.ts")
-        continue;
+      if (file === "packages/creative-pipeline/src/pcd/cost/sp10a-anti-patterns.test.ts") continue;
       if (file === "packages/creative-pipeline/src/pcd/budget/sp10b-anti-patterns.test.ts")
         continue;
-      if (
-        file === "packages/creative-pipeline/src/pcd/cost-budget/sp10c-anti-patterns.test.ts"
-      )
+      if (file === "packages/creative-pipeline/src/pcd/cost-budget/sp10c-anti-patterns.test.ts")
         continue;
       if (file === "packages/creative-pipeline/src/pcd/sp11-anti-patterns.test.ts") continue;
       if (file === "packages/creative-pipeline/src/pcd/sp12-anti-patterns.test.ts") continue;
-      if (
-        file === "packages/creative-pipeline/src/pcd/selector/sp13-anti-patterns.test.ts"
-      )
+      if (file === "packages/creative-pipeline/src/pcd/selector/sp13-anti-patterns.test.ts")
         continue;
-      if (
-        file === "packages/creative-pipeline/src/pcd/disclosure/sp14-anti-patterns.test.ts"
-      )
+      if (file === "packages/creative-pipeline/src/pcd/disclosure/sp14-anti-patterns.test.ts")
         continue;
       expect(
         allowedEdits.has(file),

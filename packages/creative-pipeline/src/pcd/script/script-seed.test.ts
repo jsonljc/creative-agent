@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ScriptTemplatePayloadSchema } from "@creativeagent/schemas";
-import {
-  SP11_ROSTER_SIZE,
-  SP11_SYNTHETIC_CREATOR_ROSTER,
-} from "../synthetic-creator/seed.js";
+import { SP11_ROSTER_SIZE, SP11_SYNTHETIC_CREATOR_ROSTER } from "../synthetic-creator/seed.js";
 import { isPlaceholderScriptText, PLACEHOLDER_SCRIPT_PREFIX } from "./script-placeholder.js";
 import { SCRIPT_TEMPLATE_SEED } from "./script-seed.js";
 
