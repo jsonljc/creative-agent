@@ -124,6 +124,104 @@ describe("selectScript — 3-way prefilter (vibe + treatment + status='active')"
   });
 });
 
+describe("selectScript — creator-compat filter + all_filtered_by_creator branch", () => {
+  it("returns all_filtered_by_creator when 3-way matches exist but none list this creator", () => {
+    const row = mkRow({
+      id: "script-template-omg_look-med_spa-v1",
+      vibe: "omg_look",
+      treatmentClass: "med_spa",
+      compatibleCreatorIdentityIds: ["cid_synth_vivienne_sg_02"],
+    });
+    const d = selectScript({
+      brief: BRIEF_FIXTURE,
+      creatorIdentityId: "cid_synth_cheryl_sg_01",
+      now: NOW_FIXTURE,
+      templates: [row],
+    });
+    expect(d.allowed).toBe(false);
+    if (d.allowed === false) {
+      expect(d.reason).toBe("all_filtered_by_creator");
+      expect(d.inspectedTemplateIds).toEqual(["script-template-omg_look-med_spa-v1"]);
+      expect(d.creatorIdentityId).toBe("cid_synth_cheryl_sg_01");
+    }
+  });
+
+  it("succeeds when the creator IS in compatibleCreatorIdentityIds", () => {
+    const row = mkRow({
+      id: "script-template-omg_look-med_spa-v1",
+      vibe: "omg_look",
+      treatmentClass: "med_spa",
+      compatibleCreatorIdentityIds: ["cid_synth_cheryl_sg_01", "cid_synth_vivienne_sg_02"],
+    });
+    const d = selectScript({
+      brief: BRIEF_FIXTURE,
+      creatorIdentityId: "cid_synth_cheryl_sg_01",
+      now: NOW_FIXTURE,
+      templates: [row],
+    });
+    expect(d.allowed).toBe(true);
+  });
+
+  it("inspectedTemplateIds on all_filtered_by_creator is sorted id ASC", () => {
+    const rows = [
+      mkRow({
+        id: "c-row",
+        vibe: "omg_look",
+        treatmentClass: "med_spa",
+        compatibleCreatorIdentityIds: ["cid_synth_vivienne_sg_02"],
+      }),
+      mkRow({
+        id: "a-row",
+        vibe: "omg_look",
+        treatmentClass: "med_spa",
+        compatibleCreatorIdentityIds: ["cid_synth_vivienne_sg_02"],
+      }),
+      mkRow({
+        id: "b-row",
+        vibe: "omg_look",
+        treatmentClass: "med_spa",
+        compatibleCreatorIdentityIds: ["cid_synth_vivienne_sg_02"],
+      }),
+    ];
+    const d = selectScript({
+      brief: BRIEF_FIXTURE,
+      creatorIdentityId: "cid_synth_cheryl_sg_01",
+      now: NOW_FIXTURE,
+      templates: rows,
+    });
+    expect(d.allowed).toBe(false);
+    if (d.allowed === false) {
+      expect(d.inspectedTemplateIds).toEqual(["a-row", "b-row", "c-row"]);
+    }
+  });
+
+  it("inspectedTemplateIds does NOT include retired rows (retired filtered out before creator check)", () => {
+    const retired = mkRow({
+      id: "retired-row",
+      vibe: "omg_look",
+      treatmentClass: "med_spa",
+      status: "retired",
+      compatibleCreatorIdentityIds: ["cid_synth_vivienne_sg_02"],
+    });
+    const active = mkRow({
+      id: "active-row",
+      vibe: "omg_look",
+      treatmentClass: "med_spa",
+      compatibleCreatorIdentityIds: ["cid_synth_vivienne_sg_02"],
+    });
+    const d = selectScript({
+      brief: BRIEF_FIXTURE,
+      creatorIdentityId: "cid_synth_cheryl_sg_01",
+      now: NOW_FIXTURE,
+      templates: [retired, active],
+    });
+    expect(d.allowed).toBe(false);
+    if (d.allowed === false) {
+      expect(d.inspectedTemplateIds).toEqual(["active-row"]);
+    }
+  });
+});
+
 // Templates available to later tasks
 export const NOW_FIXTURE = NOW;
 export const BRIEF_FIXTURE = baseBrief;

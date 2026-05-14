@@ -58,9 +58,29 @@ export function selectScript(input: SelectScriptInput): ScriptSelectionDecision 
     };
   }
 
-  // STUB — Task 9 adds the creator-compat filter; Task 10 adds the tie-break.
-  // For now, return a success decision using the first 3-way-matched row.
-  const stub = threeWayMatched[0]!;
+  // Step 2 — creator-compat filter
+  const creatorMatched = threeWayMatched.filter((t) =>
+    t.compatibleCreatorIdentityIds.includes(input.creatorIdentityId),
+  );
+  if (creatorMatched.length === 0) {
+    const inspectedTemplateIds = threeWayMatched
+      .map((t) => t.id)
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    return {
+      allowed: false,
+      briefId: input.brief.briefId,
+      reason: "all_filtered_by_creator",
+      vibe: input.brief.targetVibe,
+      treatmentClass: input.brief.treatmentClass,
+      creatorIdentityId: input.creatorIdentityId,
+      inspectedTemplateIds,
+      selectorVersion: PCD_SCRIPT_SELECTOR_VERSION,
+    };
+  }
+
+  // STUB — Task 10 adds the version tie-break. For now, return a success
+  // decision using the first creator-matched row.
+  const stub = creatorMatched[0]!;
   return {
     allowed: true,
     briefId: input.brief.briefId,
@@ -71,6 +91,6 @@ export function selectScript(input: SelectScriptInput): ScriptSelectionDecision 
     creatorIdentityId: input.creatorIdentityId,
     scriptText: stub.text,
     selectorVersion: PCD_SCRIPT_SELECTOR_VERSION,
-    decisionReason: `script_selected (three_way=${threeWayMatched.length}, picked_version=${stub.version})`,
+    decisionReason: `script_selected (creator_matched=${creatorMatched.length}, three_way=${threeWayMatched.length}, picked_version=${stub.version})`,
   };
 }
