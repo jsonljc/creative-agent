@@ -114,6 +114,24 @@ describe("SP9 anti-pattern grep", () => {
       "packages/creative-pipeline/src/index.ts",
       "packages/schemas/src/pcd-preproduction.ts",
       "packages/schemas/src/index.ts",
+      // SP11 net-new schema files (synthetic creator roster foundation)
+      "packages/schemas/src/creative-brief.ts",
+      "packages/schemas/src/__tests__/creative-brief.test.ts",
+      "packages/schemas/src/creator-identity-synthetic.ts",
+      "packages/schemas/src/__tests__/creator-identity-synthetic.test.ts",
+      // SP11 net-new db store files (synthetic creator roster Task 5)
+      "packages/db/src/stores/prisma-creator-identity-synthetic-store.ts",
+      "packages/db/src/stores/__tests__/prisma-creator-identity-synthetic-store.test.ts",
+      "packages/db/src/stores/prisma-creator-identity-synthetic-reader.ts",
+      "packages/db/src/stores/__tests__/prisma-creator-identity-synthetic-reader.test.ts",
+      // SP11 db barrel re-export (Task 6)
+      "packages/db/src/index.ts",
+      // SP11 synthetic creator seed roster (Task 7)
+      "packages/creative-pipeline/src/pcd/synthetic-creator/seed.ts",
+      "packages/creative-pipeline/src/pcd/synthetic-creator/seed.test.ts",
+      "packages/creative-pipeline/src/pcd/synthetic-creator/index.ts",
+      // SP11 anti-pattern grep tests (Task 8)
+      "packages/creative-pipeline/src/pcd/sp11-anti-patterns.test.ts",
     ]);
 
     let sp8Sha = "";

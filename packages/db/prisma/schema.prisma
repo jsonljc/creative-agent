@@ -12,6 +12,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum CreatorIdentityKind {
+  real
+  synthetic
+}
+
 // ── Creative job (PCD-relevant subset of Switchboard's CreativeJob) ──
 model CreativeJob {
   id              String   @id @default(cuid())
@@ -93,6 +98,10 @@ model CreatorIdentity {
   previousVersionId   String?
 
   qualityTier         String?
+  // SP11 — synthetic creator support. Default "real" preserves all
+  // existing rows; synthetic rows pair one-to-one with CreatorIdentitySynthetic.
+  kind                CreatorIdentityKind @default(real)
+  syntheticProfile    CreatorIdentitySynthetic?
   consentRecordId     String?
   consentRecord       ConsentRecord? @relation(fields: [consentRecordId], references: [id])
   identityAdapter     Json?
@@ -107,6 +116,34 @@ model CreatorIdentity {
   @@index([deploymentId])
   @@index([qualityTier])
   @@index([consentRecordId])
+}
+
+// ── PCD slice SP11 — synthetic creator extension table ──
+model CreatorIdentitySynthetic {
+  creatorIdentityId         String          @id
+  creatorIdentity           CreatorIdentity @relation(fields: [creatorIdentityId], references: [id], onDelete: Cascade)
+
+  treatmentClass            String
+  vibe                      String
+  market                    String
+  ethnicityFamily           String
+  ageBand                   String
+  pricePositioning          String
+
+  physicalDescriptors       Json
+  dallePromptLocked         String
+  klingDirection            Json
+  voiceCaptionStyle         Json
+
+  mutuallyExclusiveWithIds  String[]        @default([])
+  status                    String          @default("active")
+
+  createdAt                 DateTime        @default(now())
+  updatedAt                 DateTime        @updatedAt
+
+  @@index([treatmentClass, market])
+  @@index([vibe])
+  @@index([status])
 }
 
 model AssetRecord {

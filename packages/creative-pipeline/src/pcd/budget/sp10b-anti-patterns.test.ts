@@ -145,6 +145,18 @@ describe("SP10B anti-pattern grep", () => {
       // widened the SP9 anti-pattern test to allowlist pcd/cost/.
       "packages/creative-pipeline/src/pcd/provenance/sp9-anti-patterns.test.ts",
       "packages/creative-pipeline/src/pcd/cost/sp10a-anti-patterns.test.ts",
+      // SP11 net-new schema + db files (synthetic creator foundation)
+      "packages/schemas/src/index.ts",
+      "packages/schemas/src/creator-identity-synthetic.ts",
+      "packages/schemas/src/__tests__/creator-identity-synthetic.test.ts",
+      "packages/schemas/src/creative-brief.ts",
+      "packages/schemas/src/__tests__/creative-brief.test.ts",
+      "packages/db/src/stores/prisma-creator-identity-synthetic-store.ts",
+      "packages/db/src/stores/__tests__/prisma-creator-identity-synthetic-store.test.ts",
+      "packages/db/src/stores/prisma-creator-identity-synthetic-reader.ts",
+      "packages/db/src/stores/__tests__/prisma-creator-identity-synthetic-reader.test.ts",
+      "packages/db/src/index.ts",
+      "packages/db/prisma/schema.prisma",
     ]);
 
     let sp10aSha = "";
@@ -173,6 +185,11 @@ describe("SP10B anti-pattern grep", () => {
       // SP10B net-new files are out of scope.
       if (file.startsWith("packages/creative-pipeline/src/pcd/budget/")) continue;
       if (file.startsWith("docs/")) continue;
+      // SP11 net-new subdir + migration are out of scope (same precedent as SP10B
+      // allowlisting pcd/cost/ in SP9's test).
+      if (file.startsWith("packages/creative-pipeline/src/pcd/synthetic-creator/")) continue;
+      if (file === "packages/creative-pipeline/src/pcd/sp11-anti-patterns.test.ts") continue;
+      if (file.startsWith("packages/db/prisma/migrations/")) continue;
       if (allowedEdits.has(file)) continue;
 
       expect(allowedEdits.has(file), `SP10B modified disallowed file: ${file}`).toBe(true);

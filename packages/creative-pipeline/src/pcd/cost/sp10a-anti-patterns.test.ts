@@ -158,6 +158,16 @@ describe("SP10A anti-pattern grep", () => {
       // SP9 anti-pattern test was widened in this slice to allow pcd/cost/ as
       // out-of-scope for the SP1-SP8 freeze guard. Allowlisted here.
       "packages/creative-pipeline/src/pcd/provenance/sp9-anti-patterns.test.ts",
+      // SP11 net-new schema + db files (synthetic creator foundation)
+      "packages/schemas/src/creator-identity-synthetic.ts",
+      "packages/schemas/src/__tests__/creator-identity-synthetic.test.ts",
+      "packages/schemas/src/creative-brief.ts",
+      "packages/schemas/src/__tests__/creative-brief.test.ts",
+      "packages/db/src/stores/prisma-creator-identity-synthetic-store.ts",
+      "packages/db/src/stores/__tests__/prisma-creator-identity-synthetic-store.test.ts",
+      "packages/db/src/stores/prisma-creator-identity-synthetic-reader.ts",
+      "packages/db/src/stores/__tests__/prisma-creator-identity-synthetic-reader.test.ts",
+      "packages/db/src/index.ts",
     ]);
 
     let sp9Sha = "";
@@ -197,6 +207,9 @@ describe("SP10A anti-pattern grep", () => {
       if (file.startsWith("packages/db/prisma/migrations/")) continue;
       if (file.endsWith(".prisma")) continue;
       if (file.startsWith("docs/")) continue;
+      // SP11 net-new subdir is out of scope (same pattern as SP10B).
+      if (file.startsWith("packages/creative-pipeline/src/pcd/synthetic-creator/")) continue;
+      if (file === "packages/creative-pipeline/src/pcd/sp11-anti-patterns.test.ts") continue;
       if (allowedEdits.has(file)) continue;
 
       expect(allowedEdits.has(file), `SP10A modified disallowed file: ${file}`).toBe(true);
