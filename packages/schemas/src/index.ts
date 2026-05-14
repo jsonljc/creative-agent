@@ -28,3 +28,6 @@ export * from "./pcd-synthetic-selector.js";
 
 // SP14 — disclosure registry
 export * from "./pcd-disclosure-template.js";
+
+// SP15 — script templates
+export * from "./pcd-script-template.js";
