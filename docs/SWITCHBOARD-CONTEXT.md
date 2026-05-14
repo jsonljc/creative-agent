@@ -160,6 +160,68 @@ Nothing to stub — entire SP2 lives in `packages/creative-pipeline/src/pcd/tier
 - SP9 introduces NO circular dependency. `pcd/provenance/` imports from `pcd/preproduction/` (chain output types, chain-version constant) and from `pcd/` top-level (SP4 writer types, SP6 pre-check). Reverse direction does not exist; `sp9-anti-patterns.test.ts` enforces the source-freeze.
 - The SP4 writer body (`writePcdIdentitySnapshot`) is untouched. SP9 added a parallel orchestrator (`writePcdIdentitySnapshotWithProvenance`) that duplicates SP4's invariant-assert + Zod-parse + version-pin logic and calls the new SP9 store method. Anti-pattern test enforces SP4/SP9 invariant logic stays in lock-step (both files import the same four version constants and call `assertTier3RoutingDecisionCompliant` with the same six-argument shape).
 
+### SP10A (cost-forecast wiring) — SHIPPED in creativeagent
+
+**SP10A-declared merge-back surfaces (production wiring at merge-back):**
+
+- `CostEstimator` injection — Switchboard ad-optimizer team owns the production `CostEstimator` implementer. Real estimator reads FX rates, volume tiers, contract pricing. SP10A ships only the contract + a deterministic `StubCostEstimator`. `// MERGE-BACK: replace with Switchboard cost estimator` marker on the stub class declaration.
+- `adaptPcdSp10IdentitySnapshotStore(prismaStore)` ships in `packages/db/src/stores/prisma-pcd-identity-snapshot-store.ts` and returns the SP10A contract shape. Wire as:
+  ```ts
+  writePcdIdentitySnapshotWithCostForecast(input, {
+    pcdSp10IdentitySnapshotStore: adaptPcdSp10IdentitySnapshotStore(prismaStore),
+    costEstimator: switchboardCostEstimator,
+    creatorIdentityReader,
+    consentRecordReader,
+    clock,
+  });
+  ```
+- `WorkTrace` emit — every SP10A state transition carries a `// MERGE-BACK: emit WorkTrace here` marker. Two markers in `stamp-pcd-cost-forecast.ts` (after estimator return, after assembly), one in `write-pcd-identity-snapshot-with-cost-forecast.ts` (orchestrator pre-persist).
+- Production runner discipline — at merge-back, all production callsites should call `writePcdIdentitySnapshotWithCostForecast` to get cost observability. Legacy SP4 `writePcdIdentitySnapshot` and SP9 `writePcdIdentitySnapshotWithProvenance` callsites remain valid for tests + ad-hoc backfills but write `costForecastReason = null`.
+- `fanoutDecisionId` convention — still caller-supplied, inherited from SP9. Same `// MERGE-BACK: pick fanoutDecisionId convention` marker. SP10A does not lock this.
+- Gate-time `PcdProductionFanoutDecision.costForecast` stays `null` in SP10A. Slot remains reserved for a future slice with a coarse pre-routing estimator variant.
+
+**Schema reconciliation at merge-back:**
+
+- `PcdIdentitySnapshot.costForecastReason` — one new column added by SP10A migration `20260430130000_pcd_identity_snapshot_sp10a_cost_forecast`. If Switchboard `main` has not added an equivalent independently, the SP10A migration applies cleanly. If Switchboard added a same-semantic column with a different name, reconcile by renaming SP10A's column in the migration before merge-back.
+- No FK constraints. The cost record is a self-contained Json struct.
+- No flat numeric column on `PcdIdentitySnapshot`. Merge-back analytics may add `estimatedUsdCents Int?` + `(scriptId, estimatedUsdCents)` index; deferred per design §0 risk #9.
+
+**Architectural seams the merge-back does NOT need to rewrite:**
+
+- The SP10A stamper + orchestrator are pure store-injected. No production wiring inside `packages/creative-pipeline/src/pcd/cost/` changes at merge-back — only the injected estimator + readers swap (Prisma-backed via `adaptPcdSp10IdentitySnapshotStore`, real cost estimator via Switchboard ad-optimizer) and the `// MERGE-BACK:` markers get implementations.
+- `PCD_COST_FORECAST_VERSION` is the 13th pinned constant. The PCD slice carries 13 total pinned constants after SP10A.
+- SP10A introduces NO circular dependency. `pcd/cost/` imports from `pcd/provenance/` (SP9 stamper) and from `pcd/` top-level (SP4 invariant + writer types). SP6 reader contracts (`creatorIdentityReader`, `consentRecordReader`) reach the orchestrator transitively via the SP9 stamper's store contract — never via a direct import. Reverse direction does not exist; `sp10a-anti-patterns.test.ts` enforces the source-freeze.
+- The SP9 orchestrator body (`writePcdIdentitySnapshotWithProvenance`) is untouched. SP10A added a parallel orchestrator (`writePcdIdentitySnapshotWithCostForecast`) that COMPOSES SP9's pure stamper (`stampPcdProvenance`) and adds SP10A cost stamping. Anti-pattern test enforces SP4/SP9/SP10A invariant logic stays in 3-way lock-step.
+- SP10A is observability-only. Tree-budget enforcement is reserved for SP10B (separate squash, separate version pin `PCD_TREE_BUDGET_VERSION`).
+
+### SP10B (tree-budget enforcement) — SHIPPED in creativeagent
+
+**SP10B-declared merge-back surfaces (production wiring at merge-back):**
+
+- **`Sp10bBudgetReader` injection** — Switchboard owns the production budget reader. Real reader fetches per-organization defaults with brief-level override from a Switchboard-side `OrganizationBudget` table. SP10B ships only the contract + a deterministic stub (`StaticDefaultBudgetReader`). `// MERGE-BACK: replace with Switchboard org-budget reader` marker on stub class declaration.
+- **`WorkTrace` emit** — every SP10B state transition carries a `// MERGE-BACK: emit WorkTrace here` marker. Three markers in `run-identity-aware-preproduction-chain-with-budget.ts`: budget resolved (value or null), budget gate passed, budget gate violated. WorkTrace payload should include `budgetMeta` on success and `meta` + `violations` on failure (both shapes are stable per SP10B).
+- **Production runner discipline** — at merge-back, all production callsites should call `runIdentityAwarePreproductionChainWithBudget` to get budget enforcement. Legacy SP7 `runIdentityAwarePreproductionChain` callsites remain valid for tests + ad-hoc uses but bypass the gate.
+- **Dashboard UX for `TreeBudgetExceededError`** — operator-facing surface for retrying with a raised budget. SP10B emits the structured error context (`reason`, `budget`, `violations`, full `meta` with `perStageCounts` + `fanoutLevels`) sufficient for a dashboard form.
+- **Outcome-wrapper consumption at merge-back** — production runners must destructure the SP10B return: `const { result, budgetMeta } = await runIdentityAwarePreproductionChainWithBudget(...)`. The `budgetMeta` field can populate analytics dashboards directly (per-stage counts, top fanout parents) without re-walking the tree. `budgetMeta === null` means "ran in gated-bypass mode" (org has no budget configured); analytics queries should filter on this to compute opt-in rate.
+- **`OrganizationBudget` Prisma table** — Switchboard owns the schema. SP10B does not constrain shape; reader contract is the only PCD-vertical commitment.
+
+**Schema reconciliation at merge-back:**
+
+- `PreproductionTreeBudgetSchema.maxEstimatedUsd` — one new field added by SP10B as `z.number().positive().nullable()`. Always populated as `null` in SP10B; SP10C populates non-null values for cost-budget enforcement. If Switchboard `main` has not added an equivalent independently, the SP10B widen applies cleanly. If Switchboard added a same-semantic field with a different name, reconcile by renaming SP10B's field before merge-back.
+- No Prisma columns added by SP10B. Zero migration reconciliation overhead.
+
+**Architectural seams the merge-back does NOT need to rewrite:**
+
+- The SP10B orchestrator + validator are pure store-injected. No production wiring inside `packages/creative-pipeline/src/pcd/budget/` changes at merge-back — only the injected reader swaps (real Switchboard reader replaces `StaticDefaultBudgetReader`) and the `// MERGE-BACK:` markers get implementations.
+- `PCD_TREE_BUDGET_VERSION` is the 14th pinned constant. The PCD slice carries 14 total pinned constants after SP10B.
+- SP10B introduces NO circular dependency. `pcd/budget/` imports from `pcd/preproduction/` (chain composer, types) and from `pcd/` top-level (`InvariantViolationError`). Reverse direction does not exist; `sp10b-anti-patterns.test.ts` enforces the source-freeze.
+- The SP7 composer body (`runIdentityAwarePreproductionChain`) is untouched. SP10B added a parallel orchestrator (`runIdentityAwarePreproductionChainWithBudget`) that calls SP7's chain as a pure function and adds budget gating around the call. Anti-pattern test #9 enforces SP1-SP10A source-body freeze (allowlist includes `sp9-anti-patterns.test.ts` and `sp10a-anti-patterns.test.ts` as legitimate maintenance per the SP10A precedent that allowlisted `pcd/cost/` in SP9's freeze).
+- SP10B is the FIRST slice with abort/prune authority. Forecast-only invariant from SP10A no longer applies — `TreeBudgetExceededError` is the canonical SP10B-introduced exception, asserted in the orchestrator (anti-pattern test #3 catches "return false" refactors that lose the throw).
+
+**SP10B is observability + enforcement on count only.** Cost-budget enforcement (`maxEstimatedUsd` field; coarse pre-routing estimator contract) is reserved for SP10C. Field widened in SP10B as nullable, populated null. Orchestrator structurally asserts `budget.maxEstimatedUsd === null` at gate time and throws `InvariantViolationError` if non-null (SP10C-bleed protection).
+
+**SP10B compatibility with SP8 stub fanout:** the local-dev default chain shape (2 trends × 2 motivators × 3 hooks × 2 scripts = 42 nodes; max-fanout 3) PASSES `STATIC_DEFAULT_BUDGET` (`{maxBranchFanout: 5, maxTreeSize: 50, maxEstimatedUsd: null}`). Local development runs with no budget violations. Tests that exercise the fail path use tighter test-only budgets.
+
 ## Conventions inherited from Switchboard
 
 These are already enforced in `CLAUDE.md` but listed here for the merge-back checklist:

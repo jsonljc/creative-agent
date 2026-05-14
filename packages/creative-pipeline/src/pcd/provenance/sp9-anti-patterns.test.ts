@@ -159,6 +159,11 @@ describe("SP9 anti-pattern grep", () => {
     for (const file of changed) {
       // SP9 net-new files are out of scope.
       if (file.startsWith("packages/creative-pipeline/src/pcd/provenance/")) continue;
+      if (file.startsWith("packages/creative-pipeline/src/pcd/cost/")) continue;
+      // SP10B net-new files are out of scope (necessary maintenance — SP9 test
+      // was written before SP10B territory existed; same precedent as the
+      // pcd/cost/ allowlist added by SP10A).
+      if (file.startsWith("packages/creative-pipeline/src/pcd/budget/")) continue;
       if (file.startsWith("packages/db/prisma/migrations/")) continue;
       if (file.endsWith(".prisma")) continue;
       if (file.startsWith("docs/")) continue;
@@ -170,6 +175,8 @@ describe("SP9 anti-pattern grep", () => {
       if (file === "packages/schemas/src/pcd-provenance.ts") continue;
       if (file === "packages/schemas/src/__tests__/pcd-provenance.test.ts") continue;
       if (file === "packages/schemas/src/__tests__/pcd-preproduction.test.ts") continue;
+      if (file === "packages/schemas/src/pcd-cost-forecast.ts") continue;
+      if (file === "packages/schemas/src/__tests__/pcd-cost-forecast.test.ts") continue;
 
       expect(allowedEdits.has(file), `SP9 modified disallowed file: ${file}`).toBe(true);
     }

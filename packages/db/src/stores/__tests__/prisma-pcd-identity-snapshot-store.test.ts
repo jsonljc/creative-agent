@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import {
   PrismaPcdIdentitySnapshotStore,
   adaptPcdSp9IdentitySnapshotStore,
+  adaptPcdSp10IdentitySnapshotStore,
 } from "../prisma-pcd-identity-snapshot-store.js";
 
 function createMockPrisma() {
@@ -300,5 +301,161 @@ describe("adaptPcdSp9IdentitySnapshotStore", () => {
     };
     await adapted.createForShotWithProvenance(input);
     expect(spy).toHaveBeenCalledWith(input);
+  });
+});
+
+describe("PrismaPcdIdentitySnapshotStore.createForShotWithCostForecast (SP10A)", () => {
+  function makeMockPrisma() {
+    return {
+      pcdIdentitySnapshot: {
+        create: vi.fn(async (args: unknown) => ({
+          id: "snap_1",
+          ...(args as { data: object }).data,
+        })),
+      },
+    };
+  }
+
+  const baseInput = {
+    assetRecordId: "asset_1",
+    productIdentityId: "prod_1",
+    productTierAtGeneration: 2 as const,
+    productImageAssetIds: [] as string[],
+    productCanonicalTextHash: "hash",
+    productLogoAssetId: null,
+    creatorIdentityId: "creator_1",
+    avatarTierAtGeneration: 2 as const,
+    avatarReferenceAssetIds: [] as string[],
+    voiceAssetId: null,
+    consentRecordId: "consent_1",
+    policyVersion: "tier-policy@1.0.0",
+    providerCapabilityVersion: "provider-capability@1.0.0",
+    selectedProvider: "sora",
+    providerModelSnapshot: "sora-1.0",
+    seedOrNoSeed: "seed:42",
+    rewrittenPromptText: null,
+    shotSpecVersion: "shot-spec@1.0.0",
+    routerVersion: "provider-router@1.0.0",
+    routingDecisionReason: null,
+    briefId: "brief_1",
+    trendId: "trend_1",
+    motivatorId: "motivator_1",
+    hookId: "hook_1",
+    scriptId: "script_1",
+    lineageDecisionReason: {
+      decidedAt: "2026-04-30T12:00:00.000Z",
+      fanoutDecisionId: "fanout_1",
+      chainVersion: "preproduction-chain@1.0.0",
+      provenanceVersion: "pcd-provenance@1.0.0",
+    },
+    costForecastReason: {
+      estimatedUsd: 1.23,
+      currency: "USD" as const,
+      lineItems: [{ label: "x", estimatedUsd: 1.23 }],
+      costForecastVersion: "pcd-cost-forecast@1.0.0",
+      estimatorVersion: "stub-cost-estimator@1.0.0",
+      estimatedAt: "2026-04-30T12:00:00.000Z",
+    },
+  };
+
+  it("persists costForecastReason as the assembled JSON object", async () => {
+    const prisma = makeMockPrisma();
+    const store = new PrismaPcdIdentitySnapshotStore(prisma as unknown as never);
+    await store.createForShotWithCostForecast(baseInput);
+    expect(prisma.pcdIdentitySnapshot.create).toHaveBeenCalledTimes(1);
+    const dataArg = prisma.pcdIdentitySnapshot.create.mock.calls[0][0].data;
+    expect(dataArg.costForecastReason).toEqual(baseInput.costForecastReason);
+  });
+
+  it("persists lineage fields alongside the cost forecast (SP9 + SP10A composed)", async () => {
+    const prisma = makeMockPrisma();
+    const store = new PrismaPcdIdentitySnapshotStore(prisma as unknown as never);
+    await store.createForShotWithCostForecast(baseInput);
+    const dataArg = prisma.pcdIdentitySnapshot.create.mock.calls[0][0].data;
+    expect(dataArg.briefId).toBe("brief_1");
+    expect(dataArg.scriptId).toBe("script_1");
+    expect(dataArg.lineageDecisionReason).toEqual(baseInput.lineageDecisionReason);
+  });
+
+  it("persists null routingDecisionReason as Prisma.JsonNull", async () => {
+    const prisma = makeMockPrisma();
+    const store = new PrismaPcdIdentitySnapshotStore(prisma as unknown as never);
+    await store.createForShotWithCostForecast(baseInput);
+    const dataArg = prisma.pcdIdentitySnapshot.create.mock.calls[0][0].data;
+    expect(dataArg.routingDecisionReason).toBe(Prisma.JsonNull);
+  });
+
+  it("preserves legacy create() behavior unchanged (SP4 path)", async () => {
+    const prisma = makeMockPrisma();
+    const store = new PrismaPcdIdentitySnapshotStore(prisma as unknown as never);
+    const legacyInput = { ...baseInput };
+    // Strip SP9 + SP10A fields to make a SP4-shaped input
+    delete (legacyInput as Record<string, unknown>).briefId;
+    delete (legacyInput as Record<string, unknown>).trendId;
+    delete (legacyInput as Record<string, unknown>).motivatorId;
+    delete (legacyInput as Record<string, unknown>).hookId;
+    delete (legacyInput as Record<string, unknown>).scriptId;
+    delete (legacyInput as Record<string, unknown>).lineageDecisionReason;
+    delete (legacyInput as Record<string, unknown>).costForecastReason;
+    await store.create(legacyInput as never);
+    const dataArg = prisma.pcdIdentitySnapshot.create.mock.calls[0][0].data;
+    expect(dataArg.costForecastReason).toBeUndefined();
+    expect(dataArg.lineageDecisionReason).toBeUndefined();
+  });
+});
+
+describe("adaptPcdSp10IdentitySnapshotStore", () => {
+  it("forwards createForShotWithCostForecast to the Prisma store", async () => {
+    const prisma = {
+      pcdIdentitySnapshot: {
+        create: vi.fn(async () => ({ id: "snap_1" })),
+      },
+    };
+    const store = new PrismaPcdIdentitySnapshotStore(prisma as unknown as never);
+    const adapter = adaptPcdSp10IdentitySnapshotStore(store);
+    expect(typeof adapter.createForShotWithCostForecast).toBe("function");
+    const baseInput = {
+      assetRecordId: "asset_1",
+      productIdentityId: "prod_1",
+      productTierAtGeneration: 2 as const,
+      productImageAssetIds: [] as string[],
+      productCanonicalTextHash: "hash",
+      productLogoAssetId: null,
+      creatorIdentityId: "creator_1",
+      avatarTierAtGeneration: 2 as const,
+      avatarReferenceAssetIds: [] as string[],
+      voiceAssetId: null,
+      consentRecordId: "consent_1",
+      policyVersion: "tier-policy@1.0.0",
+      providerCapabilityVersion: "provider-capability@1.0.0",
+      selectedProvider: "sora",
+      providerModelSnapshot: "sora-1.0",
+      seedOrNoSeed: "seed:42",
+      rewrittenPromptText: null,
+      shotSpecVersion: "shot-spec@1.0.0",
+      routerVersion: "provider-router@1.0.0",
+      routingDecisionReason: null,
+      briefId: "brief_1",
+      trendId: "trend_1",
+      motivatorId: "motivator_1",
+      hookId: "hook_1",
+      scriptId: "script_1",
+      lineageDecisionReason: {
+        decidedAt: "2026-04-30T12:00:00.000Z",
+        fanoutDecisionId: "fanout_1",
+        chainVersion: "preproduction-chain@1.0.0",
+        provenanceVersion: "pcd-provenance@1.0.0",
+      },
+      costForecastReason: {
+        estimatedUsd: 1.23,
+        currency: "USD" as const,
+        lineItems: [{ label: "x", estimatedUsd: 1.23 }],
+        costForecastVersion: "pcd-cost-forecast@1.0.0",
+        estimatorVersion: "stub-cost-estimator@1.0.0",
+        estimatedAt: "2026-04-30T12:00:00.000Z",
+      },
+    };
+    await adapter.createForShotWithCostForecast(baseInput);
+    expect(prisma.pcdIdentitySnapshot.create).toHaveBeenCalledTimes(1);
   });
 });

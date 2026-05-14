@@ -335,7 +335,7 @@ export type PcdSp10CostForecastReason = z.infer<typeof PcdSp10CostForecastReason
 pnpm --filter @creativeagent/schemas exec vitest run src/__tests__/pcd-cost-forecast.test.ts
 ```
 
-Expected: PASS, 12 tests.
+Expected: PASS, 11 tests.
 
 - [ ] **Step 5: Format**
 

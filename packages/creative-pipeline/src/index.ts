@@ -111,6 +111,9 @@ export * from "./pcd/preproduction/index.js";
 // SP9: creative-source provenance
 export * from "./pcd/provenance/index.js";
 
+// SP10A — cost forecast
+export * from "./pcd/cost/index.js";
+
 // SP11: synthetic creator seed roster
 export * from "./pcd/synthetic-creator/index.js";
 
@@ -179,3 +182,6 @@ export {
   type AssertConsentNotRevokedForEditInput,
   type AssertConsentNotRevokedForEditStores,
 } from "./pcd/consent-pre-check-edit.js";
+
+// SP10B: tree-budget enforcement
+export * from "./pcd/budget/index.js";

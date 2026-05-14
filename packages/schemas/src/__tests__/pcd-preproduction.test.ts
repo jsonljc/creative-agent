@@ -432,29 +432,96 @@ import {
 } from "../pcd-preproduction.js";
 
 describe("PreproductionTreeBudgetSchema", () => {
-  it("accepts positive integers", () => {
+  it("accepts a valid budget", () => {
     expect(
-      PreproductionTreeBudgetSchema.safeParse({ maxBranchFanout: 3, maxTreeSize: 100 }).success,
+      PreproductionTreeBudgetSchema.safeParse({
+        maxBranchFanout: 3,
+        maxTreeSize: 100,
+        maxEstimatedUsd: null,
+      }).success,
     ).toBe(true);
   });
 
-  it("rejects zero or negative fanout", () => {
+  it("rejects non-positive maxBranchFanout", () => {
     expect(
-      PreproductionTreeBudgetSchema.safeParse({ maxBranchFanout: 0, maxTreeSize: 100 }).success,
+      PreproductionTreeBudgetSchema.safeParse({
+        maxBranchFanout: 0,
+        maxTreeSize: 100,
+        maxEstimatedUsd: null,
+      }).success,
     ).toBe(false);
     expect(
-      PreproductionTreeBudgetSchema.safeParse({ maxBranchFanout: -1, maxTreeSize: 100 }).success,
+      PreproductionTreeBudgetSchema.safeParse({
+        maxBranchFanout: -1,
+        maxTreeSize: 100,
+        maxEstimatedUsd: null,
+      }).success,
     ).toBe(false);
   });
 
-  it("rejects non-integer fanout", () => {
+  it("rejects non-integer maxBranchFanout", () => {
     expect(
-      PreproductionTreeBudgetSchema.safeParse({ maxBranchFanout: 1.5, maxTreeSize: 100 }).success,
+      PreproductionTreeBudgetSchema.safeParse({
+        maxBranchFanout: 1.5,
+        maxTreeSize: 100,
+        maxEstimatedUsd: null,
+      }).success,
     ).toBe(false);
   });
 
   it("rejects missing maxTreeSize", () => {
     expect(PreproductionTreeBudgetSchema.safeParse({ maxBranchFanout: 3 }).success).toBe(false);
+  });
+
+  // ---- SP10B widen: new tests for maxEstimatedUsd ----
+
+  it("accepts maxEstimatedUsd: null (SP10B default)", () => {
+    expect(
+      PreproductionTreeBudgetSchema.safeParse({
+        maxBranchFanout: 3,
+        maxTreeSize: 100,
+        maxEstimatedUsd: null,
+      }).success,
+    ).toBe(true);
+  });
+
+  it("accepts maxEstimatedUsd as a positive number (SP10C will populate)", () => {
+    expect(
+      PreproductionTreeBudgetSchema.safeParse({
+        maxBranchFanout: 3,
+        maxTreeSize: 100,
+        maxEstimatedUsd: 100,
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects negative maxEstimatedUsd", () => {
+    expect(
+      PreproductionTreeBudgetSchema.safeParse({
+        maxBranchFanout: 3,
+        maxTreeSize: 100,
+        maxEstimatedUsd: -1,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects zero maxEstimatedUsd (positive excludes zero)", () => {
+    expect(
+      PreproductionTreeBudgetSchema.safeParse({
+        maxBranchFanout: 3,
+        maxTreeSize: 100,
+        maxEstimatedUsd: 0,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects missing maxEstimatedUsd (non-optional after SP10B widen)", () => {
+    expect(
+      PreproductionTreeBudgetSchema.safeParse({
+        maxBranchFanout: 3,
+        maxTreeSize: 100,
+      }).success,
+    ).toBe(false);
   });
 });
 

@@ -10,6 +10,9 @@ export * from "./pcd-preproduction.js";
 // SP9 — creative-source provenance
 export * from "./pcd-provenance.js";
 
+// SP10A — cost forecast
+export * from "./pcd-cost-forecast.js";
+
 // SP11 — synthetic creator foundation
 export * from "./creator-identity-synthetic.js";
 export * from "./creative-brief.js";
