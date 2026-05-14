@@ -201,6 +201,10 @@ describe("SP13 anti-patterns", () => {
     for (const file of changed) {
       // SP13 net-new files are out of scope.
       if (file.startsWith("packages/creative-pipeline/src/pcd/selector/")) continue;
+      // SP15 net-new script subdir is out of scope (necessary maintenance — SP13
+      // test was written before SP15 territory existed; same precedent as
+      // pcd/selector/ allowlist).
+      if (file.startsWith("packages/creative-pipeline/src/pcd/script/")) continue;
       if (file.startsWith("docs/")) continue;
       // Allowlist additions to prior SP anti-pattern tests (Task 11) are
       // necessary maintenance — exact-match allowlisted via the Set above
