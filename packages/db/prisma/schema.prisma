@@ -402,3 +402,23 @@ model DisclosureTemplate {
   @@unique([jurisdictionCode, platform, treatmentClass, version])
   @@index([jurisdictionCode, platform, treatmentClass, effectiveFrom])
 }
+
+// SP15 — Script-template registry. Per-vibe × treatment catalogue of
+// ad-script copy, keyed by compatibleCreatorIdentityIds for synthetic
+// creator voicing. Reader-only on the DB side in SP15 (no store, no
+// writer — see prisma-script-template-reader.ts). Selector filter:
+// vibe + treatmentClass + status='active' + compatibleCreatorIdentityIds
+// CONTAINS creatorIdentityId; tie-break (version DESC, id ASC).
+model ScriptTemplate {
+  id                            String   @id @default(cuid())
+  vibe                          String
+  treatmentClass                String
+  text                          String   @db.Text
+  compatibleCreatorIdentityIds  String[]
+  version                       Int
+  status                        String   // "active" | "retired"
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+
+  @@index([vibe, treatmentClass, status])
+}

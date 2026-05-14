@@ -235,6 +235,14 @@ describe("SP10B anti-pattern grep", () => {
       // out-of-scope; SP13's own freeze test is the authoritative gate.
       if (file === "packages/schemas/src/pcd-synthetic-selector.ts") continue;
       if (file === "packages/schemas/src/__tests__/pcd-synthetic-selector.test.ts") continue;
+      // SP15 net-new files are out of scope (necessary maintenance — SP10B test
+      // was written before SP15 territory existed; same precedent as pcd/selector/
+      // and other additive slices).
+      if (file.startsWith("packages/creative-pipeline/src/pcd/script/")) continue;
+      if (file === "packages/schemas/src/pcd-script-template.ts") continue;
+      if (file === "packages/schemas/src/__tests__/pcd-script-template.test.ts") continue;
+      if (file === "packages/db/src/stores/prisma-script-template-reader.ts") continue;
+      if (file === "packages/db/src/stores/prisma-script-template-reader.test.ts") continue;
       if (allowedEdits.has(file)) continue;
 
       expect(allowedEdits.has(file), `SP10B modified disallowed file: ${file}`).toBe(true);
