@@ -22,3 +22,6 @@ export * from "./creative-brief.js";
 
 // SP12 — synthetic creator license gate
 export * from "./creator-identity-license.js";
+
+// SP13 — synthetic creator selector
+export * from "./pcd-synthetic-selector.js";
