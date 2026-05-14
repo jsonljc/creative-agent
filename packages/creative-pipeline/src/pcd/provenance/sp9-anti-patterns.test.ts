@@ -146,6 +146,25 @@ describe("SP9 anti-pattern grep", () => {
       "packages/creative-pipeline/src/pcd/synthetic-creator/license-gate.test.ts",
       // SP12 anti-pattern tests (Task 8)
       "packages/creative-pipeline/src/pcd/sp12-anti-patterns.test.ts",
+      // SP14 net-new files (additive maintenance)
+      "packages/schemas/src/pcd-disclosure-template.ts",
+      "packages/schemas/src/__tests__/pcd-disclosure-template.test.ts",
+      "packages/db/src/stores/prisma-disclosure-template-reader.ts",
+      "packages/db/src/stores/prisma-disclosure-template-reader.test.ts",
+      "packages/db/prisma/schema.prisma",
+      "packages/db/prisma/migrations/20260514150000_pcd_disclosure_template_sp14/migration.sql",
+      "packages/creative-pipeline/src/pcd/disclosure/disclosure-resolver-version.ts",
+      "packages/creative-pipeline/src/pcd/disclosure/disclosure-resolver-version.test.ts",
+      "packages/creative-pipeline/src/pcd/disclosure/disclosure-placeholder.ts",
+      "packages/creative-pipeline/src/pcd/disclosure/disclosure-placeholder.test.ts",
+      "packages/creative-pipeline/src/pcd/disclosure/disclosure-resolver.ts",
+      "packages/creative-pipeline/src/pcd/disclosure/disclosure-resolver.test.ts",
+      "packages/creative-pipeline/src/pcd/disclosure/disclosure-seed.ts",
+      "packages/creative-pipeline/src/pcd/disclosure/disclosure-seed.test.ts",
+      "packages/creative-pipeline/src/pcd/disclosure/sp14-anti-patterns.test.ts",
+      "packages/creative-pipeline/src/pcd/disclosure/index.ts",
+      "packages/db/src/index.ts",
+      "packages/creative-pipeline/src/index.ts",
     ]);
 
     let sp8Sha = "";

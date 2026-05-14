@@ -386,3 +386,19 @@ model PcdIdentitySnapshot {
   @@index([briefId])
   @@index([scriptId])
 }
+
+model DisclosureTemplate {
+  id                String    @id @default(cuid())
+  jurisdictionCode  String
+  platform          String
+  treatmentClass    String
+  version           Int
+  text              String    @db.Text
+  effectiveFrom     DateTime
+  effectiveTo       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([jurisdictionCode, platform, treatmentClass, version])
+  @@index([jurisdictionCode, platform, treatmentClass, effectiveFrom])
+}
