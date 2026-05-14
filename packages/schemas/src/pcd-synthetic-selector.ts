@@ -50,6 +50,13 @@ const RejectionDecisionSchema = z
   })
   .readonly();
 
+// NB: `z.union` not `z.discriminatedUnion`. Zod 3.x's discriminatedUnion
+// requires each member to be a raw `ZodObject`, but our SP13 invariant
+// applies `.readonly()` to each branch (matches SP10B / SP12 precedent
+// for readonly decision structs). `.readonly()` wraps the object and
+// hides the discriminator field from the discriminatedUnion factory.
+// `z.union` parses by trying members in order; semantically equivalent
+// here because both branches are mutually exclusive on `allowed`.
 export const SyntheticCreatorSelectionDecisionSchema = z.union([
   SuccessDecisionSchema,
   RejectionDecisionSchema,
