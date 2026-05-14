@@ -158,6 +158,20 @@ describe("SP13 anti-patterns", () => {
       "packages/creative-pipeline/src/pcd/disclosure/disclosure-seed.test.ts",
       "packages/creative-pipeline/src/pcd/disclosure/sp14-anti-patterns.test.ts",
       "packages/creative-pipeline/src/pcd/disclosure/index.ts",
+      // SP15 net-new files (additive maintenance)
+      "packages/schemas/src/pcd-script-template.ts",
+      "packages/schemas/src/__tests__/pcd-script-template.test.ts",
+      "packages/db/src/stores/prisma-script-template-reader.ts",
+      "packages/db/src/stores/prisma-script-template-reader.test.ts",
+      "packages/db/prisma/migrations/20260514160000_pcd_script_template_sp15/migration.sql",
+      "packages/creative-pipeline/src/pcd/script/script-selector-version.ts",
+      "packages/creative-pipeline/src/pcd/script/script-selector-version.test.ts",
+      "packages/creative-pipeline/src/pcd/script/script-placeholder.ts",
+      "packages/creative-pipeline/src/pcd/script/script-placeholder.test.ts",
+      "packages/creative-pipeline/src/pcd/script/script-seed.ts",
+      "packages/creative-pipeline/src/pcd/script/script-seed.test.ts",
+      "packages/creative-pipeline/src/pcd/script/script-selector.ts",
+      "packages/creative-pipeline/src/pcd/script/script-selector.test.ts",
       "packages/db/src/index.ts",
     ]);
 

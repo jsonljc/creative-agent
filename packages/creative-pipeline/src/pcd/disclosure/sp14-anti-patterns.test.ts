@@ -210,6 +210,16 @@ describe("SP14 anti-patterns", () => {
       if (file === "packages/creative-pipeline/src/pcd/sp12-anti-patterns.test.ts") continue;
       if (file === "packages/creative-pipeline/src/pcd/selector/sp13-anti-patterns.test.ts")
         continue;
+      // SP15 net-new files are out of scope (necessary maintenance — SP14 test
+      // was written before SP15 territory existed; same precedent as prior
+      // SP allowlist additions).
+      if (file.startsWith("packages/creative-pipeline/src/pcd/script/")) continue;
+      if (file === "packages/schemas/src/pcd-script-template.ts") continue;
+      if (file === "packages/schemas/src/__tests__/pcd-script-template.test.ts") continue;
+      if (file === "packages/db/src/stores/prisma-script-template-reader.ts") continue;
+      if (file === "packages/db/src/stores/prisma-script-template-reader.test.ts") continue;
+      if (file === "packages/db/prisma/migrations/20260514160000_pcd_script_template_sp15/migration.sql")
+        continue;
 
       expect(allowedEdits.has(file), `SP14 modified disallowed file: ${file}`).toBe(true);
     }
