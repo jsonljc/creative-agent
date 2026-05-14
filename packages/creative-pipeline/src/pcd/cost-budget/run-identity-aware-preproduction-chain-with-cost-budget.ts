@@ -5,7 +5,7 @@
 // so callers get computed tree shape + cost on the success path without
 // re-walking the tree or re-calling the estimator (design Q16).
 //
-// Composition order:
+// Composition order (one entry per inline `Step N` comment in the body):
 //   1. buildPcdIdentityContext (for estimator input)
 //   2. budgetReader.resolveBudget (top-level, full budget including maxEstimatedUsd)
 //   3. null budget → bypass SP10C entirely (run SP7 chain directly, return all null meta)
@@ -13,7 +13,8 @@
 //      to preserve SP10B's load-bearing count-only invariant.
 //   5. maxEstimatedUsd null → cost gate skipped, return {result, budgetMeta, costMeta: null}
 //   6. coarseCostEstimator.estimate → defense-in-depth zod parse
-//   7. validateCostAgainstBudget → throw CostBudgetExceededError on fail
+//   7. validateCostAgainstBudget → assemble CostBudgetMeta; ok-path returns outcome
+//   8. validation fail → throw CostBudgetExceededError (carries meta)
 //
 // MERGE-BACK: dashboard surfaces CostBudgetExceededError with retry-with-raised-
 // budget UI alongside SP10B's TreeBudgetExceededError UI.

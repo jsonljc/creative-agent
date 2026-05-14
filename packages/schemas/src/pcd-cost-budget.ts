@@ -9,15 +9,16 @@ import { z } from "zod";
 export const CoarseCostEstimatorOutputSchema = z.object({
   estimatedUsd: z.number().nonnegative(),
   currency: z.literal("USD"),
-  lineItems: z.array(
-    z.object({
-      label: z.string().min(1),
-      estimatedUsd: z.number().nonnegative(),
-    }),
-  ),
+  lineItems: z
+    .array(
+      z.object({
+        label: z.string().min(1),
+        estimatedUsd: z.number().nonnegative(),
+      }),
+    )
+    .readonly(),
   estimatorVersion: z.string().min(1),
 });
-export type CoarseCostEstimatorOutputSchemaType = z.infer<typeof CoarseCostEstimatorOutputSchema>;
 
 export const CostBudgetMetaSchema = z.object({
   costBudgetVersion: z.string().min(1),
@@ -25,12 +26,14 @@ export const CostBudgetMetaSchema = z.object({
   estimatedUsd: z.number().nonnegative(),
   currency: z.literal("USD"),
   threshold: z.number().positive(),
-  lineItems: z.array(
-    z.object({
-      label: z.string().min(1),
-      estimatedUsd: z.number().nonnegative(),
-    }),
-  ),
+  lineItems: z
+    .array(
+      z.object({
+        label: z.string().min(1),
+        estimatedUsd: z.number().nonnegative(),
+      }),
+    )
+    .readonly(),
   estimatedAt: z.string().datetime(),
 });
 export type CostBudgetMeta = z.infer<typeof CostBudgetMetaSchema>;

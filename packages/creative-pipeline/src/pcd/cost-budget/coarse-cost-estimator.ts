@@ -32,7 +32,10 @@ export type CoarseCostEstimatorInput = {
 export type CoarseCostEstimatorOutput = {
   estimatedUsd: number;
   currency: "USD";
-  lineItems: Array<{ label: string; estimatedUsd: number }>;
+  // ReadonlyArray matches CoarseCostEstimatorOutputSchema's `.readonly()` shape
+  // so the orchestrator's `CoarseCostEstimatorOutputSchema.parse()` result
+  // assigns cleanly into this slot (no Array→ReadonlyArray narrowing error).
+  lineItems: ReadonlyArray<{ label: string; estimatedUsd: number }>;
   estimatorVersion: string;
 };
 
