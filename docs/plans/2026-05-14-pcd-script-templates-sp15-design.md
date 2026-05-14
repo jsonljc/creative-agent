@@ -335,7 +335,7 @@ Exports a single `SCRIPT_TEMPLATE_SEED: readonly ScriptTemplatePayload[]` of len
 - `vibe`, `treatmentClass`: cell coordinates
 - `version`: `1`
 - `status`: `"active"`
-- `compatibleCreatorIdentityIds`: `SP11_SYNTHETIC_CREATOR_ROSTER.map((r) => r.id)` — imported from `packages/creative-pipeline/src/pcd/synthetic-creator/seed.js`. Drift-proof; if SP11 seed IDs change, SP15 seed updates automatically.
+- `compatibleCreatorIdentityIds`: `SP11_SYNTHETIC_CREATOR_ROSTER.map((r) => r.creatorIdentity.id)` — imported from `packages/creative-pipeline/src/pcd/synthetic-creator/seed.js`. Drift-proof; if SP11 seed IDs change, SP15 seed updates automatically.
 - `text`: `` `${PLACEHOLDER_SCRIPT_PREFIX} ${vibe}/${treatment}]` ``
 
 Top-of-file comment:
