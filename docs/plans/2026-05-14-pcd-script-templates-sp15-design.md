@@ -624,7 +624,7 @@ The SP15 plan will be written next via `writing-plans`. Anticipated task list, T
 
 | # | Task | Approx tests |
 |---|---|---|
-| 1 | New `pcd-script-template.ts` zod schema + co-located test (incl. wildcard refine) | ~10 |
+| 1 | New `pcd-script-template.ts` zod schema + co-located test (incl. wildcard refine). **Plan-time pre-flight:** `grep -n "z\.discriminatedUnion\|z\.union" packages/schemas/src/pcd-{disclosure-template,synthetic-selector}.ts` — mirror whichever factory SP13/SP14 *source* currently uses (today: `z.union` with the documented NB carve-out at `pcd-disclosure-template.ts:77` and `pcd-synthetic-selector.ts:60`). Prevents doc-vs-code drift. | ~10 |
 | 2 | Widen `packages/schemas/src/index.ts` barrel (lands now, not at end — SP14 lesson) | — |
 | 3 | New `script-selector-version.ts` constant (19th pinned) | — |
 | 4 | New `script-placeholder.ts` constant + predicate + tests | ~3 |
