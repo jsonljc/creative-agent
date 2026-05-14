@@ -73,6 +73,7 @@ describe("SP13 anti-patterns", () => {
     expect(src).not.toMatch(/from\s+["']node:http["']/);
     expect(src).not.toMatch(/from\s+["']node:https["']/);
     expect(src).not.toMatch(/from\s+["']crypto["']/);
+    expect(src).not.toMatch(/from\s+["']node:crypto["']/);
     expect(src).not.toMatch(/PrismaClient/);
   });
 
