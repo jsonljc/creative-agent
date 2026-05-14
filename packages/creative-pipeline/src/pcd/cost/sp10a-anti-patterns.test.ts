@@ -210,6 +210,18 @@ describe("SP10A anti-pattern grep", () => {
       // SP11 net-new subdir is out of scope (same pattern as SP10B).
       if (file.startsWith("packages/creative-pipeline/src/pcd/synthetic-creator/")) continue;
       if (file === "packages/creative-pipeline/src/pcd/sp11-anti-patterns.test.ts") continue;
+      // SP12 net-new files are out of scope (same precedent as SP11).
+      if (file === "packages/creative-pipeline/src/pcd/sp12-anti-patterns.test.ts") continue;
+      if (file === "packages/schemas/src/creator-identity-license.ts") continue;
+      if (file === "packages/schemas/src/__tests__/creator-identity-license.test.ts") continue;
+      if (file === "packages/db/src/stores/prisma-creator-identity-license-store.ts") continue;
+      if (file === "packages/db/src/stores/__tests__/prisma-creator-identity-license-store.test.ts")
+        continue;
+      if (file === "packages/db/src/stores/prisma-creator-identity-license-reader.ts") continue;
+      if (
+        file === "packages/db/src/stores/__tests__/prisma-creator-identity-license-reader.test.ts"
+      )
+        continue;
       if (allowedEdits.has(file)) continue;
 
       expect(allowedEdits.has(file), `SP10A modified disallowed file: ${file}`).toBe(true);
