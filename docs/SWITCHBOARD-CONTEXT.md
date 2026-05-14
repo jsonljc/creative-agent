@@ -222,6 +222,40 @@ Nothing to stub — entire SP2 lives in `packages/creative-pipeline/src/pcd/tier
 
 **SP10B compatibility with SP8 stub fanout:** the local-dev default chain shape (2 trends × 2 motivators × 3 hooks × 2 scripts = 42 nodes; max-fanout 3) PASSES `STATIC_DEFAULT_BUDGET` (`{maxBranchFanout: 5, maxTreeSize: 50, maxEstimatedUsd: null}`). Local development runs with no budget violations. Tests that exercise the fail path use tighter test-only budgets.
 
+### SP10C (cost-budget enforcement) — SHIPPED in creativeagent
+
+**SP10C-declared merge-back surfaces (production wiring at merge-back):**
+
+- **`CoarseCostEstimator` injection** — Switchboard ad-optimizer team owns the production coarse pre-routing estimator. Real estimator reads per-tier × per-allowed-shot-type pricing tables, FX rates, volume tiers, contract pricing. SP10C ships only the contract + a deterministic stub (`StubCoarseCostEstimator`). `// MERGE-BACK: replace with Switchboard ad-optimizer's coarse pre-routing estimator` marker on stub class declaration. **Different team / different model from SP10A's per-asset estimator** — coarse pre-routing vs. routed per-asset answer different questions (design §0 risk #16).
+- **`Sp10bBudgetReader` REUSED, NOT widened** — SP10C does NOT ship a parallel reader contract. SP10B's reader returns `PreproductionTreeBudget` which carries `maxEstimatedUsd: number | null`. Switchboard's production `OrganizationBudget` table at merge-back populates the field for cost-enforced orgs; leaves null for count-only orgs. One reader, one schema slot.
+- **`WorkTrace` emit** — every SP10C state transition carries a `// MERGE-BACK: emit WorkTrace here` marker. Five markers in `run-identity-aware-preproduction-chain-with-cost-budget.ts`: budget resolved at top, count gate passed via SP10B, cost gate skipped (maxEstimatedUsd null), cost gate passed, cost gate violated. WorkTrace payload should include `costMeta` on success and `error.meta` on failure (both are `CostBudgetMeta`).
+- **Production runner discipline** — at merge-back, production callsites pick their gate level: SP7's chain directly (no gate), SP10B's orchestrator (count only), or SP10C's orchestrator (count + cost). Three tiers; opt-in by injection. SP10C is the most-restrictive.
+- **Dashboard UX for `CostBudgetExceededError`** — operator-facing surface for retrying with a raised cost budget. Separate UI from SP10B's tree-budget retry UI; shared form fields possible. SP10C emits `error.meta` carrying enough context to render the violation breakdown (estimatedUsd vs threshold, lineItems, estimatorVersion, costBudgetVersion, estimatedAt).
+- **Outcome-wrapper consumption at merge-back** — production runners must destructure the SP10C return: `const { result, budgetMeta, costMeta } = await runIdentityAwarePreproductionChainWithCostBudget(...)`. The three meta fields populate analytics dashboards directly. The three-state matrix (design Q16) lets analytics queries compute opt-in rates per gate independently:
+  - all three null → ran without budget (legacy / pre-rollout)
+  - budgetMeta populated, costMeta null → count-only enforcement
+  - all three populated → count + cost enforcement
+- **`PcdProductionFanoutDecision.costForecast` slot** — STAYS null in SP10C. Merge-back consumers should NOT read this slot; read `outcome.costMeta` (or `error.meta` on failure) instead. SP7's composer is untouched.
+- **identityContext threading optimization** — SP10C builds identityContext twice on the gated success path (once at SP10C entry for the estimator, once inside SP7 chain). Merge-back may widen SP7's chain return to include identityContext, after which SP10C's call site is a one-line swap.
+
+**Schema reconciliation at merge-back:**
+
+- `packages/schemas/src/pcd-cost-budget.ts` — NEW schema file added by SP10C: `CoarseCostEstimatorOutputSchema` + `CostBudgetMetaSchema`. Reconciles cleanly if Switchboard `main` has not added equivalent schemas. If Switchboard added same-semantic schemas under different names, reconcile by renaming SP10C's schemas before merge-back.
+- `PreproductionTreeBudgetSchema.maxEstimatedUsd` — already widened in SP10B. SP10C populates the slot; does NOT widen further. SP10C anti-pattern test #5 freeze-asserts.
+- No Prisma columns added by SP10C. Zero migration reconciliation overhead.
+
+**Architectural seams the merge-back does NOT need to rewrite:**
+
+- The SP10C orchestrator + validator + stub estimator are pure store-injected. No production wiring inside `packages/creative-pipeline/src/pcd/cost-budget/` changes at merge-back — only the injected estimator + reader swap (real Switchboard ad-optimizer estimator replaces `StubCoarseCostEstimator`; real Switchboard `OrganizationBudget` reader replaces `StaticDefaultBudgetReader`) and the `// MERGE-BACK:` markers get implementations.
+- `PCD_COST_BUDGET_VERSION` is the 15th pinned constant. The PCD slice carries 15 total pinned constants after SP10C.
+- SP10C introduces NO circular dependency. `pcd/cost-budget/` imports from `pcd/preproduction/` (chain composer, identity-context builder, types), `pcd/budget/` (SP10B orchestrator + types), and `pcd/` top-level. Reverse direction does not exist; `sp10c-anti-patterns.test.ts` enforces the source-freeze.
+- The SP10B orchestrator body (`runIdentityAwarePreproductionChainWithBudget`) is untouched. SP10C added a parallel orchestrator (`runIdentityAwarePreproductionChainWithCostBudget`) that calls SP10B as a pure function with a stripped budget via `stripMaxUsdReader`. SP10B's count-only invariant is preserved structurally — `sp10b-anti-patterns.test.ts` test #6 stays unchanged.
+- SP10C is the SECOND slice with abort/prune authority (SP10B was the first). The SP10B-introduced asymmetry (throw is _required_, mutation is _forbidden_) continues to apply; SP10C's own anti-pattern tests assert it.
+
+**SP10C is the gate-time pre-routing cost forecast.** SP10A's per-asset post-routing forensic stamp is the canonical post-hoc record. The two answer different questions and WILL produce different numbers for the same scripts — operator dashboards must surface both explicitly (design §0 risk #16).
+
+**SP10C compatibility with SP8 stub fanout + StaticDefaultBudgetReader:** 24 scripts × $1.50 = $36 estimate. `STATIC_DEFAULT_BUDGET.maxEstimatedUsd: null` means cost gate is skipped on local dev — same as SP10B count-only behavior. To exercise the cost gate locally, override the budget reader to return a non-null `maxEstimatedUsd`.
+
 ## Conventions inherited from Switchboard
 
 These are already enforced in `CLAUDE.md` but listed here for the merge-back checklist:
