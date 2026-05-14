@@ -224,3 +224,36 @@ describe("resolveDisclosure — version tiebreak", () => {
     if (decision.allowed === true) expect(decision.disclosureTemplateId).toBe("tpl-a");
   });
 });
+
+describe("resolveDisclosure — inspectedTemplateIds ordering", () => {
+  const yearStart = new Date("2026-01-01T00:00:00Z");
+
+  it("c, a, b expired rows produce inspectedTemplateIds = [a, b, c] (id ASC)", () => {
+    const expired = new Date(NOW.getTime() - 1);
+    const c = makeTemplate({ id: "c", version: 1, effectiveFrom: yearStart, effectiveTo: expired });
+    const a = makeTemplate({ id: "a", version: 1, effectiveFrom: yearStart, effectiveTo: expired });
+    const b = makeTemplate({ id: "b", version: 1, effectiveFrom: yearStart, effectiveTo: expired });
+    const decision = resolveDisclosure({
+      brief: baseBrief,
+      now: NOW,
+      templates: [c, a, b],
+    });
+    expect(decision.allowed).toBe(false);
+    if (decision.allowed === false) {
+      expect(decision.inspectedTemplateIds).toEqual(["a", "b", "c"]);
+    }
+  });
+
+  it("snapshot order does not affect inspectedTemplateIds ASC ordering on failure", () => {
+    const expired = new Date(NOW.getTime() - 1);
+    const ids = ["zeta", "alpha", "mu", "beta"];
+    const rows = ids.map((id) =>
+      makeTemplate({ id, version: 1, effectiveFrom: yearStart, effectiveTo: expired }),
+    );
+    const decision = resolveDisclosure({ brief: baseBrief, now: NOW, templates: rows });
+    expect(decision.allowed).toBe(false);
+    if (decision.allowed === false) {
+      expect(decision.inspectedTemplateIds).toEqual(["alpha", "beta", "mu", "zeta"]);
+    }
+  });
+});
