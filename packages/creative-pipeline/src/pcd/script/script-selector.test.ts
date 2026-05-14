@@ -402,6 +402,88 @@ describe("selectScript — pin invariant + determinism + now-unused", () => {
   });
 });
 
+describe("selectScript — decisionReason content + field echoes", () => {
+  it("decisionReason contains picked_version=N", () => {
+    const row = mkRow({
+      id: "v7",
+      vibe: "omg_look",
+      treatmentClass: "med_spa",
+      version: 7,
+    });
+    const d = selectScript({
+      brief: BRIEF_FIXTURE,
+      creatorIdentityId: "cid_synth_cheryl_sg_01",
+      now: NOW_FIXTURE,
+      templates: [row],
+    });
+    expect(d.allowed).toBe(true);
+    if (d.allowed === true) expect(d.decisionReason).toContain("picked_version=7");
+  });
+
+  it("decisionReason contains counts of creator_matched and three_way", () => {
+    const rows = [
+      mkRow({ id: "a", vibe: "omg_look", treatmentClass: "med_spa", version: 1 }),
+      mkRow({ id: "b", vibe: "omg_look", treatmentClass: "med_spa", version: 2 }),
+      // 3-way matched but creator-incompatible — counts toward three_way only
+      mkRow({
+        id: "c",
+        vibe: "omg_look",
+        treatmentClass: "med_spa",
+        version: 3,
+        compatibleCreatorIdentityIds: ["someone-else"],
+      }),
+    ];
+    const d = selectScript({
+      brief: BRIEF_FIXTURE,
+      creatorIdentityId: "cid_synth_cheryl_sg_01",
+      now: NOW_FIXTURE,
+      templates: rows,
+    });
+    expect(d.allowed).toBe(true);
+    if (d.allowed === true) {
+      expect(d.decisionReason).toContain("creator_matched=2");
+      expect(d.decisionReason).toContain("three_way=3");
+    }
+  });
+
+  it("success echoes brief.targetVibe, brief.treatmentClass, creatorIdentityId verbatim", () => {
+    const row = mkRow({
+      id: "ok",
+      vibe: "omg_look",
+      treatmentClass: "med_spa",
+    });
+    const d = selectScript({
+      brief: BRIEF_FIXTURE,
+      creatorIdentityId: "cid_synth_cheryl_sg_01",
+      now: NOW_FIXTURE,
+      templates: [row],
+    });
+    expect(d.allowed).toBe(true);
+    if (d.allowed === true) {
+      expect(d.briefId).toBe(BRIEF_FIXTURE.briefId);
+      expect(d.vibe).toBe(BRIEF_FIXTURE.targetVibe);
+      expect(d.treatmentClass).toBe(BRIEF_FIXTURE.treatmentClass);
+      expect(d.creatorIdentityId).toBe("cid_synth_cheryl_sg_01");
+    }
+  });
+
+  it("failure echoes brief.targetVibe, brief.treatmentClass, creatorIdentityId verbatim", () => {
+    const d = selectScript({
+      brief: BRIEF_FIXTURE,
+      creatorIdentityId: "cid_synth_cheryl_sg_01",
+      now: NOW_FIXTURE,
+      templates: [],
+    });
+    expect(d.allowed).toBe(false);
+    if (d.allowed === false) {
+      expect(d.briefId).toBe(BRIEF_FIXTURE.briefId);
+      expect(d.vibe).toBe(BRIEF_FIXTURE.targetVibe);
+      expect(d.treatmentClass).toBe(BRIEF_FIXTURE.treatmentClass);
+      expect(d.creatorIdentityId).toBe("cid_synth_cheryl_sg_01");
+    }
+  });
+});
+
 // Templates available to later tasks
 export const NOW_FIXTURE = NOW;
 export const BRIEF_FIXTURE = baseBrief;
