@@ -293,3 +293,166 @@ describe("selectSyntheticCreator — license-gate composition", () => {
     }
   });
 });
+
+describe("selectSyntheticCreator — ranking + tie-break", () => {
+  // Build a 2-candidate compatible roster where both pass the gate but
+  // hold different leases. Test orders verify SP12 pickStrongest semantics
+  // applied across candidates.
+  const cherylA: RosterEntry = cherylRoster[0]!;
+  const cherylB: RosterEntry = {
+    creatorIdentity: { id: "cid_synth_cheryl_sg_zzz", name: "Cheryl-Z", kind: "synthetic" },
+    synthetic: { ...cherylA.synthetic, creatorIdentityId: "cid_synth_cheryl_sg_zzz" },
+  };
+
+  it("hard_exclusive beats priority_access", () => {
+    const decision = selectSyntheticCreator({
+      brief: briefForCheryl,
+      now: NOW_FIXTURE,
+      roster: [cherylA, cherylB],
+      leases: [
+        makeLease({
+          id: "lic_priority",
+          creatorIdentityId: cherylA.creatorIdentity.id,
+          lockType: "priority_access",
+        }),
+        makeLease({
+          id: "lic_hard",
+          creatorIdentityId: cherylB.creatorIdentity.id,
+          lockType: "hard_exclusive",
+        }),
+      ],
+    });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed === true) {
+      expect(decision.selectedCreatorIdentityId).toBe(cherylB.creatorIdentity.id);
+      expect(decision.selectedLockType).toBe("hard_exclusive");
+      expect(decision.fallbackCreatorIdentityIds).toEqual([cherylA.creatorIdentity.id]);
+    }
+  });
+
+  it("priority_access with lower priorityRank wins among priority_access leases", () => {
+    const decision = selectSyntheticCreator({
+      brief: briefForCheryl,
+      now: NOW_FIXTURE,
+      roster: [cherylA, cherylB],
+      leases: [
+        makeLease({
+          id: "lic_rank10",
+          creatorIdentityId: cherylA.creatorIdentity.id,
+          lockType: "priority_access",
+          priorityRank: 10,
+        }),
+        makeLease({
+          id: "lic_rank5",
+          creatorIdentityId: cherylB.creatorIdentity.id,
+          lockType: "priority_access",
+          priorityRank: 5,
+        }),
+      ],
+    });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed === true) {
+      expect(decision.selectedCreatorIdentityId).toBe(cherylB.creatorIdentity.id);
+      expect(decision.selectedLicenseId).toBe("lic_rank5");
+    }
+  });
+
+  it("priority_access tie on rank → older effectiveFrom wins", () => {
+    const decision = selectSyntheticCreator({
+      brief: briefForCheryl,
+      now: NOW_FIXTURE,
+      roster: [cherylA, cherylB],
+      leases: [
+        makeLease({
+          id: "lic_newer",
+          creatorIdentityId: cherylA.creatorIdentity.id,
+          lockType: "priority_access",
+          priorityRank: 5,
+          effectiveFrom: new Date("2026-05-10T00:00:00.000Z"),
+        }),
+        makeLease({
+          id: "lic_older",
+          creatorIdentityId: cherylB.creatorIdentity.id,
+          lockType: "priority_access",
+          priorityRank: 5,
+          effectiveFrom: new Date("2026-05-01T00:00:00.000Z"),
+        }),
+      ],
+    });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed === true) {
+      expect(decision.selectedCreatorIdentityId).toBe(cherylB.creatorIdentity.id);
+      expect(decision.selectedLicenseId).toBe("lic_older");
+    }
+  });
+
+  it("full tie on lockType, rank, effectiveFrom → creatorIdentityId ASC wins (SP13-vs-SP12 final tie-break)", () => {
+    // cherylA.id = "cid_synth_cheryl_sg_01"
+    // cherylB.id = "cid_synth_cheryl_sg_zzz"
+    // Identical lease shape; selector ties on creator id ASC → cherylA wins.
+    const sameLease = (creatorIdentityId: string, id: string) =>
+      makeLease({
+        id,
+        creatorIdentityId,
+        lockType: "priority_access",
+        priorityRank: 5,
+        effectiveFrom: new Date("2026-05-01T00:00:00.000Z"),
+      });
+    const decision = selectSyntheticCreator({
+      brief: briefForCheryl,
+      now: NOW_FIXTURE,
+      roster: [cherylA, cherylB],
+      leases: [
+        sameLease(cherylA.creatorIdentity.id, "lic_a"),
+        sameLease(cherylB.creatorIdentity.id, "lic_b"),
+      ],
+    });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed === true) {
+      expect(decision.selectedCreatorIdentityId).toBe(cherylA.creatorIdentity.id);
+    }
+  });
+
+  it("ranked fallback chain reflects full ordering across allowed candidates", () => {
+    // Three compatible candidates, all leased, three different strengths:
+    //   cherylA: priority_access rank 10
+    //   cherylB: priority_access rank 5
+    //   cherylC: hard_exclusive
+    const cherylC: RosterEntry = {
+      creatorIdentity: { id: "cid_synth_cheryl_sg_mid", name: "Cheryl-M", kind: "synthetic" },
+      synthetic: { ...cherylA.synthetic, creatorIdentityId: "cid_synth_cheryl_sg_mid" },
+    };
+    const decision = selectSyntheticCreator({
+      brief: briefForCheryl,
+      now: NOW_FIXTURE,
+      roster: [cherylA, cherylB, cherylC],
+      leases: [
+        makeLease({
+          id: "lic_a",
+          creatorIdentityId: cherylA.creatorIdentity.id,
+          lockType: "priority_access",
+          priorityRank: 10,
+        }),
+        makeLease({
+          id: "lic_b",
+          creatorIdentityId: cherylB.creatorIdentity.id,
+          lockType: "priority_access",
+          priorityRank: 5,
+        }),
+        makeLease({
+          id: "lic_c",
+          creatorIdentityId: cherylC.creatorIdentity.id,
+          lockType: "hard_exclusive",
+        }),
+      ],
+    });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed === true) {
+      expect(decision.selectedCreatorIdentityId).toBe(cherylC.creatorIdentity.id); // hard wins
+      expect(decision.fallbackCreatorIdentityIds).toEqual([
+        cherylB.creatorIdentity.id, // priority_access rank 5
+        cherylA.creatorIdentity.id, // priority_access rank 10
+      ]);
+    }
+  });
+});

@@ -75,9 +75,11 @@ export function selectSyntheticCreator(
     };
   }
 
-  // Step 3 — pick the first allowed candidate (Task 6 will rank).
-  const primary = allowedCandidates[0]!;
-  const fallbacks = allowedCandidates.slice(1);
+  // Step 3 — rank survivors. SP12 pickStrongest semantics applied across
+  // candidates' gate-returned licenses; final tie on creatorIdentityId ASC.
+  const ranked = [...allowedCandidates].sort(compareCandidates);
+  const primary = ranked[0]!;
+  const fallbacks = ranked.slice(1);
 
   // Step 4 — emit success decision. The type predicate above narrows
   // primary.gate to the allowed:true variant, so primary.gate.license and
@@ -95,8 +97,8 @@ export function selectSyntheticCreator(
     selectorRank: 0,
     metricsSnapshotVersion: null,
     performanceOverlayApplied: false,
-    decisionReason: `primary_compatible (${allowedCandidates.length} survivor${
-      allowedCandidates.length === 1 ? "" : "s"
+    decisionReason: `primary_compatible (${ranked.length} survivor${
+      ranked.length === 1 ? "" : "s"
     }, ${blockedCandidates.length} license-blocked)`,
   };
 }
@@ -133,4 +135,32 @@ function isAllowed(c: { entry: RosterEntry; gate: LicenseGateDecision }): c is A
 
 function isBlocked(c: { entry: RosterEntry; gate: LicenseGateDecision }): c is BlockedCandidate {
   return c.gate.allowed === false;
+}
+
+const LOCK_TYPE_RANK: Record<"hard_exclusive" | "priority_access" | "soft_exclusive", number> = {
+  hard_exclusive: 0,
+  priority_access: 1,
+  soft_exclusive: 2,
+};
+
+// SP13-vs-SP12: identical to SP12 pickStrongest EXCEPT the final tie-break
+// uses creatorIdentityId (selector picks creators) rather than license.id
+// (SP12 picks leases). Documented divergence; intentional.
+function compareCandidates(a: AllowedCandidate, b: AllowedCandidate): number {
+  const la = a.gate.license;
+  const lb = b.gate.license;
+  const ra = LOCK_TYPE_RANK[la.lockType];
+  const rb = LOCK_TYPE_RANK[lb.lockType];
+  if (ra !== rb) return ra - rb;
+  if (la.lockType === "priority_access" && lb.lockType === "priority_access") {
+    const pa = la.priorityRank ?? Number.MAX_SAFE_INTEGER;
+    const pb = lb.priorityRank ?? Number.MAX_SAFE_INTEGER;
+    if (pa !== pb) return pa - pb;
+  }
+  if (la.effectiveFrom.getTime() !== lb.effectiveFrom.getTime()) {
+    return la.effectiveFrom.getTime() - lb.effectiveFrom.getTime();
+  }
+  const cidA = a.entry.creatorIdentity.id;
+  const cidB = b.entry.creatorIdentity.id;
+  return cidA < cidB ? -1 : cidA > cidB ? 1 : 0;
 }
