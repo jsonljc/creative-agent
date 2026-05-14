@@ -99,3 +99,79 @@ describe("resolveDisclosure — tuple matching", () => {
     if (decision.allowed === false) expect(decision.reason).toBe("no_template_for_tuple");
   });
 });
+
+describe("resolveDisclosure — window boundaries", () => {
+  const yearStart = new Date("2026-01-01T00:00:00Z");
+  const yearEnd = new Date("2026-12-31T23:59:59Z");
+
+  it("now === effectiveFrom is active (inclusive lower bound)", () => {
+    const tpl = makeTemplate({ effectiveFrom: NOW, effectiveTo: yearEnd });
+    const decision = resolveDisclosure({ brief: baseBrief, now: NOW, templates: [tpl] });
+    expect(decision.allowed).toBe(true);
+  });
+
+  it("now === effectiveTo is inactive (exclusive upper bound)", () => {
+    const tpl = makeTemplate({ effectiveFrom: yearStart, effectiveTo: NOW });
+    const decision = resolveDisclosure({ brief: baseBrief, now: NOW, templates: [tpl] });
+    expect(decision.allowed).toBe(false);
+    if (decision.allowed === false) {
+      expect(decision.reason).toBe("no_active_template_at_now");
+      expect(decision.inspectedTemplateIds).toEqual([tpl.id]);
+    }
+  });
+
+  it("now = effectiveFrom - 1ms is inactive", () => {
+    const tpl = makeTemplate({
+      effectiveFrom: new Date(NOW.getTime() + 1),
+      effectiveTo: yearEnd,
+    });
+    const decision = resolveDisclosure({ brief: baseBrief, now: NOW, templates: [tpl] });
+    expect(decision.allowed).toBe(false);
+  });
+
+  it("now = effectiveTo - 1ms is active", () => {
+    const tpl = makeTemplate({
+      effectiveFrom: yearStart,
+      effectiveTo: new Date(NOW.getTime() + 1),
+    });
+    const decision = resolveDisclosure({ brief: baseBrief, now: NOW, templates: [tpl] });
+    expect(decision.allowed).toBe(true);
+  });
+
+  it("effectiveTo === null with now >= effectiveFrom is active indefinitely", () => {
+    const tpl = makeTemplate({ effectiveFrom: yearStart, effectiveTo: null });
+    const decision = resolveDisclosure({ brief: baseBrief, now: NOW, templates: [tpl] });
+    expect(decision.allowed).toBe(true);
+  });
+
+  it("all tuple-matched rows expired → no_active_template_at_now, inspectedTemplateIds ASC", () => {
+    const tplC = makeTemplate({
+      id: "disclosure-template-SG-meta-med_spa-v3",
+      version: 3,
+      effectiveFrom: yearStart,
+      effectiveTo: new Date("2026-02-01T00:00:00Z"),
+    });
+    const tplA = makeTemplate({
+      id: "disclosure-template-SG-meta-med_spa-v1",
+      version: 1,
+      effectiveFrom: yearStart,
+      effectiveTo: new Date("2026-02-01T00:00:00Z"),
+    });
+    const tplB = makeTemplate({
+      id: "disclosure-template-SG-meta-med_spa-v2",
+      version: 2,
+      effectiveFrom: yearStart,
+      effectiveTo: new Date("2026-02-01T00:00:00Z"),
+    });
+    const decision = resolveDisclosure({
+      brief: baseBrief,
+      now: NOW,
+      templates: [tplC, tplA, tplB],
+    });
+    expect(decision.allowed).toBe(false);
+    if (decision.allowed === false) {
+      expect(decision.reason).toBe("no_active_template_at_now");
+      expect(decision.inspectedTemplateIds).toEqual([tplA.id, tplB.id, tplC.id]);
+    }
+  });
+});

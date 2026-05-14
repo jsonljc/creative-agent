@@ -52,9 +52,31 @@ export function resolveDisclosure(input: ResolveDisclosureInput): DisclosureReso
     };
   }
 
-  // Steps 2 + 3 are placeholders for tasks 9 + 10. For now, naively pick
-  // the first tuple-matched row.
-  const winner = tupleMatched[0]!;
+  // Step 2 — half-open window filter at `now`: [effectiveFrom, effectiveTo)
+  const nowMs = input.now.getTime();
+  const active = tupleMatched.filter(
+    (t) =>
+      t.effectiveFrom.getTime() <= nowMs &&
+      (t.effectiveTo === null || nowMs < t.effectiveTo.getTime()),
+  );
+
+  if (active.length === 0) {
+    return {
+      allowed: false,
+      briefId: input.brief.briefId,
+      reason: "no_active_template_at_now",
+      jurisdictionCode: input.brief.jurisdictionCode,
+      platform: input.brief.platform,
+      treatmentClass: input.brief.treatmentClass,
+      inspectedTemplateIds: tupleMatched
+        .map((t) => t.id)
+        .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+      resolverVersion: PCD_DISCLOSURE_RESOLVER_VERSION,
+    };
+  }
+
+  // Step 3 placeholder (real tiebreak in task 10) — pick first active row.
+  const winner = active[0]!;
   return {
     allowed: true,
     briefId: input.brief.briefId,
@@ -65,6 +87,6 @@ export function resolveDisclosure(input: ResolveDisclosureInput): DisclosureReso
     templateVersion: winner.version,
     disclosureText: winner.text,
     resolverVersion: PCD_DISCLOSURE_RESOLVER_VERSION,
-    decisionReason: `tuple_resolved (active=1, total_for_tuple=${tupleMatched.length}, picked_version=${winner.version})`,
+    decisionReason: `tuple_resolved (active=${active.length}, total_for_tuple=${tupleMatched.length}, picked_version=${winner.version})`,
   };
 }
