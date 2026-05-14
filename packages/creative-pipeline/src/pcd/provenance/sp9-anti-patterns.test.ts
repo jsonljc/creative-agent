@@ -132,6 +132,20 @@ describe("SP9 anti-pattern grep", () => {
       "packages/creative-pipeline/src/pcd/synthetic-creator/index.ts",
       // SP11 anti-pattern grep tests (Task 8)
       "packages/creative-pipeline/src/pcd/sp11-anti-patterns.test.ts",
+      // SP12 net-new schema files (synthetic creator license gate Task 2)
+      "packages/schemas/src/creator-identity-license.ts",
+      "packages/schemas/src/__tests__/creator-identity-license.test.ts",
+      "packages/schemas/src/index.ts",
+      // SP12 net-new db store files (Task 4)
+      "packages/db/src/stores/prisma-creator-identity-license-store.ts",
+      "packages/db/src/stores/__tests__/prisma-creator-identity-license-store.test.ts",
+      "packages/db/src/stores/prisma-creator-identity-license-reader.ts",
+      "packages/db/src/stores/__tests__/prisma-creator-identity-license-reader.test.ts",
+      // SP12 net-new license-gate module + barrel (Tasks 6–7)
+      "packages/creative-pipeline/src/pcd/synthetic-creator/license-gate.ts",
+      "packages/creative-pipeline/src/pcd/synthetic-creator/license-gate.test.ts",
+      // SP12 anti-pattern tests (Task 8)
+      "packages/creative-pipeline/src/pcd/sp12-anti-patterns.test.ts",
     ]);
 
     let sp8Sha = "";

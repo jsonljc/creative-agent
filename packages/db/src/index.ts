@@ -38,3 +38,11 @@ export { PrismaCreatorIdentityReader } from "./stores/prisma-creator-identity-re
 // SP11 — synthetic creator foundation
 export { PrismaCreatorIdentitySyntheticStore } from "./stores/prisma-creator-identity-synthetic-store.js";
 export { PrismaCreatorIdentitySyntheticReader } from "./stores/prisma-creator-identity-synthetic-reader.js";
+
+// SP12 — synthetic creator license + leasing
+export {
+  PrismaCreatorIdentityLicenseStore,
+  withDefaultLeaseWindow,
+  type LicenseInputWithOptionalWindow,
+} from "./stores/prisma-creator-identity-license-store.js";
+export { PrismaCreatorIdentityLicenseReader } from "./stores/prisma-creator-identity-license-reader.js";
