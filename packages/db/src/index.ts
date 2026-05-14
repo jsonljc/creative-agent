@@ -47,3 +47,7 @@ export {
 } from "./stores/prisma-creator-identity-license-store.js";
 export { PrismaCreatorIdentityLicenseReader } from "./stores/prisma-creator-identity-license-reader.js";
 export { PrismaDisclosureTemplateReader } from "./stores/prisma-disclosure-template-reader.js";
+
+// SP15 — script templates
+export { PrismaScriptTemplateReader } from "./stores/prisma-script-template-reader.js";
+export type { ScriptTemplateReader } from "./stores/prisma-script-template-reader.js";
