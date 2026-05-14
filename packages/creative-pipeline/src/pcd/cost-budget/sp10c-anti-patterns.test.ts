@@ -190,6 +190,10 @@ describe("SP10C anti-pattern grep", () => {
     for (const file of changed) {
       // SP10C net-new files are out of scope.
       if (file.startsWith("packages/creative-pipeline/src/pcd/cost-budget/")) continue;
+      // SP13 net-new selector subdir is out of scope (necessary maintenance —
+      // SP10C test was written before SP13 territory existed; same precedent
+      // as pcd/cost-budget/ allowlist additions in prior tests).
+      if (file.startsWith("packages/creative-pipeline/src/pcd/selector/")) continue;
       if (file.startsWith("docs/")) continue;
       // SP11 net-new files are out of scope (parallel slice merged ahead of SP10C —
       // same precedent SP10B established for SP10A's pcd/cost/ allowlist).
@@ -224,6 +228,10 @@ describe("SP10C anti-pattern grep", () => {
         file === "packages/db/src/stores/__tests__/prisma-creator-identity-license-reader.test.ts"
       )
         continue;
+      // SP13 widened schemas with pcd-synthetic-selector.ts. Allow as
+      // out-of-scope; SP13's own freeze test is the authoritative gate.
+      if (file === "packages/schemas/src/pcd-synthetic-selector.ts") continue;
+      if (file === "packages/schemas/src/__tests__/pcd-synthetic-selector.test.ts") continue;
       if (allowedEdits.has(file)) continue;
 
       expect(allowedEdits.has(file), `SP10C modified disallowed file: ${file}`).toBe(true);
