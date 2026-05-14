@@ -543,3 +543,93 @@ describe("selectSyntheticCreator — soft_exclusive override propagation", () =>
     }
   });
 });
+
+describe("selectSyntheticCreator — determinism", () => {
+  // Three compatible candidates, all leased identically except for the
+  // license id. Selector must produce byte-equal output regardless of
+  // input-array ordering — true determinism, not iteration-order luck.
+  const cherylA: RosterEntry = cherylRoster[0]!;
+  const cherylB: RosterEntry = {
+    creatorIdentity: { id: "cid_synth_cheryl_sg_bbb", name: "Cheryl-B", kind: "synthetic" },
+    synthetic: { ...cherylA.synthetic, creatorIdentityId: "cid_synth_cheryl_sg_bbb" },
+  };
+  const cherylC: RosterEntry = {
+    creatorIdentity: { id: "cid_synth_cheryl_sg_ccc", name: "Cheryl-C", kind: "synthetic" },
+    synthetic: { ...cherylA.synthetic, creatorIdentityId: "cid_synth_cheryl_sg_ccc" },
+  };
+
+  const leasesForAll = [
+    makeLease({
+      id: "lic_a",
+      creatorIdentityId: cherylA.creatorIdentity.id,
+      lockType: "priority_access",
+      priorityRank: 5,
+    }),
+    makeLease({
+      id: "lic_b",
+      creatorIdentityId: cherylB.creatorIdentity.id,
+      lockType: "priority_access",
+      priorityRank: 5,
+    }),
+    makeLease({
+      id: "lic_c",
+      creatorIdentityId: cherylC.creatorIdentity.id,
+      lockType: "priority_access",
+      priorityRank: 5,
+    }),
+  ];
+
+  it("two identical calls produce byte-equal decisions", () => {
+    const inputArgs = {
+      brief: briefForCheryl,
+      now: NOW_FIXTURE,
+      roster: [cherylA, cherylB, cherylC],
+      leases: leasesForAll,
+    };
+    const a = selectSyntheticCreator(inputArgs);
+    const b = selectSyntheticCreator(inputArgs);
+    expect(a).toEqual(b);
+  });
+
+  it("shuffling roster order does not change the selected creator", () => {
+    const baseline = selectSyntheticCreator({
+      brief: briefForCheryl,
+      now: NOW_FIXTURE,
+      roster: [cherylA, cherylB, cherylC],
+      leases: leasesForAll,
+    });
+    const reversed = selectSyntheticCreator({
+      brief: briefForCheryl,
+      now: NOW_FIXTURE,
+      roster: [cherylC, cherylB, cherylA],
+      leases: leasesForAll,
+    });
+    expect(baseline.allowed).toBe(true);
+    expect(reversed.allowed).toBe(true);
+    if (baseline.allowed === true && reversed.allowed === true) {
+      expect(reversed.selectedCreatorIdentityId).toBe(baseline.selectedCreatorIdentityId);
+      expect(reversed.fallbackCreatorIdentityIds).toEqual(baseline.fallbackCreatorIdentityIds);
+    }
+  });
+
+  it("shuffling leases order does not change the selected license", () => {
+    const baseline = selectSyntheticCreator({
+      brief: briefForCheryl,
+      now: NOW_FIXTURE,
+      roster: [cherylA, cherylB, cherylC],
+      leases: leasesForAll,
+    });
+    const reversed = selectSyntheticCreator({
+      brief: briefForCheryl,
+      now: NOW_FIXTURE,
+      roster: [cherylA, cherylB, cherylC],
+      leases: [...leasesForAll].reverse(),
+    });
+    expect(baseline.allowed).toBe(true);
+    expect(reversed.allowed).toBe(true);
+    if (baseline.allowed === true && reversed.allowed === true) {
+      expect(reversed.selectedLicenseId).toBe(baseline.selectedLicenseId);
+      expect(reversed.selectedCreatorIdentityId).toBe(baseline.selectedCreatorIdentityId);
+    }
+  });
+});
