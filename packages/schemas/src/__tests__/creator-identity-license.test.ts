@@ -117,3 +117,14 @@ describe("CreatorIdentityLicensePayloadSchema", () => {
     ).toThrow();
   });
 });
+
+import * as barrel from "../index.js";
+
+describe("schemas package barrel — SP12 surface", () => {
+  it("re-exports the SP12 license schemas + types", () => {
+    expect(barrel.LockTypeSchema).toBeDefined();
+    expect(barrel.LeaseStatusSchema).toBeDefined();
+    expect(barrel.ExclusivityScopeSchema).toBeDefined();
+    expect(barrel.CreatorIdentityLicensePayloadSchema).toBeDefined();
+  });
+});
