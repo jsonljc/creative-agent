@@ -500,3 +500,46 @@ describe("selectSyntheticCreator — decisionReason builder", () => {
     }
   });
 });
+
+describe("selectSyntheticCreator — soft_exclusive override propagation", () => {
+  it("emits isSoftExclusivityOverride=true when the chosen lease is soft_exclusive and a competing soft_exclusive is active", () => {
+    const decision = selectSyntheticCreator({
+      brief: briefForCheryl,
+      now: NOW_FIXTURE,
+      roster: cherylRoster,
+      leases: [
+        makeLease({
+          id: "lic_mine_soft",
+          clinicId: "clinic_a",
+          lockType: "soft_exclusive",
+        }),
+        makeLease({
+          id: "lic_competing_soft",
+          clinicId: "clinic_competitor",
+          lockType: "soft_exclusive",
+        }),
+      ],
+    });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed === true) {
+      expect(decision.selectedLockType).toBe("soft_exclusive");
+      expect(decision.isSoftExclusivityOverride).toBe(true);
+    }
+  });
+
+  it("emits isSoftExclusivityOverride=false when the chosen lease is soft_exclusive and no competitor exists", () => {
+    const decision = selectSyntheticCreator({
+      brief: briefForCheryl,
+      now: NOW_FIXTURE,
+      roster: cherylRoster,
+      leases: [
+        makeLease({ id: "lic_mine_soft", clinicId: "clinic_a", lockType: "soft_exclusive" }),
+      ],
+    });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed === true) {
+      expect(decision.selectedLockType).toBe("soft_exclusive");
+      expect(decision.isSoftExclusivityOverride).toBe(false);
+    }
+  });
+});
