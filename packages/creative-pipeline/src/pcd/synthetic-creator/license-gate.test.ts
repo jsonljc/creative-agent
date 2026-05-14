@@ -283,3 +283,18 @@ describe("licenseGate — determinism", () => {
     if (decision1.allowed) expect(decision1.license.id).toBe("lic_b");
   });
 });
+
+import * as syntheticBarrel from "./index.js";
+import * as packageBarrel from "../../index.js";
+
+describe("synthetic-creator subdir barrel — SP12 surface", () => {
+  it("re-exports the license gate function + types", () => {
+    expect(syntheticBarrel.licenseGate).toBeDefined();
+    expect(syntheticBarrel.PCD_LICENSE_GATE_VERSION).toBe("license-gate@1.0.0");
+  });
+
+  it("re-exports through the creative-pipeline package barrel", () => {
+    expect(packageBarrel.licenseGate).toBeDefined();
+    expect(packageBarrel.PCD_LICENSE_GATE_VERSION).toBe("license-gate@1.0.0");
+  });
+});
