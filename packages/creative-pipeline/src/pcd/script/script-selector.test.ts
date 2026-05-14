@@ -301,6 +301,107 @@ describe("selectScript — version tie-break (version DESC, id ASC)", () => {
   });
 });
 
+describe("selectScript — pin invariant + determinism + now-unused", () => {
+  it("emits PCD_SCRIPT_SELECTOR_VERSION on every success branch", () => {
+    const row = mkRow({
+      id: "script-template-omg_look-med_spa-v1",
+      vibe: "omg_look",
+      treatmentClass: "med_spa",
+    });
+    const d = selectScript({
+      brief: BRIEF_FIXTURE,
+      creatorIdentityId: "cid_synth_cheryl_sg_01",
+      now: NOW_FIXTURE,
+      templates: [row],
+    });
+    expect(d.selectorVersion).toBe(PCD_SCRIPT_SELECTOR_VERSION);
+  });
+
+  it("emits PCD_SCRIPT_SELECTOR_VERSION on no_compatible_script", () => {
+    const d = selectScript({
+      brief: BRIEF_FIXTURE,
+      creatorIdentityId: "cid_synth_cheryl_sg_01",
+      now: NOW_FIXTURE,
+      templates: [],
+    });
+    expect(d.selectorVersion).toBe(PCD_SCRIPT_SELECTOR_VERSION);
+  });
+
+  it("emits PCD_SCRIPT_SELECTOR_VERSION on all_filtered_by_creator", () => {
+    const row = mkRow({
+      id: "x",
+      vibe: "omg_look",
+      treatmentClass: "med_spa",
+      compatibleCreatorIdentityIds: ["someone-else"],
+    });
+    const d = selectScript({
+      brief: BRIEF_FIXTURE,
+      creatorIdentityId: "cid_synth_cheryl_sg_01",
+      now: NOW_FIXTURE,
+      templates: [row],
+    });
+    expect(d.selectorVersion).toBe(PCD_SCRIPT_SELECTOR_VERSION);
+  });
+
+  it("is deterministic: identical input yields byte-equal decisions", () => {
+    const rows = [
+      mkRow({ id: "v1", vibe: "omg_look", treatmentClass: "med_spa", version: 1 }),
+      mkRow({ id: "v2", vibe: "omg_look", treatmentClass: "med_spa", version: 2 }),
+    ];
+    const inp = {
+      brief: BRIEF_FIXTURE,
+      creatorIdentityId: "cid_synth_cheryl_sg_01",
+      now: NOW_FIXTURE,
+      templates: rows,
+    };
+    expect(JSON.stringify(selectScript(inp))).toBe(JSON.stringify(selectScript(inp)));
+  });
+
+  it("is order-stable: shuffling templates does not change the chosen scriptTemplateId", () => {
+    const rows = [
+      mkRow({ id: "a", vibe: "omg_look", treatmentClass: "med_spa", version: 1 }),
+      mkRow({ id: "b", vibe: "omg_look", treatmentClass: "med_spa", version: 2 }),
+      mkRow({ id: "c", vibe: "omg_look", treatmentClass: "med_spa", version: 2 }),
+    ];
+    const d1 = selectScript({
+      brief: BRIEF_FIXTURE,
+      creatorIdentityId: "cid_synth_cheryl_sg_01",
+      now: NOW_FIXTURE,
+      templates: rows,
+    });
+    const d2 = selectScript({
+      brief: BRIEF_FIXTURE,
+      creatorIdentityId: "cid_synth_cheryl_sg_01",
+      now: NOW_FIXTURE,
+      templates: [...rows].reverse(),
+    });
+    expect(d1.allowed).toBe(true);
+    expect(d2.allowed).toBe(true);
+    if (d1.allowed === true && d2.allowed === true) {
+      expect(d1.scriptTemplateId).toBe(d2.scriptTemplateId);
+      expect(d1.scriptTemplateId).toBe("b"); // v2 wins; id ASC tie-break picks "b" over "c"
+    }
+  });
+
+  it("varying `now` does NOT change the decision for identical other inputs (J8 — v1 no time windows)", () => {
+    const row = mkRow({
+      id: "script-template-omg_look-med_spa-v1",
+      vibe: "omg_look",
+      treatmentClass: "med_spa",
+    });
+    const base = {
+      brief: BRIEF_FIXTURE,
+      creatorIdentityId: "cid_synth_cheryl_sg_01",
+      templates: [row],
+    };
+    const dEpoch = selectScript({ ...base, now: new Date(0) });
+    const d2000 = selectScript({ ...base, now: new Date("2000-01-01T00:00:00Z") });
+    const d2100 = selectScript({ ...base, now: new Date("2100-12-31T23:59:59Z") });
+    expect(JSON.stringify(dEpoch)).toBe(JSON.stringify(d2000));
+    expect(JSON.stringify(d2000)).toBe(JSON.stringify(d2100));
+  });
+});
+
 // Templates available to later tasks
 export const NOW_FIXTURE = NOW;
 export const BRIEF_FIXTURE = baseBrief;
