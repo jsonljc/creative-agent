@@ -75,8 +75,13 @@ export function resolveDisclosure(input: ResolveDisclosureInput): DisclosureReso
     };
   }
 
-  // Step 3 placeholder (real tiebreak in task 10) — pick first active row.
-  const winner = active[0]!;
+  // Step 3 — pick highest `version`; final tie-break `id` ASC. Defensive
+  // against caller-supplied snapshots with duplicate (tuple, version) rows
+  // even though the DB unique constraint normally prevents them.
+  const ranked = [...active].sort((a, b) =>
+    b.version !== a.version ? b.version - a.version : a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+  );
+  const winner = ranked[0]!;
   return {
     allowed: true,
     briefId: input.brief.briefId,

@@ -175,3 +175,52 @@ describe("resolveDisclosure — window boundaries", () => {
     }
   });
 });
+
+describe("resolveDisclosure — version tiebreak", () => {
+  const yearStart = new Date("2026-01-01T00:00:00Z");
+
+  it("two active rows: picks higher version (v2 over v1)", () => {
+    const v1 = makeTemplate({ id: "tpl-v1", version: 1, effectiveFrom: yearStart });
+    const v2 = makeTemplate({ id: "tpl-v2", version: 2, effectiveFrom: yearStart });
+    const decision = resolveDisclosure({ brief: baseBrief, now: NOW, templates: [v1, v2] });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed === true) expect(decision.templateVersion).toBe(2);
+  });
+
+  it("three active rows: picks the highest of v1/v2/v3", () => {
+    const v1 = makeTemplate({ id: "tpl-v1", version: 1, effectiveFrom: yearStart });
+    const v2 = makeTemplate({ id: "tpl-v2", version: 2, effectiveFrom: yearStart });
+    const v3 = makeTemplate({ id: "tpl-v3", version: 3, effectiveFrom: yearStart });
+    const decision = resolveDisclosure({ brief: baseBrief, now: NOW, templates: [v1, v2, v3] });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed === true) expect(decision.templateVersion).toBe(3);
+  });
+
+  it("active v1 + inactive (out-of-window) v2: picks the active v1", () => {
+    const activeV1 = makeTemplate({ id: "tpl-active-v1", version: 1, effectiveFrom: yearStart });
+    const inactiveV2 = makeTemplate({
+      id: "tpl-inactive-v2",
+      version: 2,
+      effectiveFrom: yearStart,
+      effectiveTo: new Date(NOW.getTime() - 1), // window closes 1ms before NOW
+    });
+    const decision = resolveDisclosure({
+      brief: baseBrief,
+      now: NOW,
+      templates: [activeV1, inactiveV2],
+    });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed === true) {
+      expect(decision.disclosureTemplateId).toBe("tpl-active-v1");
+      expect(decision.templateVersion).toBe(1);
+    }
+  });
+
+  it("two active rows same version: picks lexicographically smaller id", () => {
+    const idB = makeTemplate({ id: "tpl-b", version: 5, effectiveFrom: yearStart });
+    const idA = makeTemplate({ id: "tpl-a", version: 5, effectiveFrom: yearStart });
+    const decision = resolveDisclosure({ brief: baseBrief, now: NOW, templates: [idB, idA] });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed === true) expect(decision.disclosureTemplateId).toBe("tpl-a");
+  });
+});
