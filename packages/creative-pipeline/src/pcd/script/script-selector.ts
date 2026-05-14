@@ -38,14 +38,39 @@ export type SelectScriptInput = {
 };
 
 export function selectScript(input: SelectScriptInput): ScriptSelectionDecision {
+  // Step 1 — 3-way prefilter on vibe + treatmentClass + status === "active"
+  const threeWayMatched = input.templates.filter(
+    (t) =>
+      t.vibe === input.brief.targetVibe &&
+      t.treatmentClass === input.brief.treatmentClass &&
+      t.status === "active",
+  );
+  if (threeWayMatched.length === 0) {
+    return {
+      allowed: false,
+      briefId: input.brief.briefId,
+      reason: "no_compatible_script",
+      vibe: input.brief.targetVibe,
+      treatmentClass: input.brief.treatmentClass,
+      creatorIdentityId: input.creatorIdentityId,
+      inspectedTemplateIds: [],
+      selectorVersion: PCD_SCRIPT_SELECTOR_VERSION,
+    };
+  }
+
+  // STUB — Task 9 adds the creator-compat filter; Task 10 adds the tie-break.
+  // For now, return a success decision using the first 3-way-matched row.
+  const stub = threeWayMatched[0]!;
   return {
-    allowed: false,
+    allowed: true,
     briefId: input.brief.briefId,
-    reason: "no_compatible_script",
+    scriptTemplateId: stub.id,
     vibe: input.brief.targetVibe,
     treatmentClass: input.brief.treatmentClass,
+    scriptTemplateVersion: stub.version,
     creatorIdentityId: input.creatorIdentityId,
-    inspectedTemplateIds: [],
+    scriptText: stub.text,
     selectorVersion: PCD_SCRIPT_SELECTOR_VERSION,
+    decisionReason: `script_selected (three_way=${threeWayMatched.length}, picked_version=${stub.version})`,
   };
 }

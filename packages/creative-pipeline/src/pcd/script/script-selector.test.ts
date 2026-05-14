@@ -40,6 +40,90 @@ describe("selectScript — skeleton", () => {
   });
 });
 
+describe("selectScript — 3-way prefilter (vibe + treatment + status='active')", () => {
+  it("returns success when exactly one row matches the 3-way filter", () => {
+    const row = mkRow({
+      id: "script-template-omg_look-med_spa-v1",
+      vibe: "omg_look",
+      treatmentClass: "med_spa",
+    });
+    const d = selectScript({
+      brief: BRIEF_FIXTURE,
+      creatorIdentityId: "cid_synth_cheryl_sg_01",
+      now: NOW_FIXTURE,
+      templates: [row],
+    });
+    expect(d.allowed).toBe(true);
+  });
+
+  it("returns no_compatible_script when vibe does not match", () => {
+    const row = mkRow({
+      id: "script-template-quiet_confidence-med_spa-v1",
+      vibe: "quiet_confidence",
+      treatmentClass: "med_spa",
+    });
+    const d = selectScript({
+      brief: BRIEF_FIXTURE,
+      creatorIdentityId: "cid_synth_cheryl_sg_01",
+      now: NOW_FIXTURE,
+      templates: [row],
+    });
+    expect(d.allowed).toBe(false);
+    if (d.allowed === false) expect(d.reason).toBe("no_compatible_script");
+  });
+
+  it("returns no_compatible_script when treatmentClass does not match", () => {
+    const row = mkRow({
+      id: "script-template-omg_look-dental-v1",
+      vibe: "omg_look",
+      treatmentClass: "dental",
+    });
+    const d = selectScript({
+      brief: BRIEF_FIXTURE,
+      creatorIdentityId: "cid_synth_cheryl_sg_01",
+      now: NOW_FIXTURE,
+      templates: [row],
+    });
+    expect(d.allowed).toBe(false);
+    if (d.allowed === false) expect(d.reason).toBe("no_compatible_script");
+  });
+
+  it("returns no_compatible_script when status is retired (NOT a separate reason)", () => {
+    const row = mkRow({
+      id: "script-template-omg_look-med_spa-v1",
+      vibe: "omg_look",
+      treatmentClass: "med_spa",
+      status: "retired",
+    });
+    const d = selectScript({
+      brief: BRIEF_FIXTURE,
+      creatorIdentityId: "cid_synth_cheryl_sg_01",
+      now: NOW_FIXTURE,
+      templates: [row],
+    });
+    expect(d.allowed).toBe(false);
+    if (d.allowed === false) {
+      expect(d.reason).toBe("no_compatible_script");
+      // The retired row was filtered at the 3-way stage; not surfaced in inspectedTemplateIds.
+      expect(d.inspectedTemplateIds).toEqual([]);
+    }
+  });
+
+  it("returns no_compatible_script with empty inspectedTemplateIds when no 3-way matches exist", () => {
+    const d = selectScript({
+      brief: BRIEF_FIXTURE,
+      creatorIdentityId: "cid_synth_cheryl_sg_01",
+      now: NOW_FIXTURE,
+      templates: [
+        mkRow({ id: "x1", vibe: "softly_glowing", treatmentClass: "dental" }),
+        mkRow({ id: "x2", vibe: "quiet_confidence", treatmentClass: "anti_ageing" }),
+      ],
+    });
+    expect(d.allowed).toBe(false);
+    if (d.allowed === false) expect(d.inspectedTemplateIds).toEqual([]);
+  });
+});
+
 // Templates available to later tasks
 export const NOW_FIXTURE = NOW;
 export const BRIEF_FIXTURE = baseBrief;
