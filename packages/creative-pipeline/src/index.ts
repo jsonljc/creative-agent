@@ -203,3 +203,6 @@ export * from "./pcd/synthetic-router/index.js";
 
 // SP18 — synthetic routing provenance (snapshot/dispatch decision stamping)
 export * from "./pcd/synthetic-routing-provenance/index.js";
+
+// SP19 — performance snapshot
+export * from "./pcd/performance-snapshot/index.js";
