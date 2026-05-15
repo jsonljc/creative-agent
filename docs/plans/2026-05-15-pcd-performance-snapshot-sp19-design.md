@@ -74,9 +74,9 @@ SP19 is the first PCD slice that writes AFTER generation has terminated. Every p
 
 > The SP19 surface (subdir, schema file, store file, reader file, store contract, version constant, stamper, writer, tests) MUST NOT import `node:crypto` or any `crypto` symbol. SP19 captures runtime-observed values; it does not derive hashes. Anti-pattern test enforces. (SP18 had a single `crypto.createHash` site for `promptHash`; SP19 has none.)
 
-**Guardrail E — no widen of `PcdIdentitySnapshot`, `AssetRecord`, or `ProductQcResult`:**
+**Guardrail E — no widen of `PcdIdentitySnapshot`, `AssetRecord`, or `ProductQcResult` (database columns):**
 
-> Three Prisma models stay byte-frozen. The schema-freeze allowlist for prior anti-pattern tests already lists `schema.prisma` as immutable in its current state; SP19 widens by ADDING a new model, not by altering existing ones. Anti-pattern test #5 verifies the three models' field lists are unchanged.
+> Three Prisma models stay column-frozen at the database level. SP19 widens by ADDING a new `PcdPerformanceSnapshot` model. Clarification on `AssetRecord`: **no AssetRecord database-column widen. SP19 may add the required Prisma-only opposite-relation field `performanceSnapshot PcdPerformanceSnapshot?`; the migration SQL must not `ALTER TABLE AssetRecord`.** Prisma 5 mandates the back-reference for the 1:1 relation declared on `PcdPerformanceSnapshot.assetRecord`, so the line is unavoidable; it is tooling-only and emits no DDL. Anti-pattern test #5 verifies both halves: the existing column lists are intact, the opposite-relation line is the only AssetRecord-block change, and the SP19 migration SQL contains no `ALTER TABLE AssetRecord` statement.
 
 **Guardrail F — no `@@index` lines in SP19 v1:**
 

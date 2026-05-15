@@ -67,8 +67,8 @@ packages/creative-pipeline/src/pcd/performance-snapshot/
   stamp-pcd-performance-snapshot.test.ts                                               [Task 7]
   write-pcd-performance-snapshot.ts                                                    [Task 8]
   write-pcd-performance-snapshot.test.ts                                               [Task 8]
+  index.ts                                                                             [Task 8 — subdir barrel; created at end of Task 8 so Task 9 can scan it]
   sp19-anti-patterns.test.ts                                                           [Task 9]
-  index.ts                                                                             [Task 11]
 ```
 
 **Modified files (existing — edits only):**
@@ -76,7 +76,7 @@ packages/creative-pipeline/src/pcd/performance-snapshot/
 ```
 packages/schemas/src/index.ts                                                          [Task 2 — re-export SP19 schemas]
 packages/db/prisma/schema.prisma                                                       [Task 3 — ADD new model PcdPerformanceSnapshot]
-packages/creative-pipeline/src/index.ts                                                [Task 11 — re-export ./pcd/performance-snapshot/index.js]
+packages/creative-pipeline/src/index.ts                                                [Task 11 — root package barrel re-export of ./pcd/performance-snapshot/index.js]
 
 packages/creative-pipeline/src/pcd/provenance/sp9-anti-patterns.test.ts                [Task 10 — allowlist widen]
 packages/creative-pipeline/src/pcd/cost/sp10a-anti-patterns.test.ts                    [Task 10]
@@ -103,7 +103,7 @@ packages/creative-pipeline/src/pcd/synthetic-routing-provenance/sp18-anti-patter
 - `packages/schemas/src/pcd-identity.ts` (the SP4-era `PcdIdentitySnapshotSchema` stays narrow — Guardrail E)
 - `packages/schemas/src/pcd-synthetic-selector.ts` (`metricsSnapshotVersion: z.null()` stays narrow — Guardrail I; SP20's job to widen)
 - `packages/db/src/stores/prisma-pcd-identity-snapshot-store.ts` (post-SP18 source frozen)
-- `packages/db/prisma/schema.prisma` — only ADD the new model; do NOT alter existing `PcdIdentitySnapshot`, `AssetRecord`, or `ProductQcResult` field lists
+- `packages/db/prisma/schema.prisma` — only ADD the new `PcdPerformanceSnapshot` model. **No `PcdIdentitySnapshot` or `ProductQcResult` field changes. No `AssetRecord` database-column widen.** SP19 may add the required Prisma-only opposite-relation field `performanceSnapshot PcdPerformanceSnapshot?` on `AssetRecord` (Prisma 5 mandates the back-reference for the 1:1 relation declared on `PcdPerformanceSnapshot.assetRecord`); the migration SQL must not `ALTER TABLE AssetRecord`. Anti-pattern test #5 enforces both halves: existing column lists intact AND migration SQL untouched on `AssetRecord`.
 
 ---
 
@@ -1446,12 +1446,40 @@ pnpm --filter @creativeagent/creative-pipeline typecheck
 
 Expected: all 5 tests pass; typecheck clean.
 
-- [ ] **Step 8.5: Commit**
+- [ ] **Step 8.5: Create the subdir barrel**
+
+The subdir barrel is created at the end of Task 8 (not Task 11) so that Task 9's anti-pattern test scan can read `index.ts` without a missing-file error. By this point all symbols the barrel exports (version constant, store/reader contracts, stamper, writer) exist.
+
+Create `packages/creative-pipeline/src/pcd/performance-snapshot/index.ts`:
+
+```ts
+// SP19 — public surface for the performance-snapshot slice.
+export { PCD_PERFORMANCE_SNAPSHOT_VERSION } from "./performance-snapshot-version.js";
+export type {
+  PcdSp19PerformanceSnapshotReader,
+  PcdSp19PerformanceSnapshotStore,
+} from "./pcd-sp19-performance-snapshot-store.js";
+export { stampPcdPerformanceSnapshot } from "./stamp-pcd-performance-snapshot.js";
+export type { StampPcdPerformanceSnapshotStores } from "./stamp-pcd-performance-snapshot.js";
+export { writePcdPerformanceSnapshot } from "./write-pcd-performance-snapshot.js";
+export type { WritePcdPerformanceSnapshotStores } from "./write-pcd-performance-snapshot.js";
+```
+
+- [ ] **Step 8.6: Typecheck after barrel creation**
+
+```bash
+pnpm --filter @creativeagent/creative-pipeline typecheck
+```
+
+Expected: clean. (The barrel only re-exports; if any symbol name diverged from what the prior tasks declared, this catches it now rather than at Task 9 / Task 11.)
+
+- [ ] **Step 8.7: Commit (writer + subdir barrel together)**
 
 ```bash
 git add packages/creative-pipeline/src/pcd/performance-snapshot/write-pcd-performance-snapshot.ts \
-        packages/creative-pipeline/src/pcd/performance-snapshot/write-pcd-performance-snapshot.test.ts
-git commit -m "feat(pcd): SP19 — writePcdPerformanceSnapshot store-injected writer (no orchestrator lock-step)"
+        packages/creative-pipeline/src/pcd/performance-snapshot/write-pcd-performance-snapshot.test.ts \
+        packages/creative-pipeline/src/pcd/performance-snapshot/index.ts
+git commit -m "feat(pcd): SP19 — writePcdPerformanceSnapshot store-injected writer + subdir barrel"
 ```
 
 ---
@@ -1844,30 +1872,14 @@ git commit -m "chore(pcd): SP19 — extend SP9/10A/10B/10C/13/14/15/16/17/18 ant
 
 ---
 
-## Task 11: Subdir barrel + creative-pipeline package barrel
+## Task 11: Root creative-pipeline package barrel widen
 
 **Files:**
-- Create: `packages/creative-pipeline/src/pcd/performance-snapshot/index.ts`
 - Modify: `packages/creative-pipeline/src/index.ts`
 
-- [ ] **Step 11.1: Create the subdir barrel**
+The subdir barrel (`packages/creative-pipeline/src/pcd/performance-snapshot/index.ts`) was created in Task 8 Step 8.5 so Task 9's anti-pattern test could scan it. Task 11 only widens the root package barrel to re-export the subdir.
 
-Create `packages/creative-pipeline/src/pcd/performance-snapshot/index.ts`:
-
-```ts
-// SP19 — public surface for the performance-snapshot slice.
-export { PCD_PERFORMANCE_SNAPSHOT_VERSION } from "./performance-snapshot-version.js";
-export type {
-  PcdSp19PerformanceSnapshotReader,
-  PcdSp19PerformanceSnapshotStore,
-} from "./pcd-sp19-performance-snapshot-store.js";
-export { stampPcdPerformanceSnapshot } from "./stamp-pcd-performance-snapshot.js";
-export type { StampPcdPerformanceSnapshotStores } from "./stamp-pcd-performance-snapshot.js";
-export { writePcdPerformanceSnapshot } from "./write-pcd-performance-snapshot.js";
-export type { WritePcdPerformanceSnapshotStores } from "./write-pcd-performance-snapshot.js";
-```
-
-- [ ] **Step 11.2: Widen the package barrel**
+- [ ] **Step 11.1: Widen the root package barrel**
 
 Edit `packages/creative-pipeline/src/index.ts` — append (after existing SP18 re-export):
 
@@ -1875,7 +1887,7 @@ Edit `packages/creative-pipeline/src/index.ts` — append (after existing SP18 r
 export * from "./pcd/performance-snapshot/index.js";
 ```
 
-- [ ] **Step 11.3: Typecheck**
+- [ ] **Step 11.2: Typecheck**
 
 ```bash
 pnpm --filter @creativeagent/creative-pipeline typecheck
@@ -1883,12 +1895,11 @@ pnpm --filter @creativeagent/creative-pipeline typecheck
 
 Expected: clean.
 
-- [ ] **Step 11.4: Commit**
+- [ ] **Step 11.3: Commit**
 
 ```bash
-git add packages/creative-pipeline/src/pcd/performance-snapshot/index.ts \
-        packages/creative-pipeline/src/index.ts
-git commit -m "feat(pcd): SP19 — barrel re-exports (subdir + package surface)"
+git add packages/creative-pipeline/src/index.ts
+git commit -m "feat(pcd): SP19 — root creative-pipeline barrel re-exports performance-snapshot subdir"
 ```
 
 ---
@@ -1979,7 +1990,8 @@ Expected: `working tree clean`. Ready for PR.
 - ✅ Writer (§3.6) → Task 8
 - ✅ Anti-pattern test (§5.4) → Task 9
 - ✅ Allowlist maintenance (§5.5) → Task 10
-- ✅ Barrel re-exports (§3.1 file layout) → Task 11
+- ✅ Subdir barrel (§3.1 file layout) → Task 8 Step 8.5 (moved up from Task 11 so Task 9 can scan it)
+- ✅ Root creative-pipeline barrel widen (§3.1 file layout) → Task 11
 - ✅ Final integration sweep → Task 12
 - ✅ Pre-flight gate (working baseline) → Task 1
 - ✅ Cleanup delete-order documentation (user emphasis) → Task 3 step 3.4 SQL header + model comment
