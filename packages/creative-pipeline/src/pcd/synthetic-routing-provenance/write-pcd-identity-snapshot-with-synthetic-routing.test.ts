@@ -386,6 +386,20 @@ describe("writePcdIdentitySnapshotWithSyntheticRouting — step ordering", () =>
       };
     });
 
+    // Spy on the SP18 stamper via the clock. Both SP9 and SP18 stampers call
+    // stores.clock() once each (for their respective decidedAt stamps). The
+    // SP9 call happens during Step 1; the SP18 call happens during Step 2.
+    // Label them distinctly so we can assert: consent (SP9) → clock:sp18
+    // (SP18 stamper) → store (Step 6), proving SP18 stamper runs BEFORE the
+    // store. Without this spy, the test only proved SP9 ran before store —
+    // a future swap of Steps 2 and 6 would have gone undetected.
+    let clockCallCount = 0;
+    stores.clock = () => {
+      clockCallCount += 1;
+      calls.push(clockCallCount === 1 ? "clock:sp9" : "clock:sp18");
+      return new Date("2026-05-16T08:00:00.000Z");
+    };
+
     // Spy on store (Step 6 — last)
     const persistedSnapshot: PcdIdentitySnapshot = { id: "snap_1" } as PcdIdentitySnapshot;
     stores.pcdSp18IdentitySnapshotStore = {
@@ -399,9 +413,15 @@ describe("writePcdIdentitySnapshotWithSyntheticRouting — step ordering", () =>
 
     // Consent check (inside SP9 stamper) must run before store persist
     const consentIdx = calls.findIndex((c) => c.startsWith("consent:"));
+    const sp18ClockIdx = calls.indexOf("clock:sp18");
     const storeIdx = calls.indexOf("store");
     expect(consentIdx).toBeGreaterThanOrEqual(0);
-    expect(storeIdx).toBeGreaterThan(consentIdx);
+    expect(sp18ClockIdx, "SP18 stamper must run (clock:sp18 must be in calls)").toBeGreaterThan(-1);
+    // Full chain: consent (SP9) → sp18-clock (SP18 stamper) → store (Step 6)
+    expect(sp18ClockIdx, "SP18 stamper must run after SP9 consent check").toBeGreaterThan(
+      consentIdx,
+    );
+    expect(storeIdx, "store must run after SP18 stamper").toBeGreaterThan(sp18ClockIdx);
     // Store must be the last call
     expect(storeIdx).toBe(calls.length - 1);
   });

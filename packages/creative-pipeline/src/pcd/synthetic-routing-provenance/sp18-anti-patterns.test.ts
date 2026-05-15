@@ -203,7 +203,19 @@ describe("SP18 anti-patterns", () => {
       expect(sp18, `SP18 orchestrator should reference ${constant}`).toContain(constant);
     }
 
-    // All four must call assertTier3RoutingDecisionCompliant with the six-argument shape
+    // All four must call assertTier3RoutingDecisionCompliant with the six-argument shape.
+    // Verify both the call itself AND each of the six argument keys appears in each file —
+    // catches future drift where an argument is renamed in only one orchestrator (e.g.
+    // tier3RulesApplied → tier3Rules), which would otherwise pass the symbol-presence check
+    // but break the lock-step the test claims to enforce.
+    const sixArgumentKeys = [
+      "effectiveTier:",
+      "shotType:",
+      "outputIntent:",
+      "selectedCapability:",
+      "tier3RulesApplied:",
+      "editOverRegenerateRequired:",
+    ];
     for (const [name, src] of [
       ["SP4", sp4],
       ["SP9", sp9],
@@ -213,26 +225,75 @@ describe("SP18 anti-patterns", () => {
       expect(src, `${name} should call assertTier3RoutingDecisionCompliant`).toContain(
         "assertTier3RoutingDecisionCompliant({",
       );
+      for (const key of sixArgumentKeys) {
+        expect(
+          src,
+          `${name} orchestrator must include argument "${key}" in its assertTier3RoutingDecisionCompliant call`,
+        ).toContain(key);
+      }
     }
   });
 
   it("4: SP1–SP17 source bodies are unchanged since SP17 squash (b8d68b1)", () => {
     const frozenFiles = [
+      // SP4 — provider routing + writer
       "packages/creative-pipeline/src/pcd/pcd-identity-snapshot-writer.ts",
       "packages/creative-pipeline/src/pcd/tier-policy.ts",
       "packages/creative-pipeline/src/pcd/provider-capability-matrix.ts",
       "packages/creative-pipeline/src/pcd/provider-router.ts",
       "packages/creative-pipeline/src/pcd/tier3-routing-rules.ts",
+      // SP6 — consent pre-check
       "packages/creative-pipeline/src/pcd/consent-pre-check-generation.ts",
+      // SP9 — provenance
       "packages/creative-pipeline/src/pcd/provenance/stamp-pcd-provenance.ts",
       "packages/creative-pipeline/src/pcd/provenance/write-pcd-identity-snapshot-with-provenance.ts",
+      "packages/creative-pipeline/src/pcd/provenance/provenance-version.ts",
+      "packages/creative-pipeline/src/pcd/provenance/pcd-sp9-identity-snapshot-store.ts",
+      // SP10A — cost forecast
       "packages/creative-pipeline/src/pcd/cost/write-pcd-identity-snapshot-with-cost-forecast.ts",
       "packages/creative-pipeline/src/pcd/cost/stamp-pcd-cost-forecast.ts",
+      "packages/creative-pipeline/src/pcd/cost/cost-estimator.ts",
+      "packages/creative-pipeline/src/pcd/cost/cost-forecast-version.ts",
+      "packages/creative-pipeline/src/pcd/cost/pcd-sp10-identity-snapshot-store.ts",
+      "packages/creative-pipeline/src/pcd/cost/stub-cost-estimator.ts",
+      // SP10B — tree budget
+      "packages/creative-pipeline/src/pcd/budget/run-identity-aware-preproduction-chain-with-budget.ts",
+      "packages/creative-pipeline/src/pcd/budget/sp10b-budget-reader.ts",
+      "packages/creative-pipeline/src/pcd/budget/static-default-budget-reader.ts",
+      "packages/creative-pipeline/src/pcd/budget/tree-budget-exceeded-error.ts",
+      "packages/creative-pipeline/src/pcd/budget/tree-budget-version.ts",
+      "packages/creative-pipeline/src/pcd/budget/tree-shape-validator.ts",
+      // SP10C — cost budget
+      "packages/creative-pipeline/src/pcd/cost-budget/coarse-cost-estimator.ts",
+      "packages/creative-pipeline/src/pcd/cost-budget/cost-budget-exceeded-error.ts",
+      "packages/creative-pipeline/src/pcd/cost-budget/cost-budget-validator.ts",
+      "packages/creative-pipeline/src/pcd/cost-budget/cost-budget-version.ts",
+      "packages/creative-pipeline/src/pcd/cost-budget/run-identity-aware-preproduction-chain-with-cost-budget.ts",
+      "packages/creative-pipeline/src/pcd/cost-budget/stub-coarse-cost-estimator.ts",
+      // SP11 + SP12 — synthetic creator foundation + license gate
+      "packages/creative-pipeline/src/pcd/synthetic-creator/license-gate.ts",
+      "packages/creative-pipeline/src/pcd/synthetic-creator/seed.ts",
+      // SP13 — synthetic creator selector
+      "packages/creative-pipeline/src/pcd/selector/selector.ts",
+      "packages/creative-pipeline/src/pcd/selector/selector-version.ts",
+      // SP14 — disclosure registry
+      "packages/creative-pipeline/src/pcd/disclosure/disclosure-placeholder.ts",
+      "packages/creative-pipeline/src/pcd/disclosure/disclosure-resolver-version.ts",
+      "packages/creative-pipeline/src/pcd/disclosure/disclosure-resolver.ts",
+      "packages/creative-pipeline/src/pcd/disclosure/disclosure-seed.ts",
+      // SP15 — script templates
+      "packages/creative-pipeline/src/pcd/script/script-placeholder.ts",
+      "packages/creative-pipeline/src/pcd/script/script-seed.ts",
+      "packages/creative-pipeline/src/pcd/script/script-selector-version.ts",
+      "packages/creative-pipeline/src/pcd/script/script-selector.ts",
+      // SP16 + SP17 — synthetic provider routing
       "packages/creative-pipeline/src/pcd/synthetic-router/route-synthetic-pcd-shot.ts",
-      "packages/schemas/src/pcd-synthetic-router.ts",
       "packages/creative-pipeline/src/pcd/synthetic-router/synthetic-router-version.ts",
       "packages/creative-pipeline/src/pcd/synthetic-router/synthetic-provider-pairing.ts",
+      "packages/schemas/src/pcd-synthetic-router.ts",
+      // SP11/SP17 — synthetic creator schema (SP17 widened with SeedanceDirection)
       "packages/schemas/src/creator-identity-synthetic.ts",
+      // SP4 — identity snapshot schema (untouched by SP18 per Q9)
       "packages/schemas/src/pcd-identity.ts",
     ];
 
