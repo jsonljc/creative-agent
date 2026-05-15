@@ -31,3 +31,6 @@ export * from "./pcd-disclosure-template.js";
 
 // SP15 — script templates
 export * from "./pcd-script-template.js";
+
+// SP16 — synthetic creator provider routing
+export * from "./pcd-synthetic-router.js";
