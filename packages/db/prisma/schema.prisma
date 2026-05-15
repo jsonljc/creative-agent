@@ -381,6 +381,20 @@ model PcdIdentitySnapshot {
   // See docs/plans/2026-04-30-pcd-cost-forecast-sp10a-design.md §0 risk #9.
   costForecastReason          Json?
 
+  // SP18 — Synthetic-routing provenance. All columns nullable for historical
+  // compatibility (pre-SP18 rows remain readable). Populated by the SP18
+  // orchestrator (writePcdIdentitySnapshotWithSyntheticRouting) for synthetic-
+  // pairing success decisions only; delegation and denial decisions do NOT
+  // use this path. No flat-numeric column and no index in v1 — see SP18
+  // design §2.2 Q7.
+  imageProvider                   String?
+  videoProvider                   String?
+  videoProviderChoice             String?
+  syntheticRouterVersion          String?
+  syntheticPairingVersion         String?
+  promptHash                      String?
+  syntheticRoutingDecisionReason  Json?
+
   createdAt                   DateTime        @default(now())
 
   @@index([productIdentityId])
