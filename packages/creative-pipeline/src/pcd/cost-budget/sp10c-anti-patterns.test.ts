@@ -260,6 +260,12 @@ describe("SP10C anti-pattern grep", () => {
       if (file === "packages/db/src/stores/prisma-script-template-reader.ts") continue;
       if (file === "packages/db/src/stores/prisma-script-template-reader.test.ts") continue;
       if (allowedEdits.has(file)) continue;
+      // SP16 net-new files are out of scope (necessary maintenance — this
+      // SP test was written before SP16 territory existed; same precedent
+      // as prior SP allowlist additions).
+      if (file.startsWith("packages/creative-pipeline/src/pcd/synthetic-router/")) continue;
+      if (file === "packages/schemas/src/pcd-synthetic-router.ts") continue;
+      if (file === "packages/schemas/src/__tests__/pcd-synthetic-router.test.ts") continue;
 
       expect(allowedEdits.has(file), `SP10C modified disallowed file: ${file}`).toBe(true);
     }
