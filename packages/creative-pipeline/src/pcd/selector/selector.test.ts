@@ -5,11 +5,13 @@ import { describe, expect, it } from "vitest";
 import type {
   CreativeBrief,
   CreatorIdentityLicensePayload,
+  CreatorPerformanceMetrics,
   SyntheticCreatorSelectionDecision,
 } from "@creativeagent/schemas";
 import { SP11_SYNTHETIC_CREATOR_ROSTER } from "../synthetic-creator/seed.js";
 import type { RosterEntry } from "../synthetic-creator/seed.js";
-import { selectSyntheticCreator } from "./selector.js";
+import { buildCreatorPerformanceMetrics } from "./build-creator-performance-metrics.fixture.js";
+import { selectSyntheticCreator, type SelectSyntheticCreatorInput } from "./selector.js";
 import { PCD_SELECTOR_VERSION } from "./selector-version.js";
 
 const NOW = new Date("2026-05-15T00:00:00.000Z");
@@ -630,6 +632,38 @@ describe("selectSyntheticCreator — determinism", () => {
     if (baseline.allowed === true && reversed.allowed === true) {
       expect(reversed.selectedLicenseId).toBe(baseline.selectedLicenseId);
       expect(reversed.selectedCreatorIdentityId).toBe(baseline.selectedCreatorIdentityId);
+    }
+  });
+});
+
+describe("selectSyntheticCreator — SP20 signature widen", () => {
+  function baseInput(): SelectSyntheticCreatorInput {
+    // Cheryl with an active priority_access lease — the simplest success path.
+    return {
+      brief: briefForCheryl,
+      now: NOW_FIXTURE,
+      roster: cherylRoster,
+      leases: [makeLease({ id: "lic_sp20_base", lockType: "priority_access", priorityRank: 0 })],
+    };
+  }
+
+  it("accepts performanceHistory as an optional input and produces a typed decision", () => {
+    const performanceHistory = new Map<string, CreatorPerformanceMetrics>([
+      ["creator-A", buildCreatorPerformanceMetrics({ creatorIdentityId: "creator-A" })],
+    ]);
+    const decision = selectSyntheticCreator({
+      ...baseInput(),
+      performanceHistory,
+    });
+    expect(decision.allowed).toBe(true);
+  });
+
+  it("undefined performanceHistory produces decision with performanceOverlayApplied: false and metricsSnapshotVersion: null", () => {
+    const decision = selectSyntheticCreator(baseInput());
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed) {
+      expect(decision.performanceOverlayApplied).toBe(false);
+      expect(decision.metricsSnapshotVersion).toBeNull();
     }
   });
 });

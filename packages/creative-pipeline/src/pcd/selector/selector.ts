@@ -18,6 +18,7 @@
 import type {
   CreativeBrief,
   CreatorIdentityLicensePayload,
+  CreatorPerformanceMetrics,
   SyntheticCreatorSelectionDecision,
 } from "@creativeagent/schemas";
 import { licenseGate, type LicenseGateDecision } from "../synthetic-creator/license-gate.js";
@@ -29,6 +30,12 @@ export type SelectSyntheticCreatorInput = {
   now: Date;
   roster: readonly RosterEntry[];
   leases: readonly CreatorIdentityLicensePayload[];
+  // SP20 — optional performance overlay; absent ⇒ SP13-equivalent decision.
+  // The reader (Prisma or in-memory) supplies this Map; selector reads
+  // metrics.metricsVersion through onto the decision (Guardrail C-2).
+  // MERGE-BACK: Switchboard's composer always supplies this once runner
+  // integration ships; optionality is a SP20-land-time accommodation.
+  performanceHistory?: ReadonlyMap<string, CreatorPerformanceMetrics>;
 };
 
 export function selectSyntheticCreator(
@@ -95,8 +102,8 @@ export function selectSyntheticCreator(
     isSoftExclusivityOverride: primary.gate.isSoftExclusivityOverride,
     selectorVersion: PCD_SELECTOR_VERSION,
     selectorRank: 0,
-    metricsSnapshotVersion: null,
-    performanceOverlayApplied: false,
+    metricsSnapshotVersion: resolveMetricsVersion(input.performanceHistory),
+    performanceOverlayApplied: input.performanceHistory !== undefined,
     decisionReason: buildDecisionReason(input.brief, ranked.length, blockedCandidates.length),
   };
 }
@@ -161,6 +168,19 @@ function compareCandidates(a: AllowedCandidate, b: AllowedCandidate): number {
   const cidA = a.entry.creatorIdentity.id;
   const cidB = b.entry.creatorIdentity.id;
   return cidA < cidB ? -1 : cidA > cidB ? 1 : 0;
+}
+
+// SP20 — read metrics.metricsVersion through from the supplied map (Guardrail C-2).
+// Selector never imports PCD_PERFORMANCE_OVERLAY_VERSION directly.
+// Returns null when the map is undefined OR empty; otherwise returns the
+// metricsVersion of the first entry (reader contract: all entries share
+// the same metricsVersion).
+function resolveMetricsVersion(
+  history: ReadonlyMap<string, CreatorPerformanceMetrics> | undefined,
+): string | null {
+  if (history === undefined) return null;
+  const first = history.values().next();
+  return first.done ? null : first.value.metricsVersion;
 }
 
 // Schema caps decisionReason at 2000 chars. Bound the hardConstraints echo
