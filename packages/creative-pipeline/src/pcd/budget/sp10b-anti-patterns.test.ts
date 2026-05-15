@@ -262,6 +262,19 @@ describe("SP10B anti-pattern grep", () => {
       if (file.startsWith("packages/creative-pipeline/src/pcd/synthetic-router/")) continue;
       if (file === "packages/schemas/src/pcd-synthetic-router.ts") continue;
       if (file === "packages/schemas/src/__tests__/pcd-synthetic-router.test.ts") continue;
+      // SP18 net-new files are out of scope (necessary maintenance — this
+      // SP test was written before SP18 territory existed; same precedent
+      // as prior SP allowlist additions).
+      if (file.startsWith("packages/creative-pipeline/src/pcd/synthetic-routing-provenance/"))
+        continue;
+      if (file === "packages/schemas/src/pcd-synthetic-routing-provenance.ts") continue;
+      if (file === "packages/schemas/src/__tests__/pcd-synthetic-routing-provenance.test.ts")
+        continue;
+      // SP18 widens the db snapshot store. Allow as out-of-scope; SP18's own
+      // freeze test is the authoritative gate for SP18-era changes.
+      if (file === "packages/db/src/stores/prisma-pcd-identity-snapshot-store.ts") continue;
+      if (file === "packages/db/src/stores/__tests__/prisma-pcd-identity-snapshot-store.test.ts")
+        continue;
 
       expect(allowedEdits.has(file), `SP10B modified disallowed file: ${file}`).toBe(true);
     }

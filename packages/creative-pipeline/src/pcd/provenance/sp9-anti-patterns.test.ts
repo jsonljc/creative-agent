@@ -256,6 +256,14 @@ describe("SP9 anti-pattern grep", () => {
       if (file.startsWith("packages/creative-pipeline/src/pcd/synthetic-router/")) continue;
       if (file === "packages/schemas/src/pcd-synthetic-router.ts") continue;
       if (file === "packages/schemas/src/__tests__/pcd-synthetic-router.test.ts") continue;
+      // SP18 net-new files are out of scope (necessary maintenance — this
+      // SP test was written before SP18 territory existed; same precedent
+      // as prior SP allowlist additions).
+      if (file.startsWith("packages/creative-pipeline/src/pcd/synthetic-routing-provenance/"))
+        continue;
+      if (file === "packages/schemas/src/pcd-synthetic-routing-provenance.ts") continue;
+      if (file === "packages/schemas/src/__tests__/pcd-synthetic-routing-provenance.test.ts")
+        continue;
 
       expect(allowedEdits.has(file), `SP9 modified disallowed file: ${file}`).toBe(true);
     }
