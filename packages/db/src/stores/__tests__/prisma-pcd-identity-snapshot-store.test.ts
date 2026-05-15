@@ -4,6 +4,7 @@ import {
   PrismaPcdIdentitySnapshotStore,
   adaptPcdSp9IdentitySnapshotStore,
   adaptPcdSp10IdentitySnapshotStore,
+  adaptPcdSp18IdentitySnapshotStore,
 } from "../prisma-pcd-identity-snapshot-store.js";
 
 function createMockPrisma() {
@@ -457,5 +458,117 @@ describe("adaptPcdSp10IdentitySnapshotStore", () => {
     };
     await adapter.createForShotWithCostForecast(baseInput);
     expect(prisma.pcdIdentitySnapshot.create).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("createForShotWithSyntheticRouting (SP18)", () => {
+  it("writes a row populated with the 7 SP18 columns", async () => {
+    const prismaMock = {
+      pcdIdentitySnapshot: {
+        create: vi.fn().mockResolvedValue({
+          id: "snap-1",
+          assetRecordId: "asset-1",
+          briefId: "brief-1",
+          imageProvider: "dalle",
+          videoProvider: "kling",
+          videoProviderChoice: "kling",
+          syntheticRouterVersion: "pcd-synthetic-router@1.1.0",
+          syntheticPairingVersion: "pcd-synthetic-provider-pairing@1.1.0",
+          promptHash: "a".repeat(64),
+          syntheticRoutingDecisionReason: { videoProvider: "kling" },
+          createdAt: new Date(),
+        }),
+      },
+    };
+    const store = new PrismaPcdIdentitySnapshotStore(prismaMock as unknown as never);
+
+    const result = await store.createForShotWithSyntheticRouting({
+      assetRecordId: "asset-1",
+      productIdentityId: "prod-1",
+      productTierAtGeneration: 3,
+      productImageAssetIds: ["img-1"],
+      productCanonicalTextHash: "hash-x",
+      productLogoAssetId: null,
+      creatorIdentityId: "creator-1",
+      avatarTierAtGeneration: 3,
+      avatarReferenceAssetIds: ["ref-1"],
+      voiceAssetId: null,
+      consentRecordId: null,
+      policyVersion: "pcd-tier-policy@1.0.0",
+      providerCapabilityVersion: "pcd-provider-capability@1.0.0",
+      selectedProvider: "dalle",
+      providerModelSnapshot: "dalle-3",
+      seedOrNoSeed: "no-seed",
+      rewrittenPromptText: null,
+      shotSpecVersion: "pcd-shot-spec@1.0.0",
+      routerVersion: "pcd-provider-router@1.0.0",
+      routingDecisionReason: {
+        capabilityRefIndex: 0,
+        matchedShotType: "simple_ugc",
+        matchedEffectiveTier: 3,
+        matchedOutputIntent: "draft",
+        tier3RulesApplied: [],
+        candidatesEvaluated: 1,
+        candidatesAfterTier3Filter: 1,
+        selectionRationale: "test",
+      },
+      briefId: "brief-1",
+      trendId: "trend-1",
+      motivatorId: "mot-1",
+      hookId: "hook-1",
+      scriptId: "script-1",
+      lineageDecisionReason: {
+        decidedAt: "2026-05-16T08:00:00.000Z",
+        fanoutDecisionId: "fanout-1",
+        chainVersion: "pcd-preproduction-chain@1.0.0",
+        provenanceVersion: "pcd-provenance@1.0.0",
+      },
+      imageProvider: "dalle",
+      videoProvider: "kling",
+      videoProviderChoice: "kling",
+      syntheticRouterVersion: "pcd-synthetic-router@1.1.0",
+      syntheticPairingVersion: "pcd-synthetic-provider-pairing@1.1.0",
+      promptHash: "a".repeat(64),
+      syntheticRoutingDecisionReason: {
+        videoProvider: "kling",
+        klingDirection: {
+          setting: "x",
+          motion: "y",
+          energy: "z",
+          lighting: "w",
+          avoid: [],
+        },
+        pairingRefIndex: 0,
+        decisionReason: {
+          matchedShotType: "simple_ugc",
+          matchedOutputIntent: "draft",
+          selectionRationale: "test",
+        },
+        decidedAt: "2026-05-16T08:00:00.000Z",
+        syntheticRoutingProvenanceVersion: "pcd-synthetic-routing-provenance@1.0.0",
+      },
+    });
+
+    expect(prismaMock.pcdIdentitySnapshot.create).toHaveBeenCalledTimes(1);
+    const callArg = prismaMock.pcdIdentitySnapshot.create.mock.calls[0][0].data;
+    expect(callArg.imageProvider).toBe("dalle");
+    expect(callArg.videoProvider).toBe("kling");
+    expect(callArg.videoProviderChoice).toBe("kling");
+    expect(callArg.syntheticRouterVersion).toBe("pcd-synthetic-router@1.1.0");
+    expect(callArg.syntheticPairingVersion).toBe("pcd-synthetic-provider-pairing@1.1.0");
+    expect(callArg.promptHash).toBe("a".repeat(64));
+    expect(callArg.syntheticRoutingDecisionReason).toMatchObject({ videoProvider: "kling" });
+    expect(callArg.costForecastReason).toBeUndefined();
+    expect(result.imageProvider).toBe("dalle");
+  });
+});
+
+describe("adaptPcdSp18IdentitySnapshotStore (SP18)", () => {
+  it("returns an adapter object delegating to createForShotWithSyntheticRouting", () => {
+    const prismaStore = {
+      createForShotWithSyntheticRouting: vi.fn(),
+    } as unknown as PrismaPcdIdentitySnapshotStore;
+    const adapted = adaptPcdSp18IdentitySnapshotStore(prismaStore);
+    expect(typeof adapted.createForShotWithSyntheticRouting).toBe("function");
   });
 });
