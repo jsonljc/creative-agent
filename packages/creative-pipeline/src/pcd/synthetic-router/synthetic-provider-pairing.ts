@@ -5,6 +5,12 @@
 // seedance), partitioning lookups by 3-tuple (shotType, outputIntent,
 // videoProvider).
 //
+// Authoring intent: every synthetic-creator shot at a video-modality shot
+// type uses the locked DALL-E + chosen-video-provider pairing. Text-only
+// shot types (script_only, storyboard) are deliberately absent from this
+// matrix; they route through the delegation branch of the synthetic
+// routing decision so SP4's generic capability matrix handles them.
+//
 // MERGE-BACK: Future provider-specific narrowing (e.g., Seedance loses
 // label_closeup) edits a row's shotTypes array. Adding
 // INVALID_VIDEO_PROVIDER_CHOICE as a reachable denial requires the slice

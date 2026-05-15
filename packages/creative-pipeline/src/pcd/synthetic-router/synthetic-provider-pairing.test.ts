@@ -69,7 +69,14 @@ describe("PCD_SYNTHETIC_PROVIDER_PAIRING (SP17 v2 — kling + seedance)", () => 
     expect(PCD_SYNTHETIC_PROVIDER_PAIRING[2]).toBeUndefined();
   });
 
-  it("PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION is bumped to 1.1.0 in SP17", () => {
+  it("every row has exactly the SyntheticProviderPairing key set (no extra/missing fields)", () => {
+    const expectedKeys = ["imageProvider", "outputIntents", "shotTypes", "videoProvider"];
+    for (const row of PCD_SYNTHETIC_PROVIDER_PAIRING) {
+      expect(Object.keys(row).sort()).toEqual([...expectedKeys].sort());
+    }
+  });
+
+  it('PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION is the literal "pcd-synthetic-provider-pairing@1.1.0"', () => {
     expect(PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION).toBe(
       "pcd-synthetic-provider-pairing@1.1.0",
     );
