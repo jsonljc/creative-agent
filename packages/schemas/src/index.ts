@@ -34,3 +34,6 @@ export * from "./pcd-script-template.js";
 
 // SP16 — synthetic creator provider routing
 export * from "./pcd-synthetic-router.js";
+
+// SP18 — synthetic-routing provenance
+export * from "./pcd-synthetic-routing-provenance.js";

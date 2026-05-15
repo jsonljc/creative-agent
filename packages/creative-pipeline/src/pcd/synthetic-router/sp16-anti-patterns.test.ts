@@ -263,6 +263,19 @@ describe("SP16 anti-patterns", () => {
       // SP17 net-new migration is out of scope (necessary maintenance —
       // same precedent as prior subdir allowlists).
       if (file.startsWith("packages/db/prisma/migrations/")) continue;
+      // SP18 net-new files are out of scope (necessary maintenance — this
+      // SP test was written before SP18 territory existed; same precedent
+      // as prior SP allowlist additions).
+      if (file.startsWith("packages/creative-pipeline/src/pcd/synthetic-routing-provenance/"))
+        continue;
+      if (file === "packages/schemas/src/pcd-synthetic-routing-provenance.ts") continue;
+      if (file === "packages/schemas/src/__tests__/pcd-synthetic-routing-provenance.test.ts")
+        continue;
+      // SP18 widens the db snapshot store. Allow as out-of-scope; SP18's own
+      // freeze test is the authoritative gate for SP18-era changes.
+      if (file === "packages/db/src/stores/prisma-pcd-identity-snapshot-store.ts") continue;
+      if (file === "packages/db/src/stores/__tests__/prisma-pcd-identity-snapshot-store.test.ts")
+        continue;
       expect(
         allowedEdits.has(file),
         `unexpected file changed since ${SP15_BASELINE}: ${file}`,
