@@ -109,7 +109,7 @@ export async function routeSyntheticPcdShot(
 
   // Step 4 — Build synthetic pairing decision. Locked artifacts read
   // verbatim from input.syntheticIdentity. No transformation, no hashing
-  // (SP17 owns sha256(dallePromptLocked) at persistence time).
+  // (SP17 owns dallePromptLocked → hash at persistence time).
   const matchedShotType = input.shotType;
   const matchedOutputIntent = input.outputIntent;
   return {
