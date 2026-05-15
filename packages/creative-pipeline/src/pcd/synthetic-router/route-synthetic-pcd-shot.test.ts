@@ -574,11 +574,10 @@ describe("routeSyntheticPcdShot — Step 4 NO_DIRECTION_AUTHORED_FOR_VIDEO_PROVI
       stores,
     );
     // klingDirection is non-nullable on the SP11 payload schema, so the kling
-    // choice never hits NO_DIRECTION_AUTHORED. The decision should be allowed
-    // (tier-3 fixture) or ACCESS_POLICY — NOT NO_DIRECTION.
-    if (decision.allowed === false && decision.kind === "synthetic_pairing") {
-      expect(decision.denialKind).not.toBe("NO_DIRECTION_AUTHORED_FOR_VIDEO_PROVIDER");
-    }
+    // choice never hits NO_DIRECTION_AUTHORED. With the tier-3 fixture the
+    // decision should be allowed; assert that decisively rather than only
+    // negating the unreachable denial kind.
+    expect(decision.allowed).toBe(true);
   });
 
   it("step ordering: ACCESS_POLICY fires before NO_DIRECTION_AUTHORED", async () => {
