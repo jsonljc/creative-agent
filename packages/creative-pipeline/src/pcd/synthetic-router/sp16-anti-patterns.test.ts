@@ -276,6 +276,15 @@ describe("SP16 anti-patterns", () => {
       if (file === "packages/db/src/stores/prisma-pcd-identity-snapshot-store.ts") continue;
       if (file === "packages/db/src/stores/__tests__/prisma-pcd-identity-snapshot-store.test.ts")
         continue;
+      // SP19 net-new files are out of scope (necessary maintenance — this
+      // SP test was written before SP19 territory existed; same precedent
+      // as prior SP allowlist additions).
+      if (file.startsWith("packages/creative-pipeline/src/pcd/performance-snapshot/")) continue;
+      if (file === "packages/schemas/src/pcd-performance-snapshot.ts") continue;
+      if (file === "packages/schemas/src/__tests__/pcd-performance-snapshot.test.ts") continue;
+      if (file.startsWith("packages/db/src/stores/prisma-pcd-performance-snapshot-")) continue;
+      if (file.startsWith("packages/db/src/stores/__tests__/prisma-pcd-performance-snapshot-"))
+        continue;
       expect(
         allowedEdits.has(file),
         `unexpected file changed since ${SP15_BASELINE}: ${file}`,
