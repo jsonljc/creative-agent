@@ -31,7 +31,10 @@ import { routePcdShot } from "../provider-router.js";
 import type { ApprovedCampaignContext, ProviderRouterStores } from "../provider-router.js";
 import { decidePcdGenerationAccess } from "../tier-policy.js";
 import type { ResolvedPcdContext } from "../registry-resolver.js";
-import { PCD_SYNTHETIC_PROVIDER_PAIRING } from "./synthetic-provider-pairing.js";
+import {
+  PCD_SYNTHETIC_PROVIDER_PAIRING,
+  PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION,
+} from "./synthetic-provider-pairing.js";
 import { PCD_SYNTHETIC_ROUTER_VERSION } from "./synthetic-router-version.js";
 
 export type RouteSyntheticPcdShotInput = {
@@ -94,25 +97,28 @@ export async function routeSyntheticPcdShot(
     };
   }
 
-  // Step 4 lands in Task 8. For now, in-pairing allowed shots fall through
-  // to delegation so the existing happy-path delegation tests keep passing.
-  // `pairing`, `pairingRefIndex`, and `accessDecision` are all used above
-  // (lookup, undefined-check, and tier-policy gate respectively); Task 8
-  // will reference them in the success-branch return.
-  const sp4Decision = await routePcdShot(
-    {
-      resolvedContext: input.resolvedContext,
-      shotType: input.shotType,
-      outputIntent: input.outputIntent,
-      approvedCampaignContext: input.approvedCampaignContext,
-    },
-    stores,
-  );
+  // Step 4 — Build synthetic pairing decision. Locked artifacts read
+  // verbatim from input.syntheticIdentity. No transformation, no hashing
+  // (SP17 owns sha256(dallePromptLocked) at persistence time).
+  const matchedShotType = input.shotType;
+  const matchedOutputIntent = input.outputIntent;
+  const selectionRationale = `synthetic-pairing tier=${input.resolvedContext.effectiveTier} shot=${matchedShotType} intent=${matchedOutputIntent} → dalle+kling`;
   return {
-    kind: "delegated_to_generic_router",
-    reason: "shot_type_not_in_synthetic_pairing",
-    shotType: input.shotType,
-    sp4Decision,
+    allowed: true,
+    kind: "synthetic_pairing",
+    accessDecision,
+    imageProvider: pairing.imageProvider,
+    videoProvider: pairing.videoProvider,
+    dallePromptLocked: input.syntheticIdentity.dallePromptLocked,
+    klingDirection: input.syntheticIdentity.klingDirection,
+    pairingRefIndex,
+    pairingVersion: PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION,
     syntheticRouterVersion: PCD_SYNTHETIC_ROUTER_VERSION,
+    decisionReason: {
+      matchedShotType,
+      matchedOutputIntent,
+      selectionRationale:
+        selectionRationale.length > 200 ? selectionRationale.slice(0, 200) : selectionRationale,
+    },
   };
 }

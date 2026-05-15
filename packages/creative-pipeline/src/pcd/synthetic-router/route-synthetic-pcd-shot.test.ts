@@ -274,4 +274,78 @@ describe("routeSyntheticPcdShot — synthetic-path ACCESS_POLICY denial (Step 3)
   });
 });
 
+import { PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION } from "./synthetic-provider-pairing.js";
+
+const VIDEO_SHOT_TYPES = [
+  "simple_ugc",
+  "talking_head",
+  "product_demo",
+  "product_in_hand",
+  "face_closeup",
+  "label_closeup",
+  "object_insert",
+] as const;
+
+const OUTPUT_INTENTS = ["draft", "preview", "final_export", "meta_draft"] as const;
+
+describe("routeSyntheticPcdShot — synthetic-pairing success (Step 4)", () => {
+  for (const shotType of VIDEO_SHOT_TYPES) {
+    for (const outputIntent of OUTPUT_INTENTS) {
+      it(`tier-3 ${shotType} + ${outputIntent} → allowed synthetic_pairing`, async () => {
+        const log = { calls: 0 };
+        const stores: ProviderRouterStores = {
+          campaignTakeStore: makeCampaignTakeStore(false, log),
+        };
+        const result = await routeSyntheticPcdShot(makeInput({ shotType, outputIntent }), stores);
+        expect(result).toMatchObject({
+          allowed: true,
+          kind: "synthetic_pairing",
+          imageProvider: "dalle",
+          videoProvider: "kling",
+          pairingRefIndex: 0,
+          pairingVersion: PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION,
+          syntheticRouterVersion: PCD_SYNTHETIC_ROUTER_VERSION,
+        });
+        if (result.kind !== "synthetic_pairing" || result.allowed !== true) return;
+        // Locked-artifact byte equality.
+        expect(result.dallePromptLocked).toBe(cheryl.dallePromptLocked);
+        expect(result.klingDirection).toEqual(cheryl.klingDirection);
+        // decisionReason fields echo input.
+        expect(result.decisionReason.matchedShotType).toBe(shotType);
+        expect(result.decisionReason.matchedOutputIntent).toBe(outputIntent);
+      });
+    }
+  }
+
+  it("perturbing dallePromptLocked by one char shifts the success-branch dallePromptLocked by one char (verbatim)", async () => {
+    const tweaked = { ...cheryl, dallePromptLocked: cheryl.dallePromptLocked + "X" };
+    const log = { calls: 0 };
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log),
+    };
+    const result = await routeSyntheticPcdShot(makeInput({ syntheticIdentity: tweaked }), stores);
+    if (result.kind !== "synthetic_pairing" || result.allowed !== true) {
+      throw new Error("expected synthetic_pairing allowed");
+    }
+    expect(result.dallePromptLocked).toBe(cheryl.dallePromptLocked + "X");
+    expect(result.dallePromptLocked.endsWith("X")).toBe(true);
+  });
+
+  it("perturbing klingDirection.setting shifts the success-branch klingDirection.setting (verbatim)", async () => {
+    const tweaked = {
+      ...cheryl,
+      klingDirection: { ...cheryl.klingDirection, setting: "Different setting!" },
+    };
+    const log = { calls: 0 };
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log),
+    };
+    const result = await routeSyntheticPcdShot(makeInput({ syntheticIdentity: tweaked }), stores);
+    if (result.kind !== "synthetic_pairing" || result.allowed !== true) {
+      throw new Error("expected synthetic_pairing allowed");
+    }
+    expect(result.klingDirection.setting).toBe("Different setting!");
+  });
+});
+
 export { cheryl, makeContext, makeInput, makeCampaignTakeStore, NO_CAMPAIGN, WITH_CAMPAIGN };
