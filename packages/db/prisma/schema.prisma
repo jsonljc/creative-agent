@@ -227,6 +227,7 @@ model AssetRecord {
   createdAt           DateTime @default(now())
 
   identitySnapshot    PcdIdentitySnapshot?
+  performanceSnapshot PcdPerformanceSnapshot?
 
   @@unique([specId, attemptNumber, provider])
   @@index([jobId])
@@ -402,6 +403,40 @@ model PcdIdentitySnapshot {
   @@index([selectedProvider])
   @@index([briefId])
   @@index([scriptId])
+}
+
+// SP19 — PcdPerformanceSnapshot. Post-completion observability per AssetRecord
+// attempt. 1:1 with AssetRecord on assetRecordId @unique. Standalone writer;
+// captured at terminal-state time (success / failure / manual_skip). No
+// indexes in v1 (assetRecordId @unique already provides the lookup index).
+// onDelete: Restrict — historical performance survives accidental asset
+// deletion. Test cleanup MUST delete PcdPerformanceSnapshot rows BEFORE their
+// referenced AssetRecord rows.
+//
+// MERGE-BACK: net-new SP19 model. No reconciliation needed at Switchboard
+// merge (net-new on both sides). Switchboard may have a parallel
+// CreativeJobPerformance or AssetTelemetry concept; reconcile then.
+model PcdPerformanceSnapshot {
+  id                          String      @id @default(cuid())
+  assetRecordId               String      @unique
+  assetRecord                 AssetRecord @relation(fields: [assetRecordId], references: [id], onDelete: Restrict)
+
+  terminalKind                String      // "success" | "failure" | "manual_skip"
+  errorCategory               String?     // null on success / manual_skip; one of 5 enum values on failure
+
+  latencyMs                   Int         // always populated; failure latency = time-to-failure
+
+  actualCostUsd               Float?      // null on failure / manual_skip
+  currency                    String?     // "USD" on success; null on failure / manual_skip
+  costActualReason            Json        // forensic record-shape; always populated
+
+  attemptNumber               Int         // denormalized from AssetRecord.attemptNumber
+  providerCalled              String      // denormalized from AssetRecord.provider
+
+  performanceSnapshotVersion  String      // forensic version literal (currently "pcd-performance-snapshot@1.0.0")
+  capturedAt                  DateTime    // authoritative stamp time from the stamper; distinct from createdAt
+
+  createdAt                   DateTime    @default(now())
 }
 
 model DisclosureTemplate {
