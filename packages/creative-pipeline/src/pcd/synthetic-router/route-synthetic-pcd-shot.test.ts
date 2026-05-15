@@ -348,4 +348,35 @@ describe("routeSyntheticPcdShot — synthetic-pairing success (Step 4)", () => {
   });
 });
 
+import { buildSyntheticSelectionRationale } from "./route-synthetic-pcd-shot.js";
+
+describe("buildSyntheticSelectionRationale", () => {
+  it('contains "synthetic-pairing", "dalle+kling", tier number, shotType, outputIntent', () => {
+    const out = buildSyntheticSelectionRationale(3, "simple_ugc", "draft");
+    expect(out).toContain("synthetic-pairing");
+    expect(out).toContain("dalle+kling");
+    expect(out).toContain("tier=3");
+    expect(out).toContain("shot=simple_ugc");
+    expect(out).toContain("intent=draft");
+  });
+
+  it("never exceeds 200 chars", () => {
+    for (const tier of [1, 2, 3] as const) {
+      for (const shot of VIDEO_SHOT_TYPES) {
+        for (const intent of OUTPUT_INTENTS) {
+          expect(buildSyntheticSelectionRationale(tier, shot, intent).length).toBeLessThanOrEqual(
+            200,
+          );
+        }
+      }
+    }
+  });
+
+  it("template form mirrors SP4's buildSelectionRationale shape (tier=, shot=, intent=, →)", () => {
+    expect(buildSyntheticSelectionRationale(3, "talking_head", "preview")).toBe(
+      "synthetic-pairing tier=3 shot=talking_head intent=preview → dalle+kling",
+    );
+  });
+});
+
 export { cheryl, makeContext, makeInput, makeCampaignTakeStore, NO_CAMPAIGN, WITH_CAMPAIGN };

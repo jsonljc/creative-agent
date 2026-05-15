@@ -23,6 +23,7 @@
 
 import type {
   CreatorIdentitySyntheticPayload,
+  IdentityTier,
   OutputIntent,
   PcdShotType,
   SyntheticPcdRoutingDecision,
@@ -36,6 +37,15 @@ import {
   PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION,
 } from "./synthetic-provider-pairing.js";
 import { PCD_SYNTHETIC_ROUTER_VERSION } from "./synthetic-router-version.js";
+
+export function buildSyntheticSelectionRationale(
+  effectiveTier: IdentityTier,
+  shotType: PcdShotType,
+  outputIntent: OutputIntent,
+): string {
+  const out = `synthetic-pairing tier=${effectiveTier} shot=${shotType} intent=${outputIntent} → dalle+kling`;
+  return out.length > 200 ? out.slice(0, 200) : out;
+}
 
 export type RouteSyntheticPcdShotInput = {
   resolvedContext: ResolvedPcdContext;
@@ -102,7 +112,6 @@ export async function routeSyntheticPcdShot(
   // (SP17 owns sha256(dallePromptLocked) at persistence time).
   const matchedShotType = input.shotType;
   const matchedOutputIntent = input.outputIntent;
-  const selectionRationale = `synthetic-pairing tier=${input.resolvedContext.effectiveTier} shot=${matchedShotType} intent=${matchedOutputIntent} → dalle+kling`;
   return {
     allowed: true,
     kind: "synthetic_pairing",
@@ -117,8 +126,11 @@ export async function routeSyntheticPcdShot(
     decisionReason: {
       matchedShotType,
       matchedOutputIntent,
-      selectionRationale:
-        selectionRationale.length > 200 ? selectionRationale.slice(0, 200) : selectionRationale,
+      selectionRationale: buildSyntheticSelectionRationale(
+        input.resolvedContext.effectiveTier,
+        matchedShotType,
+        matchedOutputIntent,
+      ),
     },
   };
 }
