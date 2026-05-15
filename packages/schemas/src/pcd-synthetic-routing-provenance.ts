@@ -10,10 +10,7 @@
 // SP13/SP14/SP15/SP16/SP17. z.union parses by trying members in order;
 // semantically equivalent for the 2-branch shape.
 import { z } from "zod";
-import {
-  KlingDirectionSchema,
-  SeedanceDirectionSchema,
-} from "./creator-identity-synthetic.js";
+import { KlingDirectionSchema, SeedanceDirectionSchema } from "./creator-identity-synthetic.js";
 import { PcdShotTypeSchema, OutputIntentSchema } from "./pcd-identity.js";
 
 const DecisionReasonInnerSchema = z
@@ -72,12 +69,10 @@ export const PcdSp18SyntheticRoutingProvenancePayloadSchema = z
     syntheticRoutingDecisionReason: PcdSp18SyntheticRoutingDecisionReasonSchema,
   })
   .refine(
-    (payload) =>
-      payload.videoProvider === payload.syntheticRoutingDecisionReason.videoProvider,
+    (payload) => payload.videoProvider === payload.syntheticRoutingDecisionReason.videoProvider,
     {
       path: ["syntheticRoutingDecisionReason", "videoProvider"],
-      message:
-        "syntheticRoutingDecisionReason.videoProvider must match flat videoProvider",
+      message: "syntheticRoutingDecisionReason.videoProvider must match flat videoProvider",
     },
   );
 export type PcdSp18SyntheticRoutingProvenancePayload = z.infer<

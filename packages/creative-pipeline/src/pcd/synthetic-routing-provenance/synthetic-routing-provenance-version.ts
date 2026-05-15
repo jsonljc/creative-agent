@@ -14,5 +14,4 @@
 //
 // MERGE-BACK: Switchboard merge does not change this literal. Bumping it
 // requires a coordinated provenance-replay assessment.
-export const PCD_SYNTHETIC_ROUTING_PROVENANCE_VERSION =
-  "pcd-synthetic-routing-provenance@1.0.0";
+export const PCD_SYNTHETIC_ROUTING_PROVENANCE_VERSION = "pcd-synthetic-routing-provenance@1.0.0";
