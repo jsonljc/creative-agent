@@ -289,7 +289,9 @@ Run:
 ```bash
 pnpm --filter @creativeagent/schemas test creator-identity-synthetic 2>&1 | tail -30
 ```
-Expected: 5 failures naming `SeedanceDirectionSchema` (not exported) and `seedanceDirection` (unknown key).
+Expected: failures around `SeedanceDirectionSchema` (not exported) and the `seedanceDirection` round-trip. **Do not overfit the exact failure text.** Zod's default behavior strips unknown keys on non-`.strict()` object schemas, so the `seedanceDirection`-on-payload tests may surface as `out.seedanceDirection is undefined` rather than a hard parse failure until the schema is widened. The intent is **red on at least the named tests above** — verify the conceptual red/green behavior, not the literal stderr.
+
+**TypeScript ergonomics watchpoint:** the third test ("accepts payload with seedanceDirection field omitted") constructs `baseSynthetic` without the new key. After Task 2's schema widen, the inferred type `CreatorIdentitySyntheticPayload` should allow `seedanceDirection?: SeedanceDirection | null | undefined`. If TypeScript complains about a missing required key on a literal, build the payload via `CreatorIdentitySyntheticPayloadSchema.parse(rawPayload)` (which returns the inferred type with optional fields handled correctly) rather than asserting an object-literal into the type.
 
 - [ ] **Step 3: Add `SeedanceDirectionSchema` + widen payload schema**
 
@@ -407,7 +409,7 @@ Determine the timestamp:
 ```bash
 date -u +%Y%m%d%H%M%S
 ```
-Use that timestamp in the migration directory name. Replace `HHmmSS` with the actual digits.
+Use that timestamp in the migration directory name. **Replace `HHmmSS` (and the leading `20260515` if the slice lands on a different UTC date) with the actual digits — commit exactly one real timestamped folder. Do NOT commit the placeholder string `HHmmSS` to git; the migration directory name on disk must be all digits.**
 
 Create directory:
 ```bash
@@ -901,7 +903,12 @@ Run:
 ```bash
 pnpm --filter @creativeagent/creative-pipeline test synthetic-router 2>&1 | tail -40
 ```
-Expected: `synthetic-provider-pairing.test.ts` all pass. `sp16-anti-patterns.test.ts` tests 1–2 pass on new literals; test 6 passes on 2-row matrix. **`route-synthetic-pcd-shot.test.ts` will FAIL** because the input type no longer accepts the SP16 fixture shape (missing `videoProviderChoice`) and the decision shape changed — that's expected; Tasks 6–9 fix it.
+Expected: `synthetic-provider-pairing.test.ts` all pass. `sp16-anti-patterns.test.ts` tests 1–2 pass on new literals; test 6 passes on 2-row matrix. **`route-synthetic-pcd-shot.test.ts` may show one of two failure modes** depending on the exact intermediate state at this point:
+- **Compile error:** if Task 5 inadvertently consumed a 2-row matrix shape from the router body that the SP16 success branch can't satisfy (e.g., `pairing.videoProvider` is now a `"kling" | "seedance"` union but the existing return literal `"kling"` doesn't match the widened `SyntheticProviderPairing` row type) — typecheck fails.
+- **Runtime failure:** if the SP16 success returns are still type-compatible at the source level, the SP16 zod schema (still 3 branches at this point — Task 6 widens it) accepts the existing assertions; tests pass. Once Task 6 lands, the 3-branch → 5-branch widen makes some kling-success assertions newly demanding (need `videoProviderChoice` field present).
+The strict input-type widen of `RouteSyntheticPcdShotInput` happens in Task 6, not Task 5, so SP16 route tests missing `videoProviderChoice` will only fail to compile after Task 6.
+
+**Do not block on exact red text.** Verify the conceptual state: pairing+anti-pattern green, route test red is acceptable at this step OR may surface later in Task 6 — Tasks 6–9 reconcile.
 
 For now, scope the green to `synthetic-provider-pairing` + `sp16-anti-patterns`:
 ```bash
