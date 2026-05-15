@@ -511,6 +511,113 @@ describe("routeSyntheticPcdShot — stores discipline", () => {
   });
 });
 
+describe("routeSyntheticPcdShot — Step 4 NO_DIRECTION_AUTHORED_FOR_VIDEO_PROVIDER (SP17)", () => {
+  it("denies when videoProviderChoice=seedance and seedanceDirection is null", async () => {
+    const log = { calls: 0 };
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log),
+    };
+    const decision = await routeSyntheticPcdShot(
+      {
+        ...makeInput(),
+        videoProviderChoice: "seedance",
+        syntheticIdentity: {
+          ...makeInput().syntheticIdentity,
+          seedanceDirection: null,
+        },
+      },
+      stores,
+    );
+    expect(decision.allowed).toBe(false);
+    expect(decision.kind).toBe("synthetic_pairing");
+    if (decision.allowed === false && decision.kind === "synthetic_pairing") {
+      expect(decision.denialKind).toBe("NO_DIRECTION_AUTHORED_FOR_VIDEO_PROVIDER");
+      if (decision.denialKind === "NO_DIRECTION_AUTHORED_FOR_VIDEO_PROVIDER") {
+        expect(decision.videoProviderChoice).toBe("seedance");
+      }
+      expect(decision.syntheticRouterVersion).toBe("pcd-synthetic-router@1.1.0");
+    }
+  });
+
+  it("denies when videoProviderChoice=seedance and seedanceDirection field is omitted (undefined → null)", async () => {
+    const log = { calls: 0 };
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log),
+    };
+    const input = makeInput();
+    const { seedanceDirection: _omit, ...identityMinusSeedance } = input.syntheticIdentity;
+    const decision = await routeSyntheticPcdShot(
+      {
+        ...input,
+        videoProviderChoice: "seedance",
+        syntheticIdentity: identityMinusSeedance as typeof input.syntheticIdentity,
+      },
+      stores,
+    );
+    expect(decision.allowed).toBe(false);
+    if (decision.allowed === false && decision.kind === "synthetic_pairing") {
+      expect(decision.denialKind).toBe("NO_DIRECTION_AUTHORED_FOR_VIDEO_PROVIDER");
+    }
+  });
+
+  it("does NOT deny when videoProviderChoice=kling (klingDirection is always populated on SP11 payload)", async () => {
+    const log = { calls: 0 };
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log),
+    };
+    const decision = await routeSyntheticPcdShot(
+      {
+        ...makeInput(),
+        videoProviderChoice: "kling",
+        syntheticIdentity: { ...makeInput().syntheticIdentity, seedanceDirection: null },
+      },
+      stores,
+    );
+    // klingDirection is non-nullable on the SP11 payload schema, so the kling
+    // choice never hits NO_DIRECTION_AUTHORED. The decision should be allowed
+    // (tier-3 fixture) or ACCESS_POLICY — NOT NO_DIRECTION.
+    if (decision.allowed === false && decision.kind === "synthetic_pairing") {
+      expect(decision.denialKind).not.toBe("NO_DIRECTION_AUTHORED_FOR_VIDEO_PROVIDER");
+    }
+  });
+
+  it("step ordering: ACCESS_POLICY fires before NO_DIRECTION_AUTHORED", async () => {
+    // Build an input that would trigger BOTH ACCESS_POLICY and NO_DIRECTION
+    // if Step 4 ran in isolation. Expected: ACCESS_POLICY denial (Step 3 fires
+    // first), NOT NO_DIRECTION.
+    //
+    // Reuse the SP16 ACCESS_POLICY-triggering fixture: tier-1 + simple_ugc +
+    // final_export (final_export needs both tiers >= 2). Combine with
+    // seedance + null seedanceDirection so Step 4 would also fire.
+    const log = { calls: 0 };
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log),
+    };
+    const tierDeniedInput = makeInput({
+      resolvedContext: makeContext({
+        productTierAtResolution: 1,
+        creatorTierAtResolution: 1,
+        effectiveTier: 1,
+        allowedOutputTier: 1,
+      }),
+      shotType: "simple_ugc",
+      outputIntent: "final_export",
+    });
+    const decision = await routeSyntheticPcdShot(
+      {
+        ...tierDeniedInput,
+        videoProviderChoice: "seedance",
+        syntheticIdentity: { ...tierDeniedInput.syntheticIdentity, seedanceDirection: null },
+      },
+      stores,
+    );
+    expect(decision.allowed).toBe(false);
+    if (decision.allowed === false && decision.kind === "synthetic_pairing") {
+      expect(decision.denialKind).toBe("ACCESS_POLICY");
+    }
+  });
+});
+
 describe("routeSyntheticPcdShot — PcdRoutingDecisionSchema drift verification (real SP4 outputs)", () => {
   it("real SP4 ACCESS_POLICY denial round-trips through PcdRoutingDecisionSchema.parse()", async () => {
     const log = { calls: 0 };

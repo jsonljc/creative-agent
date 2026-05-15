@@ -4,13 +4,16 @@
 // Kling pairing).
 //
 // Composition (one inline `Step N` comment per body step):
+//   0. Normalize undefined seedanceDirection → null (J1).
 //   1. Look up pairing matrix row by 3-tuple (shotType, outputIntent,
 //      videoProviderChoice). SP17 widened the key from a 2-tuple to a
 //      3-tuple when the matrix grew to two rows partitioned by videoProvider.
 //   2. If no row matches → delegate to SP4's routePcdShot and wrap.
 //   3. Tier policy gate (SP2's decidePcdGenerationAccess) — denial path. [Task 7]
-//   4. Build synthetic pairing decision (locked artifacts read verbatim
-//      from input.syntheticIdentity). [Task 8]
+//   4. Direction-authored check (NEW, SP17) — NO_DIRECTION_AUTHORED denial
+//      if the chosen-provider direction is null.
+//   5. Build synthetic pairing decision (locked artifacts read verbatim
+//      from input.syntheticIdentity).
 //
 // Algorithm is intentionally tier3-rule-free for the synthetic path: the
 // locked pairing supersedes generic capability filtering by design
@@ -66,6 +69,11 @@ export async function routeSyntheticPcdShot(
   input: RouteSyntheticPcdShotInput,
   stores: ProviderRouterStores,
 ): Promise<SyntheticPcdRoutingDecision> {
+  // Step 0 — Normalize undefined seedanceDirection to null per design J1.
+  // Schema accepts nullish(); domain logic treats null as the single
+  // missing-state.
+  const seedanceDirection = input.syntheticIdentity.seedanceDirection ?? null;
+
   // Step 1 — Pairing matrix lookup keyed by 3-tuple
   // (shotType, outputIntent, videoProviderChoice). SP17: matrix grew to two
   // rows partitioned by videoProvider; first-match across all rows.
@@ -117,7 +125,27 @@ export async function routeSyntheticPcdShot(
     };
   }
 
-  // Step 4 — Build synthetic pairing decision. Locked artifacts read
+  // Step 4 — Direction-authored check (NEW, SP17). The chosen provider must
+  // have an authored direction on the synthetic identity. Distinct denial
+  // kind — NEVER conflated with ACCESS_POLICY, NEVER silently degraded.
+  // klingDirection is non-nullable on the SP11 payload schema; only the
+  // seedance path can hit this denial in v1.1.0.
+  const direction =
+    input.videoProviderChoice === "kling"
+      ? input.syntheticIdentity.klingDirection
+      : seedanceDirection;
+  if (direction === null) {
+    return {
+      allowed: false,
+      kind: "synthetic_pairing",
+      denialKind: "NO_DIRECTION_AUTHORED_FOR_VIDEO_PROVIDER",
+      videoProviderChoice: input.videoProviderChoice,
+      accessDecision,
+      syntheticRouterVersion: PCD_SYNTHETIC_ROUTER_VERSION,
+    };
+  }
+
+  // Step 5 — Build synthetic pairing decision. Locked artifacts read
   // verbatim from input.syntheticIdentity. No transformation, no hashing
   // (SP17 owns dallePromptLocked → hash at persistence time).
   const matchedShotType = input.shotType;
