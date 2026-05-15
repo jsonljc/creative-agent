@@ -197,3 +197,6 @@ export * from "./pcd/disclosure/index.js";
 
 // SP15 — script templates
 export * from "./pcd/script/index.js";
+
+// SP16 — synthetic creator provider routing
+export * from "./pcd/synthetic-router/index.js";
