@@ -379,4 +379,30 @@ describe("buildSyntheticSelectionRationale", () => {
   });
 });
 
+describe("routeSyntheticPcdShot — determinism", () => {
+  it("identical input twice → deep-equal decisions (synthetic path)", async () => {
+    const log = { calls: 0 };
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log),
+    };
+    const inputA = makeInput({ shotType: "simple_ugc", outputIntent: "draft" });
+    const inputB = makeInput({ shotType: "simple_ugc", outputIntent: "draft" });
+    const a = await routeSyntheticPcdShot(inputA, stores);
+    const b = await routeSyntheticPcdShot(inputB, stores);
+    expect(a).toEqual(b);
+  });
+
+  it("identical input twice → deep-equal decisions (delegation path)", async () => {
+    const log = { calls: 0 };
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log),
+    };
+    const inputA = makeInput({ shotType: "script_only", outputIntent: "draft" });
+    const inputB = makeInput({ shotType: "script_only", outputIntent: "draft" });
+    const a = await routeSyntheticPcdShot(inputA, stores);
+    const b = await routeSyntheticPcdShot(inputB, stores);
+    expect(a).toEqual(b);
+  });
+});
+
 export { cheryl, makeContext, makeInput, makeCampaignTakeStore, NO_CAMPAIGN, WITH_CAMPAIGN };
