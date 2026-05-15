@@ -59,7 +59,12 @@ SP18 must not reopen router behavior. It only persists the forensic record of a 
 
 **Guardrail C — composer-only version pinning:**
 
-> Only `synthetic-routing-provenance-version.ts` may contain the literal `"pcd-synthetic-routing-provenance@"`. No estimator, store, stamper, orchestrator, or test fixture file may carry the literal. Mirrors the SP9 `PCD_PROVENANCE_VERSION` lock and SP10A `PCD_COST_FORECAST_VERSION` lock. The stamper imports the constant; everything else reads the version forensically off the assembled payload.
+> Two parts:
+>
+> 1. **Sole literal site.** Among **non-test source files**, the literal `"pcd-synthetic-routing-provenance@"` appears in exactly one file: `synthetic-routing-provenance-version.ts`. No stamper, store, orchestrator, schema, or non-test fixture may inline the literal. Anti-pattern test #1 enforces.
+> 2. **Sole runtime import site.** Among **non-test runtime sources**, the symbol `PCD_SYNTHETIC_ROUTING_PROVENANCE_VERSION` is imported by exactly one file: `stamp-pcd-synthetic-routing-decision.ts`. Tests are explicitly permitted to import the constant from `synthetic-routing-provenance-version.ts` for literal-pin assertions and forensic-payload assertions; this is not a violation.
+>
+> Mirrors the SP9 `PCD_PROVENANCE_VERSION` lock and SP10A `PCD_COST_FORECAST_VERSION` lock with the test carve-out made explicit. The stamper imports the constant; orchestrator + store + everything else reads the version forensically off the assembled payload.
 
 **Guardrail D — single `crypto` call site:**
 
@@ -216,15 +221,33 @@ export type PcdSp18SyntheticRoutingDecisionReason = z.infer<
 
 // Persistence input — flat shape for Prisma. 6 flat fields + 1 Json reason.
 // Used as the "stamper output → orchestrator carries → store consumes" shape.
-export const PcdSp18SyntheticRoutingProvenancePayloadSchema = z.object({
-  imageProvider: z.literal("dalle"),                          // v1.1.0: always "dalle"
-  videoProvider: z.union([z.literal("kling"), z.literal("seedance")]),
-  videoProviderChoice: z.union([z.literal("kling"), z.literal("seedance")]),
-  syntheticRouterVersion: z.string().min(1),                  // verbatim from decision
-  syntheticPairingVersion: z.string().min(1),                 // verbatim from decision
-  promptHash: z.string().regex(/^[0-9a-f]{64}$/),             // sha256 hex lowercase
-  syntheticRoutingDecisionReason: PcdSp18SyntheticRoutingDecisionReasonSchema,
-});
+//
+// Cross-field invariant (user-stipulated amendment): the flat videoProvider
+// MUST match the discriminator inside the Json reason. A persisted row where
+// these disagree is structurally impossible (the row would record "user got
+// kling but reason carries seedance direction" — a corrupt forensic record).
+// Enforced at schema level via .refine(); SP18 stamper assembles both from a
+// single source value, so the refine is defensive against tampering and
+// against external callers parsing untrusted Json.
+export const PcdSp18SyntheticRoutingProvenancePayloadSchema = z
+  .object({
+    imageProvider: z.literal("dalle"),                          // v1.1.0: always "dalle"
+    videoProvider: z.union([z.literal("kling"), z.literal("seedance")]),
+    videoProviderChoice: z.union([z.literal("kling"), z.literal("seedance")]),
+    syntheticRouterVersion: z.string().min(1),                  // verbatim from decision
+    syntheticPairingVersion: z.string().min(1),                 // verbatim from decision
+    promptHash: z.string().regex(/^[0-9a-f]{64}$/),             // sha256 hex lowercase
+    syntheticRoutingDecisionReason: PcdSp18SyntheticRoutingDecisionReasonSchema,
+  })
+  .refine(
+    (payload) =>
+      payload.videoProvider === payload.syntheticRoutingDecisionReason.videoProvider,
+    {
+      path: ["syntheticRoutingDecisionReason", "videoProvider"],
+      message:
+        "syntheticRoutingDecisionReason.videoProvider must match flat videoProvider",
+    },
+  );
 export type PcdSp18SyntheticRoutingProvenancePayload = z.infer<
   typeof PcdSp18SyntheticRoutingProvenancePayloadSchema
 >;
@@ -302,7 +325,7 @@ export async function stampPcdSyntheticRoutingDecision(
 5. **Assemble Json reason** discriminated on `videoProvider`:
    - Kling success → `{ videoProvider: "kling", klingDirection, pairingRefIndex, decisionReason, decidedAt, syntheticRoutingProvenanceVersion: PCD_SYNTHETIC_ROUTING_PROVENANCE_VERSION }`
    - Seedance success → `{ videoProvider: "seedance", seedanceDirection, pairingRefIndex, decisionReason, decidedAt, syntheticRoutingProvenanceVersion: PCD_SYNTHETIC_ROUTING_PROVENANCE_VERSION }`
-6. **Defense-in-depth re-parse the assembled payload** through `PcdSp18SyntheticRoutingProvenancePayloadSchema`. Catches discriminator drift, e.g., a kling-success branch accidentally carrying `seedanceDirection`.
+6. **Defense-in-depth re-parse the assembled payload** through `PcdSp18SyntheticRoutingProvenancePayloadSchema`. Catches: (a) discriminator drift (e.g., a kling-success branch accidentally carrying `seedanceDirection`), and (b) the cross-field consistency invariant — `payload.videoProvider === payload.syntheticRoutingDecisionReason.videoProvider` — via the schema's `.refine()` (§3.2 amendment). Both checks are structurally impossible on the happy path because the stamper constructs both fields from the same source value; the re-parse is defensive against tampering and against external callers parsing untrusted Json.
 7. **Return** the parsed payload.
 
 **Failures:** all `ZodError`-class. No new error types. Propagated raw — no `try`/`catch` in the stamper body.
@@ -635,16 +658,18 @@ Same purity envelope as SP9: no I/O, no network, no Prisma, no Inngest. The only
 
 - Round-trip parse on `PcdSp18SyntheticRoutingDecisionReasonSchema` for both branches (kling success + seedance success).
 - Round-trip parse on `PcdSp18SyntheticRoutingProvenancePayloadSchema` for both flat-column variants.
-- Reject: kling branch carrying `seedanceDirection`; seedance branch carrying `klingDirection`; missing `videoProvider`; `videoProvider: "other"`; missing `syntheticRoutingProvenanceVersion`; missing `decidedAt`; malformed `decidedAt` (non-ISO); `promptHash` not 64-hex-char; `promptHash` uppercase; `imageProvider` other than `"dalle"`; flat-payload's `videoProvider` mismatching the reason Json's `videoProvider`. (Last case: not a single-schema-refinement test — it's a cross-field consistency check at the assemble layer.)
+- Reject: kling branch carrying `seedanceDirection`; seedance branch carrying `klingDirection`; missing `videoProvider`; `videoProvider: "other"`; missing `syntheticRoutingProvenanceVersion`; missing `decidedAt`; malformed `decidedAt` (non-ISO); `promptHash` not 64-hex-char; `promptHash` uppercase; `imageProvider` other than `"dalle"`; **flat-payload's `videoProvider` mismatching the reason Json's `videoProvider`** (caught by the schema's `.refine()` — §3.2 amendment — ZodIssue path `["syntheticRoutingDecisionReason", "videoProvider"]`).
 - `.readonly()` enforcement on both branches.
 
 ### 5.4 Anti-pattern tests — `sp18-anti-patterns.test.ts` (10 assertions, source-level + behavioral)
 
 **Source-level (cheap, deterministic):**
 
-1. **Single-source pinning of `PCD_SYNTHETIC_ROUTING_PROVENANCE_VERSION`** — the literal `"pcd-synthetic-routing-provenance@"` appears in exactly ONE non-test source file: `synthetic-routing-provenance-version.ts`. Stamper imports it; no other SP18 source contains the literal.
+1. **Single-source pinning of `PCD_SYNTHETIC_ROUTING_PROVENANCE_VERSION`** (Guardrail C, two parts):
+   - **Sole literal site:** the literal `"pcd-synthetic-routing-provenance@"` appears in exactly ONE non-test source file: `synthetic-routing-provenance-version.ts`. (Scan: walk the source tree, exclude test files, assert exactly one match.)
+   - **Sole runtime import site:** among non-test runtime sources, the symbol `PCD_SYNTHETIC_ROUTING_PROVENANCE_VERSION` is imported by exactly ONE file: `stamp-pcd-synthetic-routing-decision.ts`. Tests may import the constant from `synthetic-routing-provenance-version.ts` for literal-pin assertions and forensic-payload assertions; the test carve-out is explicit. (Scan: walk all `.ts` files except `*.test.ts` / `__tests__/`, grep `from ".*synthetic-routing-provenance-version` and assert exactly one match.)
 2. **Single `crypto` import site (Guardrail D)** — across the entire SP18 surface, `node:crypto` is imported only by `stamp-pcd-synthetic-routing-decision.ts`. Anti-pattern test greps for `from "node:crypto"` and asserts exactly one source-file match.
-3. **4-way lock-step with SP4/SP9/SP10A** — `write-pcd-identity-snapshot-with-synthetic-routing.ts` imports the same four SP4 version constants (`PCD_TIER_POLICY_VERSION`, `PCD_PROVIDER_CAPABILITY_VERSION`, `PCD_PROVIDER_ROUTER_VERSION`) AND calls `assertTier3RoutingDecisionCompliant` with the same six-argument shape as `pcd-identity-snapshot-writer.ts`, `write-pcd-identity-snapshot-with-provenance.ts`, `write-pcd-identity-snapshot-with-cost-forecast.ts`. (Test reads all four files and asserts structural equivalence.)
+3. **4-way lock-step with SP4/SP9/SP10A** — `write-pcd-identity-snapshot-with-synthetic-routing.ts` imports the same four SP4 version constants (`PCD_TIER_POLICY_VERSION`, `PCD_PROVIDER_CAPABILITY_VERSION`, `PCD_PROVIDER_ROUTER_VERSION`) AND calls `assertTier3RoutingDecisionCompliant` with the same six-argument shape as `pcd-identity-snapshot-writer.ts`, `write-pcd-identity-snapshot-with-provenance.ts`, `write-pcd-identity-snapshot-with-cost-forecast.ts`. (Test reads all four files and asserts structural equivalence.) **Plan directive (watchpoint):** the implementer subagent must copy the invariant call shape verbatim from `write-pcd-identity-snapshot-with-cost-forecast.ts` (the most-recent canonical orchestrator), not creatively re-derive it. Same imported invariant symbol, same six argument names sourced from the same `input.snapshot.*` paths, same pre-persist placement (after stamps, before Zod parse). The lock-step assertion is intentionally rigid; subagents may accidentally "simplify" by extracting a helper or renaming arguments — both break the lock-step.
 4. **No SP1–SP17 source body edits (Guardrail B)** — `git diff <sp17-squash-sha>..HEAD` against the SP1–SP17 source-body file list returns empty for each. (SP17 squash SHA: J12 placeholder; resolved at plan-write time after PR #17 merges.) List of frozen source bodies: SP4 writer (`pcd-identity-snapshot-writer.ts`), SP6 consent pre-checks, SP7/SP8 chain/gate, SP9 stamper (`stamp-pcd-provenance.ts`) + orchestrator (`write-pcd-identity-snapshot-with-provenance.ts`), SP10A stamper + orchestrator, SP10B budget gate, SP10C budget enforcer, SP11 synthetic identity payload + schemas, SP12 license gate, SP13 selector, SP14 disclosure registry, SP15 script-template selector, SP16 router constants (`synthetic-router-version.ts`, `synthetic-provider-pairing.ts`), SP17 widened router body (`route-synthetic-pcd-shot.ts`), SP17 widened decision union (`pcd-synthetic-router.ts`), SP17 SP11 widen (`creator-identity-synthetic.ts`).
 5. **Forbidden imports (broad)** — no SP18 source imports `@creativeagent/db`, `@prisma/client`, `inngest`, `node:fs`, `node:http`, `node:https`. (Test exempts itself.)
 6. **Single-source `crypto.createHash` call** — exactly one occurrence of `createHash(` across the SP18 surface, inside `stamp-pcd-synthetic-routing-decision.ts`. Anti-pattern test asserts.
@@ -695,7 +720,7 @@ Net-new files added to those allowlists:
 
 ## 6. Open questions / known unknowns
 
-- **U1: Stamper output schema's cross-field consistency (flat `videoProvider` vs Json `videoProvider`).** The `PcdSp18SyntheticRoutingProvenancePayloadSchema` does not enforce at the schema level that `payload.videoProvider === payload.syntheticRoutingDecisionReason.videoProvider`. Doing so would require `.refine()` at the top-level shape. **Decision baked into §5.3 cross-field test**: enforced at the assemble layer (the stamper constructs both from the same source value) and verified at test time (anti-pattern §5.4 assertion 10). Adding a `.refine()` is structurally redundant because the stamper is the only writer.
+- **U1: Stamper output schema's cross-field consistency (flat `videoProvider` vs Json `videoProvider`).** **Resolved at user review (amendment):** enforced at the schema level via `.refine()` on `PcdSp18SyntheticRoutingProvenancePayloadSchema` (§3.2). Reason: this is a persisted forensic payload, and the schema should reject impossible persisted shapes — not just trust the in-package stamper to assemble them correctly. Defends against external callers (merge-back integration, deserialized Json) parsing a corrupt row. The stamper still constructs both fields from the same source value (the SP17 decision's `videoProvider`), so the refine never fires on the happy path; it fires only on tampered or hand-constructed payloads.
 
 - **U2: `promptHash` collision risk.** sha256 collision probability is negligible at any conceivable scale. No truncation. 64 hex chars stored. **Decision baked**: no collision-handling.
 
