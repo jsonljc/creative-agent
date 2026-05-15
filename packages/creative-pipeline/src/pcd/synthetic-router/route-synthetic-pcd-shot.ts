@@ -4,7 +4,9 @@
 // Kling pairing).
 //
 // Composition (one inline `Step N` comment per body step):
-//   1. Look up pairing matrix row by (shotType, outputIntent).
+//   1. Look up pairing matrix row by 3-tuple (shotType, outputIntent,
+//      videoProviderChoice). SP17 widened the key from a 2-tuple to a
+//      3-tuple when the matrix grew to two rows partitioned by videoProvider.
 //   2. If no row matches → delegate to SP4's routePcdShot and wrap.
 //   3. Tier policy gate (SP2's decidePcdGenerationAccess) — denial path. [Task 7]
 //   4. Build synthetic pairing decision (locked artifacts read verbatim
@@ -64,11 +66,14 @@ export async function routeSyntheticPcdShot(
   input: RouteSyntheticPcdShotInput,
   stores: ProviderRouterStores,
 ): Promise<SyntheticPcdRoutingDecision> {
-  // Step 1 — Pairing matrix lookup. Find a row whose shotTypes contains
-  // input.shotType AND outputIntents contains input.outputIntent.
-  // First-match wins (v1 has only one row).
+  // Step 1 — Pairing matrix lookup keyed by 3-tuple
+  // (shotType, outputIntent, videoProviderChoice). SP17: matrix grew to two
+  // rows partitioned by videoProvider; first-match across all rows.
   const pairingRefIndex = PCD_SYNTHETIC_PROVIDER_PAIRING.findIndex(
-    (p) => p.shotTypes.includes(input.shotType) && p.outputIntents.includes(input.outputIntent),
+    (p) =>
+      p.shotTypes.includes(input.shotType) &&
+      p.outputIntents.includes(input.outputIntent) &&
+      p.videoProvider === input.videoProviderChoice,
   );
   const pairing =
     pairingRefIndex >= 0 ? PCD_SYNTHETIC_PROVIDER_PAIRING[pairingRefIndex] : undefined;

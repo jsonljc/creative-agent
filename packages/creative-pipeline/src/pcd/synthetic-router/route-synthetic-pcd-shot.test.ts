@@ -56,6 +56,7 @@ function makeInput(
     syntheticIdentity: cheryl,
     shotType: "simple_ugc",
     outputIntent: "draft",
+    videoProviderChoice: "kling",
     approvedCampaignContext: NO_CAMPAIGN,
     ...overrides,
   };
@@ -152,6 +153,59 @@ describe("routeSyntheticPcdShot — delegation branch (out-of-pairing shot types
     const result = await routeSyntheticPcdShot(makeInput({ shotType: "script_only" }), stores);
     if (result.kind !== "delegated_to_generic_router") throw new Error("expected delegation");
     expect(result.syntheticRouterVersion).toBe(PCD_SYNTHETIC_ROUTER_VERSION);
+  });
+});
+
+describe("routeSyntheticPcdShot — Step 2 delegation (SP17 — videoProviderChoice plumbed)", () => {
+  it("delegates with videoProviderChoice=kling on script_only", async () => {
+    const log = { calls: 0 };
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log),
+    };
+    const decision = await routeSyntheticPcdShot(
+      makeInput({
+        shotType: "script_only",
+        outputIntent: "draft",
+        videoProviderChoice: "kling",
+      }),
+      stores,
+    );
+    expect(decision.kind).toBe("delegated_to_generic_router");
+    if (decision.kind === "delegated_to_generic_router") {
+      expect(decision.reason).toBe("shot_type_not_in_synthetic_pairing");
+    }
+    expect((decision as Record<string, unknown>).videoProviderChoice).toBeUndefined();
+  });
+
+  it("delegates with videoProviderChoice=seedance on script_only (same behavior; choice not echoed)", async () => {
+    const log = { calls: 0 };
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log),
+    };
+    const decision = await routeSyntheticPcdShot(
+      makeInput({
+        shotType: "script_only",
+        outputIntent: "draft",
+        videoProviderChoice: "seedance",
+      }),
+      stores,
+    );
+    expect(decision.kind).toBe("delegated_to_generic_router");
+    expect((decision as Record<string, unknown>).videoProviderChoice).toBeUndefined();
+  });
+
+  it("delegates on storyboard for either provider choice", async () => {
+    for (const choice of ["kling", "seedance"] as const) {
+      const log = { calls: 0 };
+      const stores: ProviderRouterStores = {
+        campaignTakeStore: makeCampaignTakeStore(false, log),
+      };
+      const decision = await routeSyntheticPcdShot(
+        makeInput({ shotType: "storyboard", outputIntent: "draft", videoProviderChoice: choice }),
+        stores,
+      );
+      expect(decision.kind).toBe("delegated_to_generic_router");
+    }
   });
 });
 
