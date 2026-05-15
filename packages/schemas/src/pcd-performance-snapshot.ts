@@ -53,8 +53,9 @@ const SuccessInputSchema = z
     latencyMs: z.number().int().min(0),
     actualCostUsd: z.number().min(0),
     currency: z.literal("USD"),
-    costActualReason: CostActualReasonInnerSchema.nullable(),
+    costActual: CostActualReasonInnerSchema.nullable(),
   })
+  .strict()
   .readonly();
 
 const FailureInputSchema = z
@@ -67,8 +68,9 @@ const FailureInputSchema = z
     actualCostUsd: z.null(),
     currency: z.null(),
     errorCategory: PcdPerformanceErrorCategorySchema,
-    costActualReason: CostActualReasonInnerSchema.nullable(),
+    costActual: CostActualReasonInnerSchema.nullable(),
   })
+  .strict()
   .readonly();
 
 const ManualSkipInputSchema = z
@@ -80,8 +82,9 @@ const ManualSkipInputSchema = z
     latencyMs: z.number().int().min(0),
     actualCostUsd: z.null(),
     currency: z.null(),
-    costActualReason: CostActualReasonInnerSchema.nullable(),
+    costActual: CostActualReasonInnerSchema.nullable(),
   })
+  .strict()
   .readonly();
 
 export const PcdPerformanceSnapshotInputSchema = z.union([

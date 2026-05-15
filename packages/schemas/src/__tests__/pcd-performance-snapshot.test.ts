@@ -33,7 +33,7 @@ describe("PcdPerformanceSnapshotInputSchema — success branch", () => {
     latencyMs: 1234,
     actualCostUsd: 0.42,
     currency: "USD" as const,
-    costActualReason: null,
+    costActual: null,
   };
 
   it("parses a well-formed success input", () => {
@@ -74,7 +74,7 @@ describe("PcdPerformanceSnapshotInputSchema — failure branch", () => {
     actualCostUsd: null,
     currency: null,
     errorCategory: "provider_timeout" as const,
-    costActualReason: null,
+    costActual: null,
   };
 
   it("parses a well-formed failure input", () => {
@@ -107,7 +107,7 @@ describe("PcdPerformanceSnapshotInputSchema — manual_skip branch", () => {
     latencyMs: 0,
     actualCostUsd: null,
     currency: null,
-    costActualReason: null,
+    costActual: null,
   };
 
   it("parses a well-formed manual_skip input", () => {
@@ -151,6 +151,21 @@ describe("PcdPerformanceSnapshotReasonSchema", () => {
       }),
     ).toThrow();
   });
+
+  it("parses a reason with costActual populated (non-null)", () => {
+    const parsed = PcdPerformanceSnapshotReasonSchema.parse({
+      performanceSnapshotVersion: "pcd-performance-snapshot@1.0.0",
+      capturedAt: "2026-05-15T12:00:00.000Z",
+      costActual: {
+        providerCalled: "kling",
+        providerSku: "kling-v1.5-pro",
+        billingLineId: "line_abc",
+        note: null,
+      },
+    });
+    expect(parsed.costActual?.providerCalled).toBe("kling");
+    expect(parsed.costActual?.providerSku).toBe("kling-v1.5-pro");
+  });
 });
 
 describe("PcdPerformanceSnapshotPayloadSchema", () => {
@@ -173,5 +188,93 @@ describe("PcdPerformanceSnapshotPayloadSchema", () => {
       capturedAt: new Date("2026-05-15T12:00:00.000Z"),
     });
     expect(parsed.terminalKind).toBe("success");
+  });
+
+  it("rejects payload with empty assetRecordId", () => {
+    expect(() =>
+      PcdPerformanceSnapshotPayloadSchema.parse({
+        assetRecordId: "",
+        terminalKind: "success",
+        errorCategory: null,
+        latencyMs: 0,
+        actualCostUsd: 0,
+        currency: "USD",
+        costActualReason: {
+          performanceSnapshotVersion: "pcd-performance-snapshot@1.0.0",
+          capturedAt: "2026-05-15T12:00:00.000Z",
+          costActual: null,
+        },
+        attemptNumber: 1,
+        providerCalled: "kling",
+        performanceSnapshotVersion: "pcd-performance-snapshot@1.0.0",
+        capturedAt: new Date("2026-05-15T12:00:00.000Z"),
+      }),
+    ).toThrow();
+  });
+
+  it("rejects payload with negative actualCostUsd", () => {
+    expect(() =>
+      PcdPerformanceSnapshotPayloadSchema.parse({
+        assetRecordId: "asset_abc",
+        terminalKind: "success",
+        errorCategory: null,
+        latencyMs: 0,
+        actualCostUsd: -0.01,
+        currency: "USD",
+        costActualReason: {
+          performanceSnapshotVersion: "pcd-performance-snapshot@1.0.0",
+          capturedAt: "2026-05-15T12:00:00.000Z",
+          costActual: null,
+        },
+        attemptNumber: 1,
+        providerCalled: "kling",
+        performanceSnapshotVersion: "pcd-performance-snapshot@1.0.0",
+        capturedAt: new Date("2026-05-15T12:00:00.000Z"),
+      }),
+    ).toThrow();
+  });
+
+  it("rejects payload with non-USD currency literal", () => {
+    expect(() =>
+      PcdPerformanceSnapshotPayloadSchema.parse({
+        assetRecordId: "asset_abc",
+        terminalKind: "success",
+        errorCategory: null,
+        latencyMs: 0,
+        actualCostUsd: 0,
+        currency: "EUR",
+        costActualReason: {
+          performanceSnapshotVersion: "pcd-performance-snapshot@1.0.0",
+          capturedAt: "2026-05-15T12:00:00.000Z",
+          costActual: null,
+        },
+        attemptNumber: 1,
+        providerCalled: "kling",
+        performanceSnapshotVersion: "pcd-performance-snapshot@1.0.0",
+        capturedAt: new Date("2026-05-15T12:00:00.000Z"),
+      }),
+    ).toThrow();
+  });
+
+  it("rejects payload with empty performanceSnapshotVersion at top level", () => {
+    expect(() =>
+      PcdPerformanceSnapshotPayloadSchema.parse({
+        assetRecordId: "asset_abc",
+        terminalKind: "success",
+        errorCategory: null,
+        latencyMs: 0,
+        actualCostUsd: 0,
+        currency: "USD",
+        costActualReason: {
+          performanceSnapshotVersion: "pcd-performance-snapshot@1.0.0",
+          capturedAt: "2026-05-15T12:00:00.000Z",
+          costActual: null,
+        },
+        attemptNumber: 1,
+        providerCalled: "kling",
+        performanceSnapshotVersion: "",
+        capturedAt: new Date("2026-05-15T12:00:00.000Z"),
+      }),
+    ).toThrow();
   });
 });
