@@ -734,6 +734,16 @@ Net-new files added to those allowlists:
 
 - **U7: Multiple SP18 orchestrators at merge-back?** Production callers wanting "lineage + cost + synthetic-routing" cannot use SP18 alone (no cost) and cannot use SP10A alone (no synthetic-routing). Two paths forward at merge-back: (a) a new orchestrator that composes SP9 + SP10A stamper + SP18 stamper (5-way lock-step on the SP4 invariant); (b) Switchboard production runner picks the most-relevant orchestrator per asset (synthetic-pairing assets → SP18; delegated assets → SP10A with cost). **Out of SP18 scope** — neither is committed; merge-back team picks.
 
+- **U8: Structural-adapter-type compatibility check at merge-back (user-flagged).** The Prisma adapter at `packages/db/src/stores/prisma-pcd-identity-snapshot-store.ts` declares a LOCAL `PcdSp18IdentitySnapshotStoreAdapter` type because the db layer cannot import from creative-pipeline (CLAUDE.md layer rule). The local type and the creative-pipeline `PcdSp18IdentitySnapshotStore` contract are structurally equivalent today but maintained by convention only — there is no compile-time bridge enforcing structural equivalence. **At merge-back** (or in a future apps/api integration test that legitimately depends on both packages), add a one-liner type-level assertion:
+
+  ```ts
+  // apps/api or merge-back integration scope — both packages importable.
+  const _bridge: PcdSp18IdentitySnapshotStore =
+    adaptPcdSp18IdentitySnapshotStore(prismaStore);
+  ```
+
+  This catches structural drift between the local-adapter type and the creative-pipeline contract at compile time. Cannot live in db (layer rule) or in creative-pipeline tests (no Prisma access by convention). The natural site is the merge-back production runner or a Switchboard integration test. **Tracked as MERGE-BACK marker; out of SP18 scope.**
+
 ---
 
 ## 7. Merge-back to Switchboard
@@ -757,7 +767,7 @@ Strictly additive:
 4. `stampPcdSyntheticRoutingDecision` — "Net-new SP18 stamper. Sole crypto + version import site. Switchboard's ad-optimizer team may replace `crypto.createHash` if they own hash discipline (currently unowned)."
 5. WorkTrace emit markers — two in stamper (one after Step 4 reason assembly, one after Step 6 re-parse) + one in orchestrator (pre-persist, Step 7).
 6. `writePcdIdentitySnapshotWithSyntheticRouting` — "Net-new SP18 orchestrator. Production runner discipline at merge-back: synthetic-pairing success callsites should call this; delegation cases continue via SP4/SP9/SP10A; denial cases produce no asset."
-7. `PcdSp18IdentitySnapshotStore` — "Net-new SP18 store contract. Prisma adapter `adaptPcdSp18IdentitySnapshotStore` lives in `packages/db/src/stores/prisma-pcd-identity-snapshot-store.ts`."
+7. `PcdSp18IdentitySnapshotStore` — "Net-new SP18 store contract. Prisma adapter `adaptPcdSp18IdentitySnapshotStore` lives in `packages/db/src/stores/prisma-pcd-identity-snapshot-store.ts` and declares a LOCAL adapter type (`PcdSp18IdentitySnapshotStoreAdapter`) structurally equivalent to this contract. Layer rule forbids db from importing creative-pipeline; structural equivalence maintained by convention. **At merge-back, add a type-level bridge assertion** in the apps/api or integration scope: `const _bridge: PcdSp18IdentitySnapshotStore = adaptPcdSp18IdentitySnapshotStore(prismaStore);`. See §6 U8."
 8. `fanoutDecisionId` — inherited from SP9/SP10A. "Pick fanoutDecisionId convention (Inngest event id vs synth hash)." Same marker, same deferral.
 
 **Architectural seams the merge-back does NOT need to rewrite:**
