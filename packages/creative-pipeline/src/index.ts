@@ -200,3 +200,6 @@ export * from "./pcd/script/index.js";
 
 // SP16 — synthetic creator provider routing
 export * from "./pcd/synthetic-router/index.js";
+
+// SP18 — synthetic routing provenance (snapshot/dispatch decision stamping)
+export * from "./pcd/synthetic-routing-provenance/index.js";
