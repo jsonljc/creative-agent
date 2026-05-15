@@ -54,8 +54,8 @@ What SP16 deliberately does NOT do:
 | Q2 | **Narrow declarative pairing matrix** — `PCD_SYNTHETIC_PROVIDER_PAIRING` as a `ReadonlyArray<SyntheticProviderPairing>`. v1 row count: **1**. The single row maps the seven video-modality shot types (`simple_ugc, talking_head, product_demo, product_in_hand, face_closeup, label_closeup, object_insert`) and the four standard output intents (`draft, preview, final_export, meta_draft`) to the pairing `(imageProvider: "dalle", videoProvider: "kling")`. | Declarative-data convention is uniform across the PCD vertical (SP4 matrix, SP10C cost gate, SP13 compatibility set, SP14 disclosure rows, SP15 templates). A pure switch statement would be simpler but breaks the convention and is harder to widen when a 3rd modality (e.g., voice for `talking_head`) eventually lands. One row is genuinely enough in v1 — the pairing is locked per character, not per shot type; the matrix is "which shot types are pairing-eligible at all" not "which provider serves which shot type". |
 | Q3 | **Decision struct carries `dallePromptLocked` and `klingDirection` VERBATIM on the success branch.** | Self-contained decision is the established precedent: SP14 success carries `disclosureText` verbatim; SP15 success carries `scriptText` verbatim. Downstream callers should not need a second registry read just to render. The decision struct is the unit of provenance — replay must be byte-equal from the decision alone (modulo SP17's eventual hash-only persistence choice). |
 | Q4 | **No SP11 schema widen.** `CreatorIdentitySyntheticPayloadSchema` already carries both `dallePromptLocked: z.string().min(1).max(4000)` and `klingDirection: KlingDirectionSchema` (structured `{ setting, motion, energy, lighting, avoid }`). The "locked Kling pairing" is the structured direction object, NOT a separate text prompt. SP16 reads both fields verbatim. | Verified by inspection at `packages/schemas/src/creator-identity-synthetic.ts:65,96-97`. The brainstorm framing flagged this as the riskiest cross-slice question; resolving it by inspection eliminates the temptation to widen SP11. |
-| Q5 | **Two-variant denial path on the synthetic branch + transparent delegation variant for non-pairing shot types.** Decision union has FOUR branches: `{ allowed: false, denialKind: "ACCESS_POLICY", ... }` (synthetic path, tier policy denied), `{ allowed: true, kind: "synthetic_pairing", ... }` (synthetic path, allowed), `{ kind: "delegated_to_generic_router", reason: "shot_type_not_in_synthetic_pairing", sp4Decision: PcdRoutingDecision, ... }` (out-of-pairing shot type → SP4 ran), and `{ allowed: false, denialKind: "NO_SYNTHETIC_PROVIDER_PAIRING", ... }` — **WITHHELD in v1.** With the single-row matrix covering all currently-defined video shot types, this branch is structurally unreachable; failure modes for out-of-pairing shots route through delegation. Reserved as a named denial kind for future widening (e.g., if a new shot type is added that the pairing doesn't yet cover). | Four working variants keep the decision struct fully self-describing. The delegation variant carries the embedded SP4 decision wholesale — caller treats SP4 success/denial uniformly via `sp4Decision`. The future-reserved `NO_SYNTHETIC_PROVIDER_PAIRING` keeps the failure taxonomy open without speculative code. |
-| Q6 | **20th pinned PCD constant `PCD_SYNTHETIC_ROUTER_VERSION = "synthetic-router@1.0.0"` and 21st pinned constant `PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION = "synthetic-provider-pairing@1.0.0"`.** Each literal appears in exactly ONE non-test source file. All consumers import the symbol. | Matches the tightened single-source rule established in SP14 and reinforced in SP15. Two distinct versions because the router logic and the pairing matrix can evolve independently (matrix can add rows without bumping router logic; router logic can change branching without bumping the matrix). |
+| Q5 | **Decision union has THREE v1 branches** (the implemented zod surface): `{ allowed: false, kind: "synthetic_pairing", denialKind: "ACCESS_POLICY", ... }` (synthetic path, tier policy denied), `{ allowed: true, kind: "synthetic_pairing", ... }` (synthetic path, allowed), `{ kind: "delegated_to_generic_router", reason: "shot_type_not_in_synthetic_pairing", sp4Decision: PcdRoutingDecision, ... }` (out-of-pairing shot type → SP4 ran). A future fourth denial kind `NO_SYNTHETIC_PROVIDER_PAIRING` is **reserved by name in this design only — NOT implemented in v1.** With the single-row matrix covering all currently-defined video shot types, that branch is structurally unreachable; failure modes for out-of-pairing shots route through delegation. The named reservation keeps the failure taxonomy open without writing dead code. The implementation plan must NOT scaffold the fourth branch. | Three working variants keep the decision struct fully self-describing. The delegation variant carries the embedded SP4 decision wholesale — caller treats SP4 success/denial uniformly via `sp4Decision`. The `NO_SYNTHETIC_PROVIDER_PAIRING` reservation is documentation-only; a future widen that adds a shot type the pairing matrix doesn't yet cover would land the fourth branch then. |
+| Q6 | **20th pinned PCD constant `PCD_SYNTHETIC_ROUTER_VERSION = "pcd-synthetic-router@1.0.0"` and 21st pinned constant `PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION = "pcd-synthetic-provider-pairing@1.0.0"`.** Each literal appears in exactly ONE non-test source file. All consumers import the symbol. | Matches the tightened single-source rule established in SP14 and reinforced in SP15. Two distinct versions because the router logic and the pairing matrix can evolve independently (matrix can add rows without bumping router logic; router logic can change branching without bumping the matrix). |
 | Q7 | **`allowed` discriminant** on synthetic-path branches; **`kind` discriminant** on the delegation variant + synthetic-success variant. Two discriminators on the same union are intentional — `allowed` distinguishes denied-vs-allowed for the *synthetic* path, and `kind` distinguishes synthetic-vs-delegated paths. | Cross-slice consistency on `allowed` (SP12 / SP13 / SP14 / SP15). The `kind` overlay disambiguates the synthetic-vs-delegation axis and is parallel to SP4's existing `denialKind` / SP14's `kind` field on `DisclosureResolutionDecision`. Tests cover that callers narrowing on `kind === "delegated_to_generic_router"` get the embedded SP4 decision and callers narrowing on `allowed === true && kind === "synthetic_pairing"` get the locked prompts. |
 | Q8 | **Tier policy gate (SP2) is applied directly inside `routeSyntheticPcdShot` for in-pairing shot types** via `decidePcdGenerationAccess({ avatarTier, productTier, shotType, outputIntent })`. For delegated shot types, the embedded `routePcdShot` call applies its own tier policy gate (same function, same input shape) — no double-gate concern. | SP4's body runs the tier policy gate as Step 1 of `routePcdShot`. SP16's wrapper needs the same gate for in-pairing shots because we short-circuit before calling `routePcdShot`. The tier policy gate is a pure function imported from `./tier-policy.js`; no circular dependency. |
 | Q9 | **Tier 3 generic routing rules (`first_last_frame_anchor`, `performance_transfer`, `edit_over_regenerate`) are NOT applied** to in-pairing shot types. The locked pairing supersedes generic capability filtering by design. For delegated shot types, SP4 applies Tier 3 rules as normal. | This is a real semantic statement: synthetic creators have a locked pairing because their visual identity is locked. Filtering them through capability rules that might reject Kling (e.g., `performance_transfer` for talking_head) would defeat the lock. The umbrella spec line 92 says "locked DALL-E + Kling per character" — that *is* the routing, not subject to further filtering. If Kling's capability profile genuinely cannot serve a particular Tier 3 shot type for a synthetic creator, that's an authoring-time concern (don't offer that shot type for synthetic creators, or change the locked Kling direction); it is not SP4's runtime filter to make. |
@@ -114,6 +114,7 @@ import {
   KlingDirectionSchema,
 } from "./creator-identity-synthetic.js";
 import {
+  IdentityTierSchema,
   OutputIntentSchema,
   PcdShotTypeSchema,
 } from "./pcd-identity.js";
@@ -153,10 +154,13 @@ export const PcdRoutingDecisionSchema = z.union([
       accessDecision: PcdTierDecisionSchema,
       selectedCapability: z
         .object({
+          // `provider` stays as a free string — SP4 has no exported provider
+          // enum (rows use literals "openai_text" / "runway" / "kling" /
+          // "heygen"). Tightening here would risk drift if SP4 adds a row.
           provider: z.string().min(1),
-          tiers: z.array(z.number().int()).readonly(),
-          shotTypes: z.array(z.string().min(1)).readonly(),
-          outputIntents: z.array(z.string().min(1)).readonly(),
+          tiers: z.array(IdentityTierSchema).readonly(),
+          shotTypes: z.array(PcdShotTypeSchema).readonly(),
+          outputIntents: z.array(OutputIntentSchema).readonly(),
           supportsFirstLastFrame: z.boolean(),
           supportsEditExtend: z.boolean(),
           supportsPerformanceTransfer: z.boolean(),
@@ -169,8 +173,13 @@ export const PcdRoutingDecisionSchema = z.union([
         .object({
           capabilityRefIndex: z.number().int().min(0),
           matchedShotType: PcdShotTypeSchema,
-          matchedEffectiveTier: z.number().int(),
+          matchedEffectiveTier: IdentityTierSchema,
           matchedOutputIntent: OutputIntentSchema,
+          // SP4's `tier3RulesApplied` literal set is `first_last_frame_anchor`
+          // / `performance_transfer` / `edit_over_regenerate` (see SP4's
+          // Tier3Rule TS type). Kept as a free string array here — the
+          // values are SP4-owned, not SP16-owned; if SP4 ever adds a rule
+          // SP16 should parse it without modification.
           tier3RulesApplied: z.array(z.string().min(1)).readonly(),
           candidatesEvaluated: z.number().int().min(0),
           candidatesAfterTier3Filter: z.number().int().min(0),
@@ -251,7 +260,7 @@ Notes:
 //
 // MERGE-BACK: Switchboard merge does not change this literal; bumping it
 // requires a coordinated provenance-replay assessment.
-export const PCD_SYNTHETIC_ROUTER_VERSION = "synthetic-router@1.0.0";
+export const PCD_SYNTHETIC_ROUTER_VERSION = "pcd-synthetic-router@1.0.0";
 ```
 
 `synthetic-provider-pairing.ts` (top of file, alongside the matrix):
@@ -259,12 +268,11 @@ export const PCD_SYNTHETIC_ROUTER_VERSION = "synthetic-router@1.0.0";
 ```ts
 // PCD slice SP16 — 21st pinned PCD constant.
 // Pairing-data version. Distinct from PCD_SYNTHETIC_ROUTER_VERSION (which
-// versions the routing logic, not the data). Bumped when matrix rows are
-// added / shot types are reshuffled — does NOT bump for additive shot-type
-// extensions if behavior is identical for callers.
+// versions the routing logic, not the data). Bumped when matrix membership
+// changes in any way that can affect routing decisions.
 //
 // MERGE-BACK: Same provenance-replay assessment as router version.
-export const PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION = "synthetic-provider-pairing@1.0.0";
+export const PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION = "pcd-synthetic-provider-pairing@1.0.0";
 ```
 
 Each literal appears in **exactly one non-test source file**. All consumers import the symbol.
@@ -274,7 +282,7 @@ Each literal appears in **exactly one non-test source file**. All consumers impo
 ```ts
 import type { OutputIntent, PcdShotType } from "@creativeagent/schemas";
 
-export const PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION = "synthetic-provider-pairing@1.0.0";
+export const PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION = "pcd-synthetic-provider-pairing@1.0.0";
 
 export type SyntheticProviderPairing = {
   shotTypes: ReadonlyArray<PcdShotType>;
@@ -512,6 +520,7 @@ Test fixtures: a synthetic creator identity payload built from SP11's seed (firs
 | `pairingRefIndex` invariant | success → `pairingRefIndex === 0` (v1 has one row); equal to index in the matrix. |
 | Stores ignored on synthetic path | replace `stores.campaignTakeStore` with a throw-on-any-call mock; in-pairing combos still succeed. (Asserts: synthetic path is pure.) |
 | Stores used on delegation path | spy on `stores.campaignTakeStore`; delegated tier-3 campaign shot calls the store (asserts SP4 ran its tier3 rules). |
+| **`PcdRoutingDecisionSchema` drift verification — real SP4 outputs (U1 mitigation)** | Real-call sub-tests for the two reachable SP4 branches: (a) `ACCESS_POLICY` denial — call `routePcdShot` with avatarTier=1 + productTier=1 + shotType in `{simple_ugc, ...}` + outputIntent=`final_export` (SP2 denies tier-1 publishable output); (b) `allowed: true` — call `routePcdShot` with tier-3 video shot + campaign context + a `CampaignTakeStore` mock that returns `false` from `hasApprovedTier3TakeForCampaign` (runway wins). Each returned value is round-tripped through `PcdRoutingDecisionSchema.parse()` and the parsed result is deep-equal to the original. **`NO_PROVIDER_CAPABILITY` is structurally unreachable** under SP4's v1 matrix (runway has `supportsFirstLastFrame=true` + `supportsEditExtend=true` + `supportsPerformanceTransfer=true` and covers all 7 video shot types at all 3 tiers; openai_text covers script/storyboard). That branch is exercised via a **single hand-built fixture** in §5.3 with an explicit code comment noting the unreachability. If a future SP4 matrix tightening introduces a reachable NO_PROVIDER_CAPABILITY path, the test owner promotes the hand-fixture to a real-call test at that time. Catches the schema-vs-SP4-TS-type drift for the two reachable branches — the dominant drift vector — that hand-built fixtures would miss. |
 
 ### 5.2 Pairing matrix tests — `synthetic-provider-pairing.test.ts` (~8 tests)
 
@@ -521,7 +530,7 @@ Test fixtures: a synthetic creator identity payload built from SP11's seed (firs
 - Row 0's `outputIntents` exactly equals `["draft", "preview", "final_export", "meta_draft"]`.
 - `script_only` NOT in row 0's `shotTypes`.
 - `storyboard` NOT in row 0's `shotTypes`.
-- `PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION === "synthetic-provider-pairing@1.0.0"`.
+- `PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION === "pcd-synthetic-provider-pairing@1.0.0"`.
 - Type-only check: matrix `as const`, fields read-only — `Object.isFrozen(matrix)` or equivalent depth check.
 
 ### 5.3 Zod surface tests — `packages/schemas/src/__tests__/pcd-synthetic-router.test.ts` (~14 tests)
@@ -536,15 +545,15 @@ Test fixtures: a synthetic creator identity payload built from SP11's seed (firs
   - allowed-true branch with malformed `klingDirection` (missing field)
   - denial branch with `kind !== "synthetic_pairing"`
   - any branch missing `syntheticRouterVersion`
-- `PcdRoutingDecisionSchema` round-trips all three SP4 branches (`ACCESS_POLICY`, `NO_PROVIDER_CAPABILITY`, allowed).
+- `PcdRoutingDecisionSchema` round-trips all three SP4 branches with hand-built minimal fixtures (cheap structural parse tests; the *authoritative* drift check uses real `routePcdShot` outputs in §5.1).
 - `.readonly()` enforcement on all three branches.
 
 ### 5.4 Anti-pattern tests — `sp16-anti-patterns.test.ts` (6 assertions)
 
-1. **Single-source router-version pin.** `"synthetic-router@"` appears in exactly ONE non-test source file across `packages/`: `synthetic-router-version.ts`. Matches SP14/SP15's tightened rule.
-2. **Single-source pairing-version pin.** `"synthetic-provider-pairing@"` appears in exactly ONE non-test source file: `synthetic-provider-pairing.ts`.
+1. **Single-source router-version pin.** `"pcd-synthetic-router@"` appears in exactly ONE non-test source file across `packages/`: `synthetic-router-version.ts`. Matches SP14/SP15's tightened rule.
+2. **Single-source pairing-version pin.** `"pcd-synthetic-provider-pairing@"` appears in exactly ONE non-test source file: `synthetic-provider-pairing.ts`.
 3. **Router purity.** Sources under `pcd/synthetic-router/` (excluding tests) contain no `Date.now()`, no `new Date(`, no `Math.random()`, no `import.*crypto|@creativeagent/db|@prisma/client|inngest|node:fs|http|https`. (J4 envelope.)
-4. **No SP4-internals leakage.** Sources under `pcd/synthetic-router/` contain no source-string occurrences of: `PCD_PROVIDER_CAPABILITY_MATRIX`, `Tier3Rule`, `requiresFirstLastFrameAnchor`, `requiresPerformanceTransfer`, `requiresEditOverRegenerate`, `tier3-routing-rules`, `tier3RulesApplied`, `supportsFirstLastFrame`, `supportsEditExtend`, `supportsPerformanceTransfer`, `capabilityRefIndex`. The only allowed SP4 references are `routePcdShot`, `ApprovedCampaignContext`, `ProviderRouterStores`, `PcdRoutingDecision`, `PCD_PROVIDER_CAPABILITY_VERSION` (if at all — actually NOT needed; SP16's decision struct does not re-export it). The router source uses `routePcdShot`, `ApprovedCampaignContext`, and `ProviderRouterStores`; nothing else. (J8.)
+4. **No SP4-internals leakage in the pipeline-side router.** Scope: only `packages/creative-pipeline/src/pcd/synthetic-router/*.ts` (excluding tests). **The schema file `packages/schemas/src/pcd-synthetic-router.ts` is explicitly excluded** because `PcdRoutingDecisionSchema` intentionally mirrors SP4's decision shape and legitimately contains field names like `selectedCapability`, `supportsFirstLastFrame`, `supportsEditExtend`, `supportsPerformanceTransfer`, `tier3RulesApplied`, `capabilityRefIndex`, `candidatesEvaluated`, `candidatesAfterTier3Filter` (those tokens are the SP4 contract that SP16 is parsing). The blacklist tokens that DO get scanned in the pipeline-side router sources: `PCD_PROVIDER_CAPABILITY_MATRIX`, `Tier3Rule`, `requiresFirstLastFrameAnchor`, `requiresPerformanceTransfer`, `requiresEditOverRegenerate`, `tier3-routing-rules`, `tier3RulesApplied`, `supportsFirstLastFrame`, `supportsEditExtend`, `supportsPerformanceTransfer`, `capabilityRefIndex`, `buildSelectionRationale`. The only allowed SP4 references in pipeline-side sources are the type/function symbols `routePcdShot`, `ApprovedCampaignContext`, `ProviderRouterStores`, `PcdRoutingDecision` (and the import path `../provider-router.js`). Specifically NOT needed: `PCD_PROVIDER_CAPABILITY_VERSION`. The router source uses `routePcdShot`, `ApprovedCampaignContext`, `ProviderRouterStores`; nothing else. (J8.)
 5. **No cross-slice token leakage.** Sources under `pcd/synthetic-router/` contain no occurrence of: (SP13) `SyntheticCreatorSelectionDecision`, `selectedCreatorIdentityId`, `fallbackCreatorIdentityIds`, `selectorRank`, `metricsSnapshotVersion`, `performanceOverlayApplied`; (SP14) `DisclosureResolutionDecision`, `disclosureTemplateId`, `resolverVersion`; (SP15) `ScriptSelectionDecision`, `scriptTemplateId`, `scriptText`; (SP17+) `PcdIdentitySnapshot`, `provenance_widen`, `promptHash`, `sha256(`; (SP18+) `PcdPerformanceSnapshot`, `performance_snapshot`; (SP19+) `overlayWeight`; (SP20+) `face_descriptor`, `qc_face`. The plain tokens `creatorIdentityId` and `syntheticIdentity` ARE allowed (SP11 concepts; SP16 takes them as input parameters).
 6. **Pairing matrix integrity.** Programmatic assertion: matrix length is exactly 1; row 0's `imageProvider === "dalle"`; row 0's `videoProvider === "kling"`; row 0's `shotTypes` and `outputIntents` are exactly the expected sets (duplicated from the synthetic-provider-pairing.test.ts source for defense-in-depth).
 
@@ -599,7 +608,7 @@ Strictly additive:
 **`// MERGE-BACK:` markers** (six, on the listed declarations):
 
 1. **`PCD_SYNTHETIC_ROUTER_VERSION`** (in `synthetic-router-version.ts`) — "Pinned 20th PCD constant. Router-logic version. Distinct from PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION. Switchboard merge does not change this literal; bumping it requires a coordinated provenance-replay assessment."
-2. **`PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION`** (in `synthetic-provider-pairing.ts`) — "Pinned 21st PCD constant. Pairing-data version. Bumped when matrix rows are added or shot-types reshuffled. Same provenance-replay assessment as router version."
+2. **`PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION`** (in `synthetic-provider-pairing.ts`) — "Pinned 21st PCD constant. Pairing-data version. Bumped when matrix membership changes in any way that can affect routing decisions. Same provenance-replay assessment as router version."
 3. **`PCD_SYNTHETIC_PROVIDER_PAIRING`** (in `synthetic-provider-pairing.ts`) — "Future modalities (e.g., voice for talking_head — different model pairing) add NEW rows. Adding a row that overlaps shot-types with the existing row requires a row-precedence rule (first-match? explicit priority?) — that's a future-PR design call. v1's single row makes the question moot."
 4. **`routeSyntheticPcdShot`** declaration (in `route-synthetic-pcd-shot.ts`) — "Caller (SP21 composer or equivalent) supplies the synthetic identity payload via `PrismaCreatorIdentitySyntheticReader.findByCreatorIdentityId(...)`. SP16 itself never reads. SP21 is responsible for asserting `syntheticIdentity.creatorIdentityId === resolvedContext.creatorIdentityId`. Mirrors SP12 / SP13 / SP14 / SP15 snapshot pattern."
 5. **`SyntheticPcdRoutingDecisionSchema`** zod schema (in `pcd-synthetic-router.ts`) — "Decision struct is zod-only in SP16. Persistence is SP17's responsibility (SP9 provenance widen). SP17 will add `imageProvider`, `videoProvider`, `syntheticRouterVersion`, `pairingVersion`, and `sha256(dallePromptLocked)` to `PcdIdentitySnapshot` per umbrella §5 line 263. Whether SP17 also persists `klingDirection` verbatim, or hashes it, is SP17's decision."
@@ -630,7 +639,7 @@ Carried forward from the umbrella roster design §11 and narrowed for SP16:
 
 ## 8. Open questions / known unknowns
 
-- **U1: Schema ownership of `PcdRoutingDecisionSchema`.** SP4 ships `PcdRoutingDecision` as a TypeScript type only — no zod schema. SP16's delegation branch needs to embed a parseable SP4 decision. **Decision (J13)**: SP16 owns `PcdRoutingDecisionSchema` for now, with a `// MERGE-BACK:` marker noting that SP17 may move it to `pcd-provenance.ts` when persistence becomes a concern. **Risk**: schema drift between SP4's TS type and SP16's zod schema. Mitigation: a co-located test in `pcd-synthetic-router.test.ts` constructs a `PcdRoutingDecision` (via `routePcdShot` call against an in-memory store) and round-trips it through `PcdRoutingDecisionSchema.parse()` — any drift surfaces as a test failure. Alternative considered: put the schema in `packages/schemas/src/pcd-provider-router.ts` (a net-new schema file colocated with SP4 by convention rather than slice ownership). Rejected because that file would have no other content and would be net-new infrastructure for SP4 that SP4's own slice didn't ship — a small but real cross-slice edit. SP16's file owning it is a smaller footprint.
+- **U1: Schema ownership of `PcdRoutingDecisionSchema`.** SP4 ships `PcdRoutingDecision` as a TypeScript type only — no zod schema. SP16's delegation branch needs to embed a parseable SP4 decision. **Decision (J13)**: SP16 owns `PcdRoutingDecisionSchema` for now, with a `// MERGE-BACK:` marker noting that SP17 should probably centralize this schema (likely moving it to `pcd-provenance.ts` or a net-new `pcd-provider-router.ts` schema file) when persistence becomes a concern. SP16 ownership is acceptable temporarily *only because* the delegation branch needs a parseable embedded SP4 decision now. **Risk**: schema drift between SP4's TS type and SP16's zod schema. **Mitigation (strengthened per user review)**: drift verification exercises **real `routePcdShot` outputs for the reachable branches**, not hand-built fixtures. The drift test lives in `route-synthetic-pcd-shot.test.ts` (not the schema-file test) and calls `routePcdShot(input, stores)` directly with crafted inputs that force SP4's two reachable return branches: (a) `ACCESS_POLICY` denial via tier-policy failure (e.g., tier-1 + `final_export` per SP2's policy table); (b) `allowed: true` success via tier-3 video shot + campaign context + a `CampaignTakeStore` mock returning false. Each returned value is round-tripped through `PcdRoutingDecisionSchema.parse()` — any schema drift (a missing field, a tightened-too-far enum, a renamed discriminator) surfaces as a parse failure. **`NO_PROVIDER_CAPABILITY` is structurally unreachable** with SP4's v1 matrix (runway covers every video shot type at every tier with `supportsFirstLastFrame` + `supportsEditExtend` + `supportsPerformanceTransfer` all true; openai_text covers script/storyboard) — so its branch is covered only by a hand-built minimal fixture in the schema-file tests, with an explicit code comment noting the structural unreachability. If a future SP4 matrix tightening makes NO_PROVIDER_CAPABILITY reachable, the hand-fixture gets promoted to a real-call test at that point. Hand-built fixtures can silently drift in lockstep with both the schema and SP4's TS type; real-call outputs cannot — and the two reachable branches are the dominant drift vector. Alternative considered: put the schema in `packages/schemas/src/pcd-provider-router.ts` (a net-new schema file colocated with SP4 by convention rather than slice ownership). Rejected because that file would have no other content and would be net-new infrastructure for SP4 that SP4's own slice didn't ship — a small but real cross-slice edit. SP16's file owning it is a smaller footprint, mitigated by the real-output drift test.
 
 - **U2: Does the `klingDirection.avoid: ReadonlyArray<string>` field need any post-processing into a "negative prompt" string at decision time?** SP11 stores `avoid` as a structured array. Kling's actual API takes a `negative_prompt` string (typically comma-joined avoid terms). **Decision**: NO transformation at SP16. The decision struct carries `klingDirection` verbatim — provider-call layer joins / formats. Keeps SP16 pure; mirrors the "verbatim from SP11" principle.
 
