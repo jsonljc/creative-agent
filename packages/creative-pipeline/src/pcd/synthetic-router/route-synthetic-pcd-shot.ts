@@ -3,13 +3,12 @@
 // synthetic-pairing decision for in-pairing shot types (locked DALL-E +
 // Kling pairing).
 //
-// Composition (one inline `Step N` comment per body step, filled in
-// across Tasks 6–8):
+// Composition (one inline `Step N` comment per body step):
 //   1. Look up pairing matrix row by (shotType, outputIntent).
 //   2. If no row matches → delegate to SP4's routePcdShot and wrap.
-//   3. Tier policy gate (SP2's decidePcdGenerationAccess) — denial path.
+//   3. Tier policy gate (SP2's decidePcdGenerationAccess) — denial path. [Task 7]
 //   4. Build synthetic pairing decision (locked artifacts read verbatim
-//      from input.syntheticIdentity).
+//      from input.syntheticIdentity). [Task 8]
 //
 // Algorithm is intentionally tier3-rule-free for the synthetic path: the
 // locked pairing supersedes generic capability filtering by design
@@ -31,6 +30,7 @@ import type {
 import { routePcdShot } from "../provider-router.js";
 import type { ApprovedCampaignContext, ProviderRouterStores } from "../provider-router.js";
 import type { ResolvedPcdContext } from "../registry-resolver.js";
+import { PCD_SYNTHETIC_PROVIDER_PAIRING } from "./synthetic-provider-pairing.js";
 import { PCD_SYNTHETIC_ROUTER_VERSION } from "./synthetic-router-version.js";
 
 export type RouteSyntheticPcdShotInput = {
@@ -45,7 +45,41 @@ export async function routeSyntheticPcdShot(
   input: RouteSyntheticPcdShotInput,
   stores: ProviderRouterStores,
 ): Promise<SyntheticPcdRoutingDecision> {
-  // Skeleton — Tasks 6/7/8 fill in the body. Always delegate for now.
+  // Step 1 — Pairing matrix lookup. Find a row whose shotTypes contains
+  // input.shotType AND outputIntents contains input.outputIntent.
+  // First-match wins (v1 has only one row).
+  const pairingRefIndex = PCD_SYNTHETIC_PROVIDER_PAIRING.findIndex(
+    (p) => p.shotTypes.includes(input.shotType) && p.outputIntents.includes(input.outputIntent),
+  );
+  const pairing =
+    pairingRefIndex >= 0 ? PCD_SYNTHETIC_PROVIDER_PAIRING[pairingRefIndex] : undefined;
+
+  // Step 2 — Out-of-pairing shot type → delegate to SP4.
+  if (pairing === undefined) {
+    const sp4Decision = await routePcdShot(
+      {
+        resolvedContext: input.resolvedContext,
+        shotType: input.shotType,
+        outputIntent: input.outputIntent,
+        approvedCampaignContext: input.approvedCampaignContext,
+      },
+      stores,
+    );
+    return {
+      kind: "delegated_to_generic_router",
+      reason: "shot_type_not_in_synthetic_pairing",
+      shotType: input.shotType,
+      sp4Decision,
+      syntheticRouterVersion: PCD_SYNTHETIC_ROUTER_VERSION,
+    };
+  }
+
+  // Steps 3 + 4 land in Tasks 7 + 8. For now, still delegate so existing
+  // tests keep passing while we incrementally fill in the synthetic path.
+  // `pairing` and `pairingRefIndex` are used above in the lookup +
+  // undefined-check; TypeScript's noUnusedLocals is satisfied. Task 7
+  // will replace this fall-through with the tier-policy gate and Task 8
+  // will replace it with the success-branch return.
   const sp4Decision = await routePcdShot(
     {
       resolvedContext: input.resolvedContext,
