@@ -148,4 +148,130 @@ describe("routeSyntheticPcdShot — delegation branch (out-of-pairing shot types
   });
 });
 
+describe("routeSyntheticPcdShot — synthetic-path ACCESS_POLICY denial (Step 3)", () => {
+  it("tier-1 face_closeup → denied (face_closeup needs avatarTier>=3)", async () => {
+    const log = { calls: 0 };
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log),
+    };
+    const result = await routeSyntheticPcdShot(
+      makeInput({
+        resolvedContext: makeContext({
+          productTierAtResolution: 1,
+          creatorTierAtResolution: 1,
+          effectiveTier: 1,
+          allowedOutputTier: 1,
+        }),
+        shotType: "face_closeup",
+        outputIntent: "preview",
+      }),
+      stores,
+    );
+    expect(result).toMatchObject({
+      allowed: false,
+      kind: "synthetic_pairing",
+      denialKind: "ACCESS_POLICY",
+      syntheticRouterVersion: PCD_SYNTHETIC_ROUTER_VERSION,
+    });
+    if (result.kind !== "synthetic_pairing" || result.allowed !== false) return;
+    expect(result.accessDecision.allowed).toBe(false);
+  });
+
+  it("tier-1 simple_ugc + final_export → denied (final_export needs both tiers >= 2)", async () => {
+    const log = { calls: 0 };
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log),
+    };
+    const result = await routeSyntheticPcdShot(
+      makeInput({
+        resolvedContext: makeContext({
+          productTierAtResolution: 1,
+          creatorTierAtResolution: 1,
+          effectiveTier: 1,
+          allowedOutputTier: 1,
+        }),
+        shotType: "simple_ugc",
+        outputIntent: "final_export",
+      }),
+      stores,
+    );
+    if (result.kind !== "synthetic_pairing" || result.allowed !== false) {
+      throw new Error("expected synthetic-pairing denial");
+    }
+    expect(result.denialKind).toBe("ACCESS_POLICY");
+  });
+
+  it("denial branch does NOT carry imageProvider/videoProvider/locked-artifacts", async () => {
+    const log = { calls: 0 };
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log),
+    };
+    const result = await routeSyntheticPcdShot(
+      makeInput({
+        resolvedContext: makeContext({
+          productTierAtResolution: 1,
+          creatorTierAtResolution: 1,
+          effectiveTier: 1,
+          allowedOutputTier: 1,
+        }),
+        shotType: "face_closeup",
+        outputIntent: "preview",
+      }),
+      stores,
+    );
+    if (result.kind !== "synthetic_pairing" || result.allowed !== false) {
+      throw new Error("expected synthetic-pairing denial");
+    }
+    expect("imageProvider" in result).toBe(false);
+    expect("videoProvider" in result).toBe(false);
+    expect("dallePromptLocked" in result).toBe(false);
+    expect("klingDirection" in result).toBe(false);
+  });
+
+  it("denial branch returns BEFORE consulting SP4 (campaignTakeStore never called)", async () => {
+    const log = { calls: 0 };
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log),
+    };
+    await routeSyntheticPcdShot(
+      makeInput({
+        resolvedContext: makeContext({
+          productTierAtResolution: 1,
+          creatorTierAtResolution: 1,
+          effectiveTier: 1,
+          allowedOutputTier: 1,
+        }),
+        shotType: "face_closeup",
+        outputIntent: "preview",
+      }),
+      stores,
+    );
+    expect(log.calls).toBe(0);
+  });
+
+  it("denial branch syntheticRouterVersion is stamped", async () => {
+    const log = { calls: 0 };
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log),
+    };
+    const result = await routeSyntheticPcdShot(
+      makeInput({
+        resolvedContext: makeContext({
+          productTierAtResolution: 1,
+          creatorTierAtResolution: 1,
+          effectiveTier: 1,
+          allowedOutputTier: 1,
+        }),
+        shotType: "face_closeup",
+        outputIntent: "preview",
+      }),
+      stores,
+    );
+    if (result.kind !== "synthetic_pairing" || result.allowed !== false) {
+      throw new Error("expected synthetic-pairing denial");
+    }
+    expect(result.syntheticRouterVersion).toBe(PCD_SYNTHETIC_ROUTER_VERSION);
+  });
+});
+
 export { cheryl, makeContext, makeInput, makeCampaignTakeStore, NO_CAMPAIGN, WITH_CAMPAIGN };

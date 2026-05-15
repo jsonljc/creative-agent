@@ -29,6 +29,7 @@ import type {
 } from "@creativeagent/schemas";
 import { routePcdShot } from "../provider-router.js";
 import type { ApprovedCampaignContext, ProviderRouterStores } from "../provider-router.js";
+import { decidePcdGenerationAccess } from "../tier-policy.js";
 import type { ResolvedPcdContext } from "../registry-resolver.js";
 import { PCD_SYNTHETIC_PROVIDER_PAIRING } from "./synthetic-provider-pairing.js";
 import { PCD_SYNTHETIC_ROUTER_VERSION } from "./synthetic-router-version.js";
@@ -74,12 +75,30 @@ export async function routeSyntheticPcdShot(
     };
   }
 
-  // Steps 3 + 4 land in Tasks 7 + 8. For now, still delegate so existing
-  // tests keep passing while we incrementally fill in the synthetic path.
-  // `pairing` and `pairingRefIndex` are used above in the lookup +
-  // undefined-check; TypeScript's noUnusedLocals is satisfied. Task 7
-  // will replace this fall-through with the tier-policy gate and Task 8
-  // will replace it with the success-branch return.
+  // Step 3 — Tier policy gate. SP4 also runs this for its own path; we run
+  // it here independently because Step 4 short-circuits before any
+  // routePcdShot call.
+  const accessDecision = decidePcdGenerationAccess({
+    avatarTier: input.resolvedContext.creatorTierAtResolution,
+    productTier: input.resolvedContext.productTierAtResolution,
+    shotType: input.shotType,
+    outputIntent: input.outputIntent,
+  });
+  if (!accessDecision.allowed) {
+    return {
+      allowed: false,
+      kind: "synthetic_pairing",
+      denialKind: "ACCESS_POLICY",
+      accessDecision,
+      syntheticRouterVersion: PCD_SYNTHETIC_ROUTER_VERSION,
+    };
+  }
+
+  // Step 4 lands in Task 8. For now, in-pairing allowed shots fall through
+  // to delegation so the existing happy-path delegation tests keep passing.
+  // `pairing`, `pairingRefIndex`, and `accessDecision` are all used above
+  // (lookup, undefined-check, and tier-policy gate respectively); Task 8
+  // will reference them in the success-branch return.
   const sp4Decision = await routePcdShot(
     {
       resolvedContext: input.resolvedContext,
