@@ -73,7 +73,8 @@ describe("PcdRoutingDecisionSchema", () => {
         tier3RulesApplied: ["first_last_frame_anchor"],
         candidatesEvaluated: 1,
         candidatesAfterTier3Filter: 1,
-        selectionRationale: "tier=3 shot=simple_ugc intent=draft → runway (tier3 rules [first_last_frame_anchor])",
+        selectionRationale:
+          "tier=3 shot=simple_ugc intent=draft → runway (tier3 rules [first_last_frame_anchor])",
       },
     };
     expect(() => PcdRoutingDecisionSchema.parse(v)).not.toThrow();
@@ -183,7 +184,10 @@ describe("SyntheticPcdRoutingDecisionSchema", () => {
 
   it('rejects allowed branch with imageProvider !== "dalle"', () => {
     expect(() =>
-      SyntheticPcdRoutingDecisionSchema.parse({ ...goodSyntheticAllowed, imageProvider: "midjourney" }),
+      SyntheticPcdRoutingDecisionSchema.parse({
+        ...goodSyntheticAllowed,
+        imageProvider: "midjourney",
+      }),
     ).toThrow();
   });
 

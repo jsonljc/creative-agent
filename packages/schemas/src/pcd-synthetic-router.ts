@@ -28,11 +28,7 @@
 // hashes it, is SP17's decision.
 import { z } from "zod";
 import { KlingDirectionSchema } from "./creator-identity-synthetic.js";
-import {
-  IdentityTierSchema,
-  OutputIntentSchema,
-  PcdShotTypeSchema,
-} from "./pcd-identity.js";
+import { IdentityTierSchema, OutputIntentSchema, PcdShotTypeSchema } from "./pcd-identity.js";
 import { PcdTierDecisionSchema } from "./pcd-tier-policy.js";
 
 // SP4 PcdRoutingDecision — three structural branches mirrored verbatim.
@@ -45,14 +41,14 @@ export const PcdRoutingDecisionSchema = z.union([
     .object({
       allowed: z.literal(false),
       denialKind: z.literal("ACCESS_POLICY"),
-      accessDecision: PcdTierDecisionSchema,
+      accessDecision: PcdTierDecisionSchema.readonly(),
     })
     .readonly(),
   z
     .object({
       allowed: z.literal(false),
       denialKind: z.literal("NO_PROVIDER_CAPABILITY"),
-      accessDecision: PcdTierDecisionSchema,
+      accessDecision: PcdTierDecisionSchema.readonly(),
       reason: z.literal("no provider satisfies tier3 routing rules for this shot"),
       requiredActions: z.array(z.literal("choose_safer_shot_type")).readonly(),
       candidatesEvaluated: z.number().int().min(0),
@@ -62,7 +58,7 @@ export const PcdRoutingDecisionSchema = z.union([
   z
     .object({
       allowed: z.literal(true),
-      accessDecision: PcdTierDecisionSchema,
+      accessDecision: PcdTierDecisionSchema.readonly(),
       selectedCapability: z
         .object({
           provider: z.string().min(1),
@@ -106,7 +102,7 @@ export const SyntheticPcdRoutingDecisionSchema = z.union([
       allowed: z.literal(false),
       kind: z.literal("synthetic_pairing"),
       denialKind: z.literal("ACCESS_POLICY"),
-      accessDecision: PcdTierDecisionSchema,
+      accessDecision: PcdTierDecisionSchema.readonly(),
       syntheticRouterVersion: z.string().min(1),
     })
     .readonly(),
@@ -115,7 +111,7 @@ export const SyntheticPcdRoutingDecisionSchema = z.union([
     .object({
       allowed: z.literal(true),
       kind: z.literal("synthetic_pairing"),
-      accessDecision: PcdTierDecisionSchema,
+      accessDecision: PcdTierDecisionSchema.readonly(),
       imageProvider: z.literal("dalle"),
       videoProvider: z.literal("kling"),
       dallePromptLocked: z.string().min(1).max(4000),
