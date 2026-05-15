@@ -72,7 +72,7 @@ packages/creative-pipeline/src/pcd/provenance/sp9-anti-patterns.test.ts         
 packages/creative-pipeline/src/pcd/cost/sp10a-anti-patterns.test.ts                           [Task 10]
 packages/creative-pipeline/src/pcd/budget/sp10b-anti-patterns.test.ts                         [Task 10]
 packages/creative-pipeline/src/pcd/cost-budget/sp10c-anti-patterns.test.ts                    [Task 10]
-packages/creative-pipeline/src/pcd/synthetic-creator/sp13-anti-patterns.test.ts               [Task 10]
+packages/creative-pipeline/src/pcd/selector/sp13-anti-patterns.test.ts               [Task 10]
 packages/creative-pipeline/src/pcd/disclosure/sp14-anti-patterns.test.ts                      [Task 10]
 packages/creative-pipeline/src/pcd/script/sp15-anti-patterns.test.ts                          [Task 10]
 packages/creative-pipeline/src/pcd/synthetic-router/sp16-anti-patterns.test.ts                [Task 10]
@@ -579,11 +579,13 @@ Do NOT touch the existing `@@index([...])` lines — SP18 adds no indexes.
 
 - [ ] **Step 3.4: Apply migration locally**
 
+The repo exposes `pnpm db:migrate` (root script → `pnpm --filter @creativeagent/db migrate` → `prisma migrate dev`). The manually-authored migration directory (Step 3.2) is detected as a pending migration; `prisma migrate dev` with no `--name` argument applies it without regenerating.
+
 ```bash
-pnpm --filter @creativeagent/db exec prisma migrate dev --skip-seed --name pcd_identity_snapshot_sp18_synthetic_routing_provenance
+pnpm db:migrate
 ```
 
-Expected: Prisma detects the existing migration file and applies it. **If Prisma tries to CREATE a new migration with a different name, that means `schema.prisma` is out of sync with the SQL file — re-check Step 3.3.** Migration should apply cleanly.
+Expected: Prisma detects the pending migration and applies it. **If Prisma instead prompts to create a new migration, that means `schema.prisma` is out of sync with the SQL file — re-check Step 3.3 (the schema.prisma model fields and the SQL ALTER TABLE columns must agree exactly).**
 
 - [ ] **Step 3.5: Regenerate Prisma client**
 
@@ -635,26 +637,25 @@ The SP4 / SP9 / SP10A store contracts + adapters are preserved byte-equivalent. 
 - [ ] **Step 4.1: Read the existing store file to understand the structure**
 
 ```bash
-sed -n '1,60p' packages/db/src/stores/prisma-pcd-identity-snapshot-store.ts
+cat packages/db/src/stores/prisma-pcd-identity-snapshot-store.ts
 ```
 
-Expected: imports + class `PrismaPcdIdentitySnapshotStore` with methods `create`, `createForShotWithProvenance`, `createForShotWithCostForecast`. Adapters `adaptPcdIdentitySnapshotStore`, `adaptPcdSp9IdentitySnapshotStore`, `adaptPcdSp10IdentitySnapshotStore`.
+Expected: imports from `"../prisma-db.js"` (`PrismaDbClient`), interface chain `CreatePcdIdentitySnapshotInput` → `CreatePcdIdentitySnapshotWithProvenanceInput` (extends) → `CreatePcdIdentitySnapshotWithCostForecastInput` (extends), class `PrismaPcdIdentitySnapshotStore` with constructor `(private prisma: PrismaDbClient)` and methods `create`, `createForShotWithProvenance`, `createForShotWithCostForecast`, `getByAssetRecordId`. Three adapters with LOCAL `*Adapter` types (`PcdIdentitySnapshotStoreAdapter`, `PcdSp9IdentitySnapshotStoreAdapter`, `PcdSp10IdentitySnapshotStoreAdapter`) — none imported from creative-pipeline; the layer rule forbids it.
 
 (The exact line numbers depend on SP10A/SP10C state on `main` at execution time; do not hardcode them.)
 
 - [ ] **Step 4.2: Write the failing test**
 
-Append to `packages/db/src/stores/prisma-pcd-identity-snapshot-store.test.ts`:
+Append to `packages/db/src/stores/prisma-pcd-identity-snapshot-store.test.ts`. **Note on types:** the test file should match the existing test's import + mock pattern — `PrismaDbClient` (NOT `PrismaClient` from `@prisma/client`), `vi.fn()` from `vitest`, store result cast `as unknown as PcdIdentitySnapshot`. Read the existing tests for `createForShotWithCostForecast` and copy the mock shape exactly.
 
 ```ts
 describe("createForShotWithSyntheticRouting (SP18)", () => {
-  it("writes a 33-field row including the 7 SP18 columns", async () => {
+  it("writes a row populated with the 7 SP18 columns", async () => {
     const prismaMock = {
       pcdIdentitySnapshot: {
         create: vi.fn().mockResolvedValue({
           id: "snap-1",
           assetRecordId: "asset-1",
-          // ...minimal SP4 fields...
           briefId: "brief-1",
           imageProvider: "dalle",
           videoProvider: "kling",
@@ -667,10 +668,10 @@ describe("createForShotWithSyntheticRouting (SP18)", () => {
         }),
       },
     };
-    const store = new PrismaPcdIdentitySnapshotStore(prismaMock as unknown as PrismaClient);
+    const store = new PrismaPcdIdentitySnapshotStore(prismaMock as unknown as PrismaDbClient);
 
     const result = await store.createForShotWithSyntheticRouting({
-      // 15 SP4 base fields
+      // SP4 base — typed via CreatePcdIdentitySnapshotInput interface inheritance
       assetRecordId: "asset-1",
       productIdentityId: "prod-1",
       productTierAtGeneration: 3,
@@ -682,17 +683,25 @@ describe("createForShotWithSyntheticRouting (SP18)", () => {
       avatarReferenceAssetIds: ["ref-1"],
       voiceAssetId: null,
       consentRecordId: null,
+      policyVersion: "pcd-tier-policy@1.0.0",
+      providerCapabilityVersion: "pcd-provider-capability@1.0.0",
       selectedProvider: "dalle",
       providerModelSnapshot: "dalle-3",
       seedOrNoSeed: "no-seed",
       rewrittenPromptText: null,
-      // SP4 pinned versions + forensic
-      policyVersion: "pcd-tier-policy@1.0.0",
-      providerCapabilityVersion: "pcd-provider-capability@1.0.0",
-      routerVersion: "pcd-provider-router@1.0.0",
       shotSpecVersion: "pcd-shot-spec@1.0.0",
-      routingDecisionReason: { selectionRationale: "test" },
-      // SP9 lineage
+      routerVersion: "pcd-provider-router@1.0.0",
+      routingDecisionReason: {
+        capabilityRefIndex: 0,
+        matchedShotType: "simple_ugc",
+        matchedEffectiveTier: 3,
+        matchedOutputIntent: "draft",
+        tier3RulesApplied: [],
+        candidatesEvaluated: 1,
+        candidatesAfterTier3Filter: 1,
+        selectionRationale: "test",
+      },
+      // SP9 lineage — typed via CreatePcdIdentitySnapshotWithProvenanceInput
       briefId: "brief-1",
       trendId: "trend-1",
       motivatorId: "mot-1",
@@ -704,7 +713,7 @@ describe("createForShotWithSyntheticRouting (SP18)", () => {
         chainVersion: "pcd-preproduction-chain@1.0.0",
         provenanceVersion: "pcd-provenance@1.0.0",
       },
-      // SP18 synthetic-routing
+      // SP18 synthetic-routing — typed via CreatePcdIdentitySnapshotWithSyntheticRoutingInput
       imageProvider: "dalle",
       videoProvider: "kling",
       videoProviderChoice: "kling",
@@ -740,22 +749,24 @@ describe("createForShotWithSyntheticRouting (SP18)", () => {
     expect(callArg.syntheticPairingVersion).toBe("pcd-synthetic-provider-pairing@1.1.0");
     expect(callArg.promptHash).toBe("a".repeat(64));
     expect(callArg.syntheticRoutingDecisionReason).toMatchObject({ videoProvider: "kling" });
+    // costForecastReason must not appear in the call payload — SP18 path does not bundle SP10A cost.
+    expect(callArg.costForecastReason).toBeUndefined();
     expect(result.imageProvider).toBe("dalle");
   });
 });
 
 describe("adaptPcdSp18IdentitySnapshotStore (SP18)", () => {
-  it("returns a contract-shaped object that delegates to createForShotWithSyntheticRouting", () => {
-    const prismaStore = { createForShotWithSyntheticRouting: vi.fn() };
-    const adapted = adaptPcdSp18IdentitySnapshotStore(
-      prismaStore as unknown as PrismaPcdIdentitySnapshotStore,
-    );
+  it("returns an adapter object delegating to createForShotWithSyntheticRouting", () => {
+    const prismaStore = {
+      createForShotWithSyntheticRouting: vi.fn(),
+    } as unknown as PrismaPcdIdentitySnapshotStore;
+    const adapted = adaptPcdSp18IdentitySnapshotStore(prismaStore);
     expect(typeof adapted.createForShotWithSyntheticRouting).toBe("function");
   });
 });
 ```
 
-(Subagent: ensure `vi` and `PrismaClient` are imported at the top of the test file — copy the existing import block, do not introduce new shapes.)
+(Subagent: ensure `vi` is imported from `vitest` and `PrismaDbClient` is imported from `"../prisma-db.js"`. Match the existing test file's imports — do not add `PrismaClient` from `@prisma/client`.)
 
 - [ ] **Step 4.3: Run test to verify failure**
 
@@ -765,133 +776,114 @@ pnpm --filter @creativeagent/db test prisma-pcd-identity-snapshot-store
 
 Expected: FAIL with "createForShotWithSyntheticRouting is not a function" or similar.
 
-- [ ] **Step 4.4: Add `createForShotWithSyntheticRouting` method to the store class**
+- [ ] **Step 4.4: Add the SP18 input interface and `createForShotWithSyntheticRouting` method**
 
-Edit `packages/db/src/stores/prisma-pcd-identity-snapshot-store.ts`. After the existing `createForShotWithCostForecast` method, add:
+Edit `packages/db/src/stores/prisma-pcd-identity-snapshot-store.ts`. **Two changes:**
+
+**(a) Add a new interface** declaration in the existing SP4 → SP9 → SP10A interface chain. Critically, SP18's input extends `CreatePcdIdentitySnapshotWithProvenanceInput` (the SP9 base), **NOT** `CreatePcdIdentitySnapshotWithCostForecastInput` — SP18 path does not include cost.
+
+Insert after the existing `CreatePcdIdentitySnapshotWithCostForecastInput` declaration:
 
 ```ts
-  /**
-   * SP18 — Persists a synthetic-routing-success snapshot. 33 input fields
-   * (SP4 base + SP4 versions + SP9 lineage + SP18 synthetic-routing provenance).
-   *
-   * costForecastReason is intentionally not part of this method's input — SP18
-   * orchestrator does not bundle SP10A cost (orthogonal slices). Prisma writes
-   * the column as NULL via its nullable default.
-   *
-   * MERGE-BACK: net-new SP18 store method.
-   */
-  async createForShotWithSyntheticRouting(input: {
-    // SP4 base
-    assetRecordId: string;
-    productIdentityId: string;
-    productTierAtGeneration: number;
-    productImageAssetIds: string[];
-    productCanonicalTextHash: string;
-    productLogoAssetId: string | null;
-    creatorIdentityId: string;
-    avatarTierAtGeneration: number;
-    avatarReferenceAssetIds: string[];
-    voiceAssetId: string | null;
-    consentRecordId: string | null;
-    selectedProvider: string;
-    providerModelSnapshot: string;
-    seedOrNoSeed: string;
-    rewrittenPromptText: string | null;
-    // SP4 pinned + forensic
-    policyVersion: string;
-    providerCapabilityVersion: string;
-    routerVersion: string;
-    shotSpecVersion: string | null;
-    routingDecisionReason: unknown;
-    // SP9 lineage
-    briefId: string;
-    trendId: string;
-    motivatorId: string;
-    hookId: string;
-    scriptId: string;
-    lineageDecisionReason: unknown;
-    // SP18 synthetic-routing
-    imageProvider: "dalle";
-    videoProvider: "kling" | "seedance";
-    videoProviderChoice: "kling" | "seedance";
-    syntheticRouterVersion: string;
-    syntheticPairingVersion: string;
-    promptHash: string;
-    syntheticRoutingDecisionReason: unknown;
-  }): Promise<PcdIdentitySnapshotRow> {
+// SP18 — wider input. Same shape as SP9's input, plus the 6 SP18 flat fields
+// and the SP18 synthetic-routing decision reason. NOTE: extends SP9 directly,
+// not SP10A — SP18 path is the synthetic-routing-only persistence path and
+// does NOT bundle SP10A cost (orthogonal slices). costForecastReason on the
+// resulting row defaults to NULL.
+export interface CreatePcdIdentitySnapshotWithSyntheticRoutingInput
+  extends CreatePcdIdentitySnapshotWithProvenanceInput {
+  imageProvider: "dalle";
+  videoProvider: "kling" | "seedance";
+  videoProviderChoice: "kling" | "seedance";
+  syntheticRouterVersion: string;
+  syntheticPairingVersion: string;
+  promptHash: string;
+  syntheticRoutingDecisionReason: PcdSp18SyntheticRoutingDecisionReason;
+}
+```
+
+Also add `PcdSp18SyntheticRoutingDecisionReason` to the existing top-of-file `@creativeagent/schemas` import (alphabetical order):
+
+```ts
+import type {
+  IdentityTier,
+  PcdIdentitySnapshot,
+  PcdProvenanceDecisionReason,
+  PcdRoutingDecisionReason,
+  PcdSp10CostForecastReason,
+  PcdSp18SyntheticRoutingDecisionReason,  // SP18 — added
+} from "@creativeagent/schemas";
+```
+
+**(b) Add the `createForShotWithSyntheticRouting` method** on the class. Insert immediately after `createForShotWithCostForecast`:
+
+```ts
+  // SP18 — additive persistence path. Writes the SP9 25-field shape PLUS the
+  // 7 SP18 synthetic-routing fields (6 flat + 1 Json). Legacy create(),
+  // createForShotWithProvenance(), and createForShotWithCostForecast() are
+  // preserved unchanged. costForecastReason is NOT included in this method's
+  // input — SP18 path does not bundle SP10A cost. Prisma writes the column
+  // as NULL via its nullable default.
+  //
+  // MERGE-BACK: net-new SP18 store method.
+  async createForShotWithSyntheticRouting(
+    input: CreatePcdIdentitySnapshotWithSyntheticRoutingInput,
+  ): Promise<PcdIdentitySnapshot> {
+    const {
+      routingDecisionReason,
+      lineageDecisionReason,
+      syntheticRoutingDecisionReason,
+      ...rest
+    } = input;
     return this.prisma.pcdIdentitySnapshot.create({
       data: {
-        assetRecordId: input.assetRecordId,
-        productIdentityId: input.productIdentityId,
-        productTierAtGeneration: input.productTierAtGeneration,
-        productImageAssetIds: input.productImageAssetIds,
-        productCanonicalTextHash: input.productCanonicalTextHash,
-        productLogoAssetId: input.productLogoAssetId,
-        creatorIdentityId: input.creatorIdentityId,
-        avatarTierAtGeneration: input.avatarTierAtGeneration,
-        avatarReferenceAssetIds: input.avatarReferenceAssetIds,
-        voiceAssetId: input.voiceAssetId,
-        consentRecordId: input.consentRecordId,
-        selectedProvider: input.selectedProvider,
-        providerModelSnapshot: input.providerModelSnapshot,
-        seedOrNoSeed: input.seedOrNoSeed,
-        rewrittenPromptText: input.rewrittenPromptText,
-        policyVersion: input.policyVersion,
-        providerCapabilityVersion: input.providerCapabilityVersion,
-        routerVersion: input.routerVersion,
-        shotSpecVersion: input.shotSpecVersion,
-        routingDecisionReason: input.routingDecisionReason as Prisma.InputJsonValue,
-        briefId: input.briefId,
-        trendId: input.trendId,
-        motivatorId: input.motivatorId,
-        hookId: input.hookId,
-        scriptId: input.scriptId,
-        lineageDecisionReason: input.lineageDecisionReason as Prisma.InputJsonValue,
-        imageProvider: input.imageProvider,
-        videoProvider: input.videoProvider,
-        videoProviderChoice: input.videoProviderChoice,
-        syntheticRouterVersion: input.syntheticRouterVersion,
-        syntheticPairingVersion: input.syntheticPairingVersion,
-        promptHash: input.promptHash,
-        syntheticRoutingDecisionReason: input.syntheticRoutingDecisionReason as Prisma.InputJsonValue,
-        // costForecastReason intentionally absent — SP18 does not bundle SP10A cost.
+        ...rest,
+        routingDecisionReason: routingDecisionReason
+          ? (routingDecisionReason as object)
+          : Prisma.JsonNull,
+        lineageDecisionReason: lineageDecisionReason as unknown as object,
+        syntheticRoutingDecisionReason: syntheticRoutingDecisionReason as unknown as object,
+        // costForecastReason intentionally not set — SP18 path does not bundle
+        // SP10A cost. Prisma writes the column as NULL via its nullable default.
       },
-    });
+    }) as unknown as PcdIdentitySnapshot;
   }
 ```
 
-(Subagent: ensure `Prisma` is imported from `@prisma/client` if not already — copy from the existing `createForShotWithCostForecast` method's import pattern.)
+The destructure-and-spread pattern, the `as object` cast on the Json fields, and the `as unknown as PcdIdentitySnapshot` return cast are all verbatim from SP9's `createForShotWithProvenance` and SP10A's `createForShotWithCostForecast`. Do not deviate — the pattern is load-bearing.
 
-- [ ] **Step 4.5: Add `adaptPcdSp18IdentitySnapshotStore` adapter function**
+(Subagent: `Prisma` is already imported from `@prisma/client` at the top of the file via the existing SP9/SP10A code — no new import needed.)
+
+- [ ] **Step 4.5: Add `adaptPcdSp18IdentitySnapshotStore` adapter with a LOCAL adapter type**
 
 After the existing `adaptPcdSp10IdentitySnapshotStore` adapter, add:
 
 ```ts
-/**
- * SP18 — Adapter returning the SP18 store contract shape. Delegates to the
- * concrete PrismaPcdIdentitySnapshotStore.createForShotWithSyntheticRouting.
- *
- * MERGE-BACK: at Switchboard merge, the production runner wires this adapter
- * by injecting it into writePcdIdentitySnapshotWithSyntheticRouting's stores
- * parameter (pcdSp18IdentitySnapshotStore field).
- */
+// SP18 adapter — bridges the SP18 orchestrator's PcdSp18IdentitySnapshotStore
+// contract (defined in @creativeagent/creative-pipeline) to the Prisma
+// createForShotWithSyntheticRouting() method. The adapter type is declared
+// LOCALLY here — the db layer cannot import from creative-pipeline (CLAUDE.md
+// layer rule: db → schemas only). The local type is structurally equivalent
+// to the creative-pipeline contract; production wiring at merge-back consumes
+// this adapter from the apps/api layer.
+export type PcdSp18IdentitySnapshotStoreAdapter = {
+  createForShotWithSyntheticRouting(
+    input: CreatePcdIdentitySnapshotWithSyntheticRoutingInput,
+  ): Promise<PcdIdentitySnapshot>;
+};
+
 export function adaptPcdSp18IdentitySnapshotStore(
-  prismaStore: PrismaPcdIdentitySnapshotStore,
-): PcdSp18IdentitySnapshotStore {
+  store: PrismaPcdIdentitySnapshotStore,
+): PcdSp18IdentitySnapshotStoreAdapter {
   return {
-    createForShotWithSyntheticRouting: (input) =>
-      prismaStore.createForShotWithSyntheticRouting(input),
+    createForShotWithSyntheticRouting: (input) => store.createForShotWithSyntheticRouting(input),
   };
 }
 ```
 
-Import `PcdSp18IdentitySnapshotStore` at the top of the file:
+**Critical: do NOT import `PcdSp18IdentitySnapshotStore` from `@creativeagent/creative-pipeline`.** The db package cannot depend on creative-pipeline (CLAUDE.md layer rule). The local `PcdSp18IdentitySnapshotStoreAdapter` type is structurally equivalent — TypeScript's structural typing means the production runner can pass the adapter to the orchestrator's `pcdSp18IdentitySnapshotStore` slot without an explicit type bridge. This matches SP9's `PcdSp9IdentitySnapshotStoreAdapter` and SP10A's `PcdSp10IdentitySnapshotStoreAdapter` pattern verbatim.
 
-```ts
-import type { PcdSp18IdentitySnapshotStore } from "@creativeagent/creative-pipeline/pcd/synthetic-routing-provenance";
-```
-
-**Note on the import path:** Task 6 creates `pcd-sp18-identity-snapshot-store.ts` and Task 11 wires the barrel. If the import path here resolves before Task 6, the typecheck will fail. Subagent: defer the adapter implementation if necessary, OR coordinate Tasks 4 + 6 ordering (Task 6 ships the type-only contract; Task 4 imports it). **Recommendation:** Execute Task 6 BEFORE this step. The plan order Task 4 → Task 5 → Task 6 is sub-optimal; subagent-driven-development can re-order — reorder to Task 5 → Task 6 → Task 4 if needed. This plan keeps the design's logical order for clarity but flags the dependency.
+**Task ordering note:** With this fix, Task 4 no longer depends on Task 6. The original plan ordering (Task 1 → 2 → 3 → 4 → 5 → 6 → ...) is now correct without re-ordering.
 
 - [ ] **Step 4.6: Run tests to verify they pass**
 
@@ -1009,68 +1001,48 @@ Per design §3.5.
 
 - [ ] **Step 6.1: Create the contract type file**
 
+Match SP10A's intersection-type pattern (`packages/creative-pipeline/src/pcd/cost/pcd-sp10-identity-snapshot-store.ts`). Compose existing types rather than re-declaring the 30+ fields inline.
+
 Create `packages/creative-pipeline/src/pcd/synthetic-routing-provenance/pcd-sp18-identity-snapshot-store.ts`:
 
 ```ts
-// SP18 — Additive store contract. Imported from SP18 sources only. The SP4 /
-// SP9 / SP10A contracts are preserved verbatim and continue to serve their
-// callsites. The Prisma adapter (adaptPcdSp18IdentitySnapshotStore in
-// packages/db/) wires this contract onto the widened PcdIdentitySnapshot
-// model.
-//
-// MERGE-BACK: net-new SP18 store contract. Production runner injects this at
-// merge-back by calling adaptPcdSp18IdentitySnapshotStore(prismaStore).
-
 import type {
   PcdIdentitySnapshot,
-  PcdProvenanceDecisionReason,
-  PcdSp18SyntheticRoutingDecisionReason,
+  PcdSp9ProvenancePayload,
+  PcdSp18SyntheticRoutingProvenancePayload,
 } from "@creativeagent/schemas";
+import type { PcdIdentitySnapshotStoreInput } from "../pcd-identity-snapshot-writer.js";
 
+/**
+ * SP18 — additive store contract. Imported only by the SP18 orchestrator
+ * (write-pcd-identity-snapshot-with-synthetic-routing.ts) and implemented by
+ * the Prisma adapter at packages/db/src/stores/prisma-pcd-identity-snapshot-store.ts
+ * (via the structurally-equivalent local PcdSp18IdentitySnapshotStoreAdapter type).
+ *
+ * The SP4 contract (PcdIdentitySnapshotStore.createForShot), the SP9 contract
+ * (PcdSp9IdentitySnapshotStore.createForShotWithProvenance), and the SP10A
+ * contract (PcdSp10IdentitySnapshotStore.createForShotWithCostForecast) are
+ * preserved verbatim. This contract widens the persistence shape with the
+ * SP18 synthetic-routing provenance fields (6 flat + 1 Json).
+ *
+ * Composes: SP4 base input + SP9 provenance payload + SP18 synthetic-routing
+ * payload. costForecastReason is intentionally NOT in the intersection —
+ * SP18 path does not bundle SP10A cost (orthogonal slices).
+ *
+ * MERGE-BACK: at merge-back, Switchboard's apps/api wires this store into the
+ * production runner's per-asset synthetic-pairing-success snapshot path via
+ * writePcdIdentitySnapshotWithSyntheticRouting.
+ */
 export type PcdSp18IdentitySnapshotStore = {
-  createForShotWithSyntheticRouting(input: {
-    // SP4 base — identity + provider
-    assetRecordId: string;
-    productIdentityId: string;
-    productTierAtGeneration: number;
-    productImageAssetIds: ReadonlyArray<string>;
-    productCanonicalTextHash: string;
-    productLogoAssetId: string | null;
-    creatorIdentityId: string;
-    avatarTierAtGeneration: number;
-    avatarReferenceAssetIds: ReadonlyArray<string>;
-    voiceAssetId: string | null;
-    consentRecordId: string | null;
-    selectedProvider: string;
-    providerModelSnapshot: string;
-    seedOrNoSeed: string;
-    rewrittenPromptText: string | null;
-    // SP4 pinned versions (orchestrator stamps from imports)
-    policyVersion: string;
-    providerCapabilityVersion: string;
-    routerVersion: string;
-    shotSpecVersion: string | null;
-    routingDecisionReason: unknown; // SP4 Json forensic
-    // SP9 lineage
-    briefId: string;
-    trendId: string;
-    motivatorId: string;
-    hookId: string;
-    scriptId: string;
-    lineageDecisionReason: PcdProvenanceDecisionReason;
-    // SP18 synthetic-routing — 6 flat + 1 Json
-    imageProvider: "dalle";
-    videoProvider: "kling" | "seedance";
-    videoProviderChoice: "kling" | "seedance";
-    syntheticRouterVersion: string;
-    syntheticPairingVersion: string;
-    promptHash: string;
-    syntheticRoutingDecisionReason: PcdSp18SyntheticRoutingDecisionReason;
-    // SP10A costForecastReason intentionally absent — SP18 orchestrator does
-    // not bundle cost. Adapter writes the column as NULL via Prisma's default.
-  }): Promise<PcdIdentitySnapshot>;
+  createForShotWithSyntheticRouting(
+    input: PcdIdentitySnapshotStoreInput &
+      PcdSp9ProvenancePayload &
+      PcdSp18SyntheticRoutingProvenancePayload,
+  ): Promise<PcdIdentitySnapshot>;
 };
 ```
+
+**Why intersection-types over an inline literal:** matches SP10A precedent verbatim. Reuses the SP4 base type (`PcdIdentitySnapshotStoreInput` from the SP4 writer) and the SP9 stamper's payload type (`PcdSp9ProvenancePayload` from `@creativeagent/schemas`). The SP18 stamper output (`PcdSp18SyntheticRoutingProvenancePayload`, defined Task 2) provides the 6 flat + 1 Json fields. No field duplication; no drift risk.
 
 - [ ] **Step 6.2: Verify typecheck**
 
@@ -2319,11 +2291,11 @@ git commit -m "test(pcd): SP18 task 9 — sp18-anti-patterns.test.ts (10 source-
 **Files (edits only):**
 - `packages/creative-pipeline/src/pcd/provenance/sp9-anti-patterns.test.ts`
 - `packages/creative-pipeline/src/pcd/cost/sp10a-anti-patterns.test.ts`
-- `packages/creative-pipeline/src/pcd/budget/sp10b-anti-patterns.test.ts` (verify actual subdir name)
-- `packages/creative-pipeline/src/pcd/cost-budget/sp10c-anti-patterns.test.ts` (verify actual subdir name)
-- `packages/creative-pipeline/src/pcd/synthetic-creator/sp13-anti-patterns.test.ts` (verify)
-- `packages/creative-pipeline/src/pcd/disclosure/sp14-anti-patterns.test.ts` (verify)
-- `packages/creative-pipeline/src/pcd/script/sp15-anti-patterns.test.ts` (verify)
+- `packages/creative-pipeline/src/pcd/budget/sp10b-anti-patterns.test.ts`
+- `packages/creative-pipeline/src/pcd/cost-budget/sp10c-anti-patterns.test.ts`
+- `packages/creative-pipeline/src/pcd/selector/sp13-anti-patterns.test.ts`
+- `packages/creative-pipeline/src/pcd/disclosure/sp14-anti-patterns.test.ts`
+- `packages/creative-pipeline/src/pcd/script/sp15-anti-patterns.test.ts`
 - `packages/creative-pipeline/src/pcd/synthetic-router/sp16-anti-patterns.test.ts`
 - `packages/creative-pipeline/src/pcd/synthetic-router/sp17-anti-patterns.test.ts`
 
@@ -2531,8 +2503,10 @@ Expected: 22. If lower, a constant was dropped; if higher, a constant was inadve
 - [ ] **Step 12.6: Final git log review**
 
 ```bash
-git log --oneline 04f14b1..HEAD
+git log --oneline <SP17_SQUASH_SHA>..HEAD
 ```
+
+(Substitute the SP17 squash SHA captured in Task 1, Step 1.2.)
 
 Expected: ~12 commits with `feat(pcd): SP18 task N — ...` or `test(pcd): SP18 task N — ...` style messages. (Subagent-driven-development creates one commit per task per the plan structure.)
 
@@ -2581,7 +2555,9 @@ Performed inline at plan-write time:
    - `createForShotWithSyntheticRouting` — defined Task 4 + Task 6, used Task 8 ✓
    - `adaptPcdSp18IdentitySnapshotStore` — defined Task 4, no other reference (correct — production runner wires at merge-back)
 
-4. **Task ordering issue noted:** Task 4 imports `PcdSp18IdentitySnapshotStore` (defined in Task 6). The plan flags this in Step 4.5 and recommends executing Task 6 before Task 4 if the dependency surfaces. Subagent-driven-development tolerates this since it can detect typecheck failure and re-order; inline execution should manually re-order to: Task 1 → 2 → 3 → 5 → 6 → 4 → 7 → 8 → 9 → 10 → 11 → 12.
+4. **Task ordering resolved.** Post-alignment-check fix: Task 4's adapter now declares a LOCAL `PcdSp18IdentitySnapshotStoreAdapter` type (no import from creative-pipeline — required by CLAUDE.md layer rule). With that fix, Task 4 no longer depends on Task 6, and the linear order Task 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 is correct as written.
+
+5. **Alignment-check sweep performed.** Verified against the SP9/SP10A live source the following: (a) `PrismaPcdIdentitySnapshotStore` uses `PrismaDbClient` from `"../prisma-db.js"`, not `PrismaClient` from `@prisma/client`; (b) interface chain `CreatePcdIdentitySnapshotInput` → `…WithProvenanceInput` → `…WithCostForecastInput`, SP18 extends `…WithProvenanceInput` directly (not SP10A) per the cost-bundling exclusion; (c) Json fields persisted via destructure + `as object` + `Prisma.JsonNull` for nullable cases; (d) adapter types declared LOCALLY in the db layer (never imported from creative-pipeline); (e) creative-pipeline contract uses intersection-type composition (`PcdIdentitySnapshotStoreInput & PcdSp9ProvenancePayload & PcdSp18SyntheticRoutingProvenancePayload`) per SP10A precedent, not inline field literals; (f) SP13 anti-pattern test lives at `selector/`, not `synthetic-creator/`; (g) `pnpm db:migrate` is the documented command (root script → `prisma migrate dev`).
 
 ---
 
