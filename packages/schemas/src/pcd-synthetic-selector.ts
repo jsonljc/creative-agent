@@ -2,10 +2,10 @@
 // Pure zod surface; consumed by the pure selector at
 // `packages/creative-pipeline/src/pcd/selector/selector.ts`.
 //
-// SP13 invariants encoded at schema level:
-//   - selectorRank: z.literal(0)        — SP19 will widen
-//   - performanceOverlayApplied: false  — SP19 will widen
-//   - metricsSnapshotVersion: z.null()  — SP19 will widen to nullable string
+// SP13 invariants encoded at schema level (SP20-widened where noted):
+//   - selectorRank: z.literal(0)                            — reserved (a future slice may widen)
+//   - performanceOverlayApplied: z.boolean()                — SP20 widened (was z.literal(false))
+//   - metricsSnapshotVersion: z.string().min(1).nullable()  — SP20 widened (was z.null())
 //
 // No persistence in SP13; SP17 will widen PcdIdentitySnapshot with a
 // selectionDecisionId column when provenance lights up.
@@ -31,10 +31,11 @@ const SuccessDecisionSchema = z
     isSoftExclusivityOverride: z.boolean(),
     selectorVersion: z.string().min(1),
     selectorRank: z.literal(0),
-    // SP13: strict z.null(). SP19 will widen to z.string().min(1).nullable()
-    // when the performance overlay populates this slot.
-    metricsSnapshotVersion: z.null(),
-    performanceOverlayApplied: z.literal(false),
+    // SP20 widened: was z.null() in SP13; SP20 populates with PCD_PERFORMANCE_OVERLAY_VERSION
+    // (read-through from the supplied performanceHistory map) when overlay is applied
+    // and the map is non-empty; null otherwise.
+    metricsSnapshotVersion: z.string().min(1).nullable(),
+    performanceOverlayApplied: z.boolean(),
     decisionReason: z.string().min(1).max(2000),
   })
   .readonly();
