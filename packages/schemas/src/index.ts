@@ -37,3 +37,6 @@ export * from "./pcd-synthetic-router.js";
 
 // SP18 — synthetic-routing provenance
 export * from "./pcd-synthetic-routing-provenance.js";
+
+// SP19 — PcdPerformanceSnapshot
+export * from "./pcd-performance-snapshot.js";
