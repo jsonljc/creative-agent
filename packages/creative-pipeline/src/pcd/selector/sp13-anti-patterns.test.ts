@@ -173,6 +173,18 @@ describe("SP13 anti-patterns", () => {
       "packages/creative-pipeline/src/pcd/script/script-selector.ts",
       "packages/creative-pipeline/src/pcd/script/script-selector.test.ts",
       "packages/db/src/index.ts",
+      // SP17 net-new + edits (allowlist maintenance, Task 13)
+      "packages/creative-pipeline/src/pcd/synthetic-router/sp17-anti-patterns.test.ts",
+      "packages/schemas/src/creator-identity-synthetic.ts",
+      "packages/schemas/src/__tests__/creator-identity-synthetic.test.ts",
+      "packages/schemas/src/pcd-synthetic-router.ts",
+      "packages/schemas/src/__tests__/pcd-synthetic-router.test.ts",
+      "packages/db/prisma/schema.prisma",
+      "packages/db/src/stores/prisma-creator-identity-synthetic-store.ts",
+      "packages/db/src/stores/prisma-creator-identity-synthetic-reader.ts",
+      "packages/db/src/stores/__tests__/prisma-creator-identity-synthetic-store.test.ts",
+      "docs/plans/2026-05-15-pcd-synthetic-provider-routing-seedance-sp17-design.md",
+      "docs/plans/2026-05-15-pcd-synthetic-provider-routing-seedance-sp17-plan.md",
     ]);
 
     let baselineSha = "";
@@ -226,6 +238,9 @@ describe("SP13 anti-patterns", () => {
       if (file.startsWith("packages/creative-pipeline/src/pcd/synthetic-router/")) continue;
       if (file === "packages/schemas/src/pcd-synthetic-router.ts") continue;
       if (file === "packages/schemas/src/__tests__/pcd-synthetic-router.test.ts") continue;
+      // SP17 net-new migration is out of scope (necessary maintenance — same
+      // precedent as prior subdir allowlists).
+      if (file.startsWith("packages/db/prisma/migrations/")) continue;
 
       expect(allowedEdits.has(file), `SP13 modified disallowed file: ${file}`).toBe(true);
     }

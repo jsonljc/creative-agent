@@ -187,6 +187,18 @@ describe("SP10A anti-pattern grep", () => {
       "packages/creative-pipeline/src/pcd/disclosure/index.ts",
       "packages/db/src/index.ts",
       "packages/creative-pipeline/src/index.ts",
+      // SP17 net-new + edits (allowlist maintenance, Task 13)
+      "packages/creative-pipeline/src/pcd/synthetic-router/sp17-anti-patterns.test.ts",
+      "packages/schemas/src/creator-identity-synthetic.ts",
+      "packages/schemas/src/__tests__/creator-identity-synthetic.test.ts",
+      "packages/schemas/src/pcd-synthetic-router.ts",
+      "packages/schemas/src/__tests__/pcd-synthetic-router.test.ts",
+      "packages/db/prisma/schema.prisma",
+      "packages/db/src/stores/prisma-creator-identity-synthetic-store.ts",
+      "packages/db/src/stores/prisma-creator-identity-synthetic-reader.ts",
+      "packages/db/src/stores/__tests__/prisma-creator-identity-synthetic-store.test.ts",
+      "docs/plans/2026-05-15-pcd-synthetic-provider-routing-seedance-sp17-design.md",
+      "docs/plans/2026-05-15-pcd-synthetic-provider-routing-seedance-sp17-plan.md",
     ]);
 
     let sp9Sha = "";
