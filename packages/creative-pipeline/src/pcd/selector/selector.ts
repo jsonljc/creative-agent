@@ -84,7 +84,9 @@ export function selectSyntheticCreator(
 
   // Step 3 — rank survivors. SP12 pickStrongest semantics applied across
   // candidates' gate-returned licenses; final tie on creatorIdentityId ASC.
-  const ranked = [...allowedCandidates].sort(compareCandidates);
+  const ranked = [...allowedCandidates].sort((a, b) =>
+    compareCandidates(a, b, input.performanceHistory),
+  );
   const primary = ranked[0]!;
   const fallbacks = ranked.slice(1);
 
@@ -151,7 +153,16 @@ const LOCK_TYPE_RANK: Record<"hard_exclusive" | "priority_access" | "soft_exclus
 // SP13-vs-SP12: identical to SP12 pickStrongest EXCEPT the final tie-break
 // uses creatorIdentityId (selector picks creators) rather than license.id
 // (SP12 picks leases). Documented divergence; intentional.
-function compareCandidates(a: AllowedCandidate, b: AllowedCandidate): number {
+//
+// SP20 widen: position 4 performance sub-tiebreaker inserted between
+// SP12 effectiveFrom and the creatorIdentityId ASC tiebreak. Cold-start
+// no-op rule per Guardrail G — comparator returns 0 whenever either side
+// is missing metrics or has sampleSize === 0.
+function compareCandidates(
+  a: AllowedCandidate,
+  b: AllowedCandidate,
+  performanceHistory: ReadonlyMap<string, CreatorPerformanceMetrics> | undefined,
+): number {
   const la = a.gate.license;
   const lb = b.gate.license;
   const ra = LOCK_TYPE_RANK[la.lockType];
@@ -165,6 +176,19 @@ function compareCandidates(a: AllowedCandidate, b: AllowedCandidate): number {
   if (la.effectiveFrom.getTime() !== lb.effectiveFrom.getTime()) {
     return la.effectiveFrom.getTime() - lb.effectiveFrom.getTime();
   }
+  // SP20 position 4 — performance sub-tiebreaker (Guardrail G cold-start rule).
+  if (performanceHistory !== undefined) {
+    const am = performanceHistory.get(a.entry.creatorIdentity.id);
+    const bm = performanceHistory.get(b.entry.creatorIdentity.id);
+    if (am !== undefined && bm !== undefined && am.sampleSize > 0 && bm.sampleSize > 0) {
+      if (am.successRate !== bm.successRate) return bm.successRate - am.successRate;
+      // Both sampleSize > 0 ⇒ medianLatencyMs !== null by reader contract.
+      if (am.medianLatencyMs !== bm.medianLatencyMs) {
+        return (am.medianLatencyMs as number) - (bm.medianLatencyMs as number);
+      }
+    }
+  }
+  // Position 5 — final determinism tiebreak (unchanged from SP13).
   const cidA = a.entry.creatorIdentity.id;
   const cidB = b.entry.creatorIdentity.id;
   return cidA < cidB ? -1 : cidA > cidB ? 1 : 0;

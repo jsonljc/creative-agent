@@ -636,6 +636,226 @@ describe("selectSyntheticCreator — determinism", () => {
   });
 });
 
+describe("selectSyntheticCreator — SP20 comparator sub-tiebreaker", () => {
+  function twoEquivalentCandidatesInput(): SelectSyntheticCreatorInput {
+    const cherylSynthetic = cherylRoster[0]!.synthetic;
+    const rosterA: RosterEntry = {
+      creatorIdentity: { id: "creator-A", name: "A", kind: "synthetic" },
+      synthetic: { ...cherylSynthetic, creatorIdentityId: "creator-A" },
+    };
+    const rosterB: RosterEntry = {
+      creatorIdentity: { id: "creator-B", name: "B", kind: "synthetic" },
+      synthetic: { ...cherylSynthetic, creatorIdentityId: "creator-B" },
+    };
+    // Two leases with identical (lockType, priorityRank, effectiveFrom) for the
+    // same (clinicId, market, treatmentClass) — positions 1-3 of the comparator
+    // tie, so position 4 (performance) decides.
+    const leaseShape = {
+      clinicId: "clinic_a",
+      market: "SG" as const,
+      treatmentClass: "med_spa" as const,
+      lockType: "hard_exclusive" as const,
+      exclusivityScope: "market_treatment" as const,
+      effectiveFrom: new Date("2026-01-01T00:00:00.000Z"),
+      effectiveTo: null,
+      priorityRank: null,
+      status: "active" as const,
+    };
+    const leaseA: CreatorIdentityLicensePayload = {
+      id: "lease-A",
+      creatorIdentityId: "creator-A",
+      ...leaseShape,
+    };
+    const leaseB: CreatorIdentityLicensePayload = {
+      id: "lease-B",
+      creatorIdentityId: "creator-B",
+      ...leaseShape,
+    };
+    return {
+      brief: briefForCheryl,
+      now: NOW,
+      roster: [rosterA, rosterB],
+      leases: [leaseA, leaseB],
+    };
+  }
+
+  it("performance: better successRate wins among license-equivalent candidates", () => {
+    const perf = new Map<string, CreatorPerformanceMetrics>([
+      [
+        "creator-A",
+        buildCreatorPerformanceMetrics({
+          creatorIdentityId: "creator-A",
+          sampleSize: 10,
+          successCount: 9,
+          failureCount: 1,
+          manualSkipCount: 0,
+          successRate: 0.9,
+          medianLatencyMs: 2000,
+        }),
+      ],
+      [
+        "creator-B",
+        buildCreatorPerformanceMetrics({
+          creatorIdentityId: "creator-B",
+          sampleSize: 10,
+          successCount: 4,
+          failureCount: 6,
+          manualSkipCount: 0,
+          successRate: 0.4,
+          medianLatencyMs: 2000,
+        }),
+      ],
+    ]);
+    const decision = selectSyntheticCreator({
+      ...twoEquivalentCandidatesInput(),
+      performanceHistory: perf,
+    });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed) {
+      expect(decision.selectedCreatorIdentityId).toBe("creator-A");
+    }
+  });
+
+  it("performance: lower medianLatencyMs wins as sub-sub-tiebreak when successRate ties", () => {
+    const perf = new Map<string, CreatorPerformanceMetrics>([
+      [
+        "creator-A",
+        buildCreatorPerformanceMetrics({
+          creatorIdentityId: "creator-A",
+          sampleSize: 5,
+          successCount: 5,
+          failureCount: 0,
+          manualSkipCount: 0,
+          successRate: 1,
+          medianLatencyMs: 2000,
+        }),
+      ],
+      [
+        "creator-B",
+        buildCreatorPerformanceMetrics({
+          creatorIdentityId: "creator-B",
+          sampleSize: 5,
+          successCount: 5,
+          failureCount: 0,
+          manualSkipCount: 0,
+          successRate: 1,
+          medianLatencyMs: 1000,
+        }),
+      ],
+    ]);
+    const decision = selectSyntheticCreator({
+      ...twoEquivalentCandidatesInput(),
+      performanceHistory: perf,
+    });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed) {
+      expect(decision.selectedCreatorIdentityId).toBe("creator-B");
+    }
+  });
+
+  it("cold-start no-op: either side sampleSize === 0 falls through to creatorIdentityId ASC", () => {
+    const perf = new Map<string, CreatorPerformanceMetrics>([
+      [
+        "creator-A",
+        buildCreatorPerformanceMetrics({
+          creatorIdentityId: "creator-A",
+          sampleSize: 10,
+          successCount: 0,
+          failureCount: 10,
+          manualSkipCount: 0,
+          successRate: 0,
+          medianLatencyMs: 5000,
+        }),
+      ],
+      [
+        "creator-B",
+        buildCreatorPerformanceMetrics({
+          creatorIdentityId: "creator-B",
+          sampleSize: 0,
+          successCount: 0,
+          failureCount: 0,
+          manualSkipCount: 0,
+          successRate: 0,
+          medianLatencyMs: null,
+        }),
+      ],
+    ]);
+    const decision = selectSyntheticCreator({
+      ...twoEquivalentCandidatesInput(),
+      performanceHistory: perf,
+    });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed) {
+      // Tied at position 4 ⇒ position 5 picks creator-A (ASC).
+      expect(decision.selectedCreatorIdentityId).toBe("creator-A");
+    }
+  });
+
+  it("cold-start no-op: both sides cold-start preserves creatorIdentityId ASC", () => {
+    const perf = new Map<string, CreatorPerformanceMetrics>([
+      [
+        "creator-A",
+        buildCreatorPerformanceMetrics({
+          creatorIdentityId: "creator-A",
+          sampleSize: 0,
+          successCount: 0,
+          failureCount: 0,
+          manualSkipCount: 0,
+          successRate: 0,
+          medianLatencyMs: null,
+        }),
+      ],
+      [
+        "creator-B",
+        buildCreatorPerformanceMetrics({
+          creatorIdentityId: "creator-B",
+          sampleSize: 0,
+          successCount: 0,
+          failureCount: 0,
+          manualSkipCount: 0,
+          successRate: 0,
+          medianLatencyMs: null,
+        }),
+      ],
+    ]);
+    const decision = selectSyntheticCreator({
+      ...twoEquivalentCandidatesInput(),
+      performanceHistory: perf,
+    });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed) {
+      expect(decision.selectedCreatorIdentityId).toBe("creator-A");
+    }
+  });
+
+  it("missing entry for one candidate behaves like sampleSize === 0 (no-op)", () => {
+    const perf = new Map<string, CreatorPerformanceMetrics>([
+      [
+        "creator-A",
+        buildCreatorPerformanceMetrics({
+          creatorIdentityId: "creator-A",
+          sampleSize: 10,
+          successCount: 10,
+          failureCount: 0,
+          manualSkipCount: 0,
+          successRate: 1,
+          medianLatencyMs: 500,
+        }),
+      ],
+      // creator-B intentionally missing.
+    ]);
+    const decision = selectSyntheticCreator({
+      ...twoEquivalentCandidatesInput(),
+      performanceHistory: perf,
+    });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed) {
+      // No comparator winner at position 4; ASC tiebreak → creator-A.
+      expect(decision.selectedCreatorIdentityId).toBe("creator-A");
+    }
+  });
+});
+
 describe("selectSyntheticCreator — SP20 signature widen", () => {
   function baseInput(): SelectSyntheticCreatorInput {
     // Cheryl with an active priority_access lease — the simplest success path.
