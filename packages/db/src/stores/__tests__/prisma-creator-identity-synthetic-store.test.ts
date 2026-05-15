@@ -2,10 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Prisma } from "@prisma/client";
 import { PrismaCreatorIdentitySyntheticStore } from "../prisma-creator-identity-synthetic-store.js";
 import { PrismaCreatorIdentitySyntheticReader } from "../prisma-creator-identity-synthetic-reader.js";
-import type {
-  CreatorIdentitySyntheticPayload,
-  SeedanceDirection,
-} from "@creativeagent/schemas";
+import type { CreatorIdentitySyntheticPayload, SeedanceDirection } from "@creativeagent/schemas";
 
 function createMockPrisma() {
   return {

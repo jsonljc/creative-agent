@@ -586,7 +586,11 @@ describe("routeSyntheticPcdShot — Step 5 success branches (SP17 — per-provid
       },
       stores2,
     );
-    if (dec1.allowed === true && dec1.kind === "synthetic_pairing" && dec1.videoProvider === "kling") {
+    if (
+      dec1.allowed === true &&
+      dec1.kind === "synthetic_pairing" &&
+      dec1.videoProvider === "kling"
+    ) {
       if (
         dec2.allowed === true &&
         dec2.kind === "synthetic_pairing" &&

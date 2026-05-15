@@ -15,7 +15,10 @@ import { execSync } from "node:child_process";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { CreatorIdentitySyntheticPayload } from "@creativeagent/schemas";
-import { routeSyntheticPcdShot, type RouteSyntheticPcdShotInput } from "./route-synthetic-pcd-shot.js";
+import {
+  routeSyntheticPcdShot,
+  type RouteSyntheticPcdShotInput,
+} from "./route-synthetic-pcd-shot.js";
 import type { ProviderRouterStores } from "../provider-router.js";
 import type { ResolvedPcdContext } from "../registry-resolver.js";
 import { PCD_SHOT_SPEC_VERSION } from "../shot-spec-version.js";

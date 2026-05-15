@@ -77,8 +77,6 @@ describe("PCD_SYNTHETIC_PROVIDER_PAIRING (SP17 v2 — kling + seedance)", () => 
   });
 
   it('PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION is the literal "pcd-synthetic-provider-pairing@1.1.0"', () => {
-    expect(PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION).toBe(
-      "pcd-synthetic-provider-pairing@1.1.0",
-    );
+    expect(PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION).toBe("pcd-synthetic-provider-pairing@1.1.0");
   });
 });

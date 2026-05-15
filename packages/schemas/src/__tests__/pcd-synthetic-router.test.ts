@@ -277,8 +277,7 @@ describe("SyntheticPcdRoutingDecisionSchema — SP17 v2 (5 branches)", () => {
       decisionReason: {
         matchedShotType: "simple_ugc",
         matchedOutputIntent: "draft",
-        selectionRationale:
-          "synthetic-pairing tier=3 shot=simple_ugc intent=draft → dalle+kling",
+        selectionRationale: "synthetic-pairing tier=3 shot=simple_ugc intent=draft → dalle+kling",
       },
     };
     expect(SyntheticPcdRoutingDecisionSchema.parse(dec)).toEqual(dec);
