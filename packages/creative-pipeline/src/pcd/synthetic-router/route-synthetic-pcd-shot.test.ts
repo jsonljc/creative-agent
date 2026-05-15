@@ -405,4 +405,104 @@ describe("routeSyntheticPcdShot — determinism", () => {
   });
 });
 
+import { routePcdShot } from "../provider-router.js";
+import { PcdRoutingDecisionSchema } from "@creativeagent/schemas";
+
+describe("routeSyntheticPcdShot — stores discipline", () => {
+  it("synthetic path: campaignTakeStore throw-on-any-call mock, in-pairing shot still succeeds", async () => {
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: {
+        hasApprovedTier3TakeForCampaign: async () => {
+          throw new Error("synthetic path must not consult campaignTakeStore");
+        },
+      },
+    };
+    const result = await routeSyntheticPcdShot(
+      makeInput({ shotType: "simple_ugc", outputIntent: "draft" }),
+      stores,
+    );
+    expect(result.kind).toBe("synthetic_pairing");
+    if (result.kind !== "synthetic_pairing") return;
+    expect(result.allowed).toBe(true);
+  });
+
+  it("delegation path: routePcdShot is invoked and its decision is returned verbatim on sp4Decision", async () => {
+    const log = { calls: 0 };
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log),
+    };
+    const result = await routeSyntheticPcdShot(
+      makeInput({
+        shotType: "storyboard",
+        outputIntent: "draft",
+        approvedCampaignContext: WITH_CAMPAIGN,
+      }),
+      stores,
+    );
+    expect(result.kind).toBe("delegated_to_generic_router");
+    if (result.kind !== "delegated_to_generic_router") return;
+    expect(result.sp4Decision).toBeDefined();
+    expect(result.sp4Decision.allowed).toBe(true);
+    if (!result.sp4Decision.allowed) return;
+    // SP4 picks openai_text for storyboard; this proves routePcdShot ran
+    // (the synthetic path would have set imageProvider/videoProvider, not
+    // selectedProvider).
+    expect(result.sp4Decision.selectedProvider).toBe("openai_text");
+  });
+});
+
+describe("routeSyntheticPcdShot — PcdRoutingDecisionSchema drift verification (real SP4 outputs)", () => {
+  it("real SP4 ACCESS_POLICY denial round-trips through PcdRoutingDecisionSchema.parse()", async () => {
+    const log = { calls: 0 };
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log),
+    };
+    const sp4Decision = await routePcdShot(
+      {
+        resolvedContext: makeContext({
+          productTierAtResolution: 1,
+          creatorTierAtResolution: 1,
+          effectiveTier: 1,
+          allowedOutputTier: 1,
+        }),
+        shotType: "simple_ugc",
+        outputIntent: "final_export",
+        approvedCampaignContext: NO_CAMPAIGN,
+      },
+      stores,
+    );
+    expect(sp4Decision.allowed).toBe(false);
+    const parsed = PcdRoutingDecisionSchema.parse(sp4Decision);
+    expect(parsed).toEqual(sp4Decision);
+  });
+
+  it("real SP4 allowed success round-trips through PcdRoutingDecisionSchema.parse()", async () => {
+    const log = { calls: 0 };
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log),
+    };
+    const sp4Decision = await routePcdShot(
+      {
+        resolvedContext: makeContext(),
+        shotType: "simple_ugc",
+        outputIntent: "draft",
+        approvedCampaignContext: WITH_CAMPAIGN,
+      },
+      stores,
+    );
+    expect(sp4Decision.allowed).toBe(true);
+    const parsed = PcdRoutingDecisionSchema.parse(sp4Decision);
+    expect(parsed).toEqual(sp4Decision);
+  });
+
+  // NB: NO_PROVIDER_CAPABILITY is structurally unreachable under SP4's v1
+  // matrix (runway covers every video shot type at every tier with
+  // supportsFirstLastFrame + supportsEditExtend + supportsPerformanceTransfer
+  // all true; openai_text covers script/storyboard). That branch is exercised
+  // via the hand-built fixture in packages/schemas/src/__tests__/pcd-synthetic-router.test.ts
+  // (Task 2). If a future SP4 matrix tightening introduces a reachable
+  // NO_PROVIDER_CAPABILITY path, promote the hand-fixture to a real-call test
+  // here at that time.
+});
+
 export { cheryl, makeContext, makeInput, makeCampaignTakeStore, NO_CAMPAIGN, WITH_CAMPAIGN };
