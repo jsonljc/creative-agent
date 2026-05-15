@@ -174,7 +174,7 @@ describe("routeSyntheticPcdShot — Step 2 delegation (SP17 — videoProviderCho
     if (decision.kind === "delegated_to_generic_router") {
       expect(decision.reason).toBe("shot_type_not_in_synthetic_pairing");
     }
-    expect((decision as Record<string, unknown>).videoProviderChoice).toBeUndefined();
+    expect("videoProviderChoice" in decision).toBe(false);
   });
 
   it("delegates with videoProviderChoice=seedance on script_only (same behavior; choice not echoed)", async () => {
@@ -191,7 +191,10 @@ describe("routeSyntheticPcdShot — Step 2 delegation (SP17 — videoProviderCho
       stores,
     );
     expect(decision.kind).toBe("delegated_to_generic_router");
-    expect((decision as Record<string, unknown>).videoProviderChoice).toBeUndefined();
+    if (decision.kind === "delegated_to_generic_router") {
+      expect(decision.reason).toBe("shot_type_not_in_synthetic_pairing");
+    }
+    expect("videoProviderChoice" in decision).toBe(false);
   });
 
   it("delegates on storyboard for either provider choice", async () => {
@@ -205,6 +208,9 @@ describe("routeSyntheticPcdShot — Step 2 delegation (SP17 — videoProviderCho
         stores,
       );
       expect(decision.kind).toBe("delegated_to_generic_router");
+      if (decision.kind === "delegated_to_generic_router") {
+        expect(decision.reason).toBe("shot_type_not_in_synthetic_pairing");
+      }
     }
   });
 });
