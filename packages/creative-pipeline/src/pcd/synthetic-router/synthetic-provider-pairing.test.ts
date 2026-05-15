@@ -2,29 +2,24 @@ import { describe, expect, it } from "vitest";
 import {
   PCD_SYNTHETIC_PROVIDER_PAIRING,
   PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION,
-  type SyntheticProviderPairing,
 } from "./synthetic-provider-pairing.js";
 
-describe("PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION", () => {
-  it('is the literal "pcd-synthetic-provider-pairing@1.0.0"', () => {
-    expect(PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION).toBe("pcd-synthetic-provider-pairing@1.0.0");
-  });
-});
-
-describe("PCD_SYNTHETIC_PROVIDER_PAIRING — v1 matrix", () => {
-  it("has exactly one row", () => {
-    expect(PCD_SYNTHETIC_PROVIDER_PAIRING.length).toBe(1);
+describe("PCD_SYNTHETIC_PROVIDER_PAIRING (SP17 v2 — kling + seedance)", () => {
+  it("has exactly two rows", () => {
+    expect(PCD_SYNTHETIC_PROVIDER_PAIRING.length).toBe(2);
   });
 
-  it('row 0 imageProvider === "dalle"', () => {
+  it("row 0 is the kling pairing", () => {
     expect(PCD_SYNTHETIC_PROVIDER_PAIRING[0].imageProvider).toBe("dalle");
-  });
-
-  it('row 0 videoProvider === "kling"', () => {
     expect(PCD_SYNTHETIC_PROVIDER_PAIRING[0].videoProvider).toBe("kling");
   });
 
-  it("row 0 shotTypes is exactly the seven video-modality shot types", () => {
+  it("row 1 is the seedance pairing", () => {
+    expect(PCD_SYNTHETIC_PROVIDER_PAIRING[1].imageProvider).toBe("dalle");
+    expect(PCD_SYNTHETIC_PROVIDER_PAIRING[1].videoProvider).toBe("seedance");
+  });
+
+  it("both rows cover the seven video shot types (set equality)", () => {
     const expected = [
       "simple_ugc",
       "talking_head",
@@ -34,31 +29,49 @@ describe("PCD_SYNTHETIC_PROVIDER_PAIRING — v1 matrix", () => {
       "label_closeup",
       "object_insert",
     ];
-    expect([...PCD_SYNTHETIC_PROVIDER_PAIRING[0].shotTypes].sort()).toEqual([...expected].sort());
-    expect(PCD_SYNTHETIC_PROVIDER_PAIRING[0].shotTypes.length).toBe(expected.length);
+    for (const row of PCD_SYNTHETIC_PROVIDER_PAIRING) {
+      expect([...row.shotTypes].sort()).toEqual([...expected].sort());
+    }
   });
 
-  it("row 0 outputIntents is exactly the four standard output intents", () => {
-    const expected = ["draft", "preview", "final_export", "meta_draft"];
-    expect([...PCD_SYNTHETIC_PROVIDER_PAIRING[0].outputIntents].sort()).toEqual(
-      [...expected].sort(),
-    );
-    expect(PCD_SYNTHETIC_PROVIDER_PAIRING[0].outputIntents.length).toBe(expected.length);
+  it("both rows cover the four standard output intents (set equality)", () => {
+    for (const row of PCD_SYNTHETIC_PROVIDER_PAIRING) {
+      expect([...row.outputIntents].sort()).toEqual(
+        ["draft", "final_export", "meta_draft", "preview"].sort(),
+      );
+    }
   });
 
-  it('row 0 shotTypes does NOT include "script_only" (delegation reachability lock)', () => {
-    expect(PCD_SYNTHETIC_PROVIDER_PAIRING[0].shotTypes.includes("script_only" as never)).toBe(
+  it("script_only is NOT in either row's shotTypes (delegation reachability)", () => {
+    for (const row of PCD_SYNTHETIC_PROVIDER_PAIRING) {
+      expect(row.shotTypes).not.toContain("script_only");
+    }
+  });
+
+  it("storyboard is NOT in either row's shotTypes (delegation reachability)", () => {
+    for (const row of PCD_SYNTHETIC_PROVIDER_PAIRING) {
+      expect(row.shotTypes).not.toContain("storyboard");
+    }
+  });
+
+  it("matrix's videoProvider set is exactly {kling, seedance}", () => {
+    const providers = new Set(PCD_SYNTHETIC_PROVIDER_PAIRING.map((r) => r.videoProvider));
+    expect(providers).toEqual(new Set(["kling", "seedance"]));
+  });
+
+  it("rows are distinct objects (no shared reference)", () => {
+    expect(Object.is(PCD_SYNTHETIC_PROVIDER_PAIRING[0], PCD_SYNTHETIC_PROVIDER_PAIRING[1])).toBe(
       false,
     );
   });
 
-  it('row 0 shotTypes does NOT include "storyboard" (delegation reachability lock)', () => {
-    expect(PCD_SYNTHETIC_PROVIDER_PAIRING[0].shotTypes.includes("storyboard" as never)).toBe(false);
+  it("no third row exists (no accidental scaffolding for future modalities)", () => {
+    expect(PCD_SYNTHETIC_PROVIDER_PAIRING[2]).toBeUndefined();
   });
 
-  it("matrix entries are typed as SyntheticProviderPairing (compile-time + runtime check on shape keys)", () => {
-    const row: SyntheticProviderPairing = PCD_SYNTHETIC_PROVIDER_PAIRING[0];
-    const keys = Object.keys(row).sort();
-    expect(keys).toEqual(["imageProvider", "outputIntents", "shotTypes", "videoProvider"]);
+  it("PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION is bumped to 1.1.0 in SP17", () => {
+    expect(PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION).toBe(
+      "pcd-synthetic-provider-pairing@1.1.0",
+    );
   });
 });
