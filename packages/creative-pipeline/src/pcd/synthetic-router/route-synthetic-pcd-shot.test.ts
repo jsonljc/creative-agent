@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
+import { PcdRoutingDecisionSchema } from "@creativeagent/schemas";
 import {
   routeSyntheticPcdShot,
+  buildSyntheticSelectionRationale,
   type RouteSyntheticPcdShotInput,
 } from "./route-synthetic-pcd-shot.js";
 import { PCD_SYNTHETIC_ROUTER_VERSION } from "./synthetic-router-version.js";
-import type { ApprovedCampaignContext, ProviderRouterStores } from "../provider-router.js";
+import { PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION } from "./synthetic-provider-pairing.js";
+import {
+  routePcdShot,
+  type ApprovedCampaignContext,
+  type ProviderRouterStores,
+} from "../provider-router.js";
 import type { CampaignTakeStore } from "../tier3-routing-rules.js";
 import type { ResolvedPcdContext } from "../registry-resolver.js";
 import { PCD_SHOT_SPEC_VERSION } from "../shot-spec-version.js";
@@ -274,8 +281,6 @@ describe("routeSyntheticPcdShot — synthetic-path ACCESS_POLICY denial (Step 3)
   });
 });
 
-import { PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION } from "./synthetic-provider-pairing.js";
-
 const VIDEO_SHOT_TYPES = [
   "simple_ugc",
   "talking_head",
@@ -348,8 +353,6 @@ describe("routeSyntheticPcdShot — synthetic-pairing success (Step 4)", () => {
   });
 });
 
-import { buildSyntheticSelectionRationale } from "./route-synthetic-pcd-shot.js";
-
 describe("buildSyntheticSelectionRationale", () => {
   it('contains "synthetic-pairing", "dalle+kling", tier number, shotType, outputIntent', () => {
     const out = buildSyntheticSelectionRationale(3, "simple_ugc", "draft");
@@ -404,9 +407,6 @@ describe("routeSyntheticPcdShot — determinism", () => {
     expect(a).toEqual(b);
   });
 });
-
-import { routePcdShot } from "../provider-router.js";
-import { PcdRoutingDecisionSchema } from "@creativeagent/schemas";
 
 describe("routeSyntheticPcdShot — stores discipline", () => {
   it("synthetic path: campaignTakeStore throw-on-any-call mock, in-pairing shot still succeeds", async () => {
@@ -504,5 +504,3 @@ describe("routeSyntheticPcdShot — PcdRoutingDecisionSchema drift verification 
   // NO_PROVIDER_CAPABILITY path, promote the hand-fixture to a real-call test
   // here at that time.
 });
-
-export { cheryl, makeContext, makeInput, makeCampaignTakeStore, NO_CAMPAIGN, WITH_CAMPAIGN };

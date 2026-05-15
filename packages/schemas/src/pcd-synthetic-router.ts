@@ -1,12 +1,15 @@
-// PCD slice SP16 — Synthetic-creator provider-routing zod surface. Two
-// schemas:
+// PCD slice SP16 — Synthetic-creator provider-routing zod surface. Two schemas:
 //   1. PcdRoutingDecisionSchema — net-new zod analogue of SP4's
 //      TypeScript-only PcdRoutingDecision (defined inline in
-//      packages/creative-pipeline/src/pcd/provider-router.ts). SP4 ships
-//      the TS type but no zod schema; SP16's delegation branch needs a
-//      zod-parseable union for round-tripping decisions. The structure
-//      here is the authoritative parse contract; the SP4 TS type is a
-//      structural subset.
+//      packages/creative-pipeline/src/pcd/provider-router.ts:40-63). SP4
+//      itself ships only the TS type for the union, although the inner
+//      decisionReason field has long had a zod analogue
+//      (PcdRoutingDecisionReasonSchema in pcd-identity.ts:185, the SP4
+//      enum-typed source of truth). The schema below mirrors SP4's
+//      union shape and re-uses PcdRoutingDecisionReasonSchema verbatim
+//      for the success branch's decisionReason — no duplicate enum
+//      definition. SP16's delegation branch needs a zod-parseable union
+//      for round-tripping decisions, hence this top-level schema.
 //   2. SyntheticPcdRoutingDecisionSchema — SP16's own three-branch
 //      decision union: synthetic-pairing allowed, synthetic-pairing
 //      denied (ACCESS_POLICY), and delegated_to_generic_router (carries
@@ -28,14 +31,19 @@
 // hashes it, is SP17's decision.
 import { z } from "zod";
 import { KlingDirectionSchema } from "./creator-identity-synthetic.js";
-import { IdentityTierSchema, OutputIntentSchema, PcdShotTypeSchema } from "./pcd-identity.js";
+import {
+  IdentityTierSchema,
+  OutputIntentSchema,
+  PcdRoutingDecisionReasonSchema,
+  PcdShotTypeSchema,
+} from "./pcd-identity.js";
 import { PcdTierDecisionSchema } from "./pcd-tier-policy.js";
 
 // SP4 PcdRoutingDecision — three structural branches mirrored verbatim.
 // `provider` stays as a free string — SP4 has no exported provider enum
 // (rows use literals "openai_text" / "runway" / "kling" / "heygen").
-// Tightening here would risk drift if SP4 adds a row. Same rationale for
-// `tier3RulesApplied` (free string array — SP4 owns the literal set).
+// Tightening here would risk drift if SP4 adds a row. `tier3RulesApplied`
+// uses PcdRoutingDecisionReasonSchema's strict enum (the SP4 source of truth).
 export const PcdRoutingDecisionSchema = z.union([
   z
     .object({
@@ -73,18 +81,7 @@ export const PcdRoutingDecisionSchema = z.union([
       selectedProvider: z.string().min(1),
       providerCapabilityVersion: z.string().min(1),
       routerVersion: z.string().min(1),
-      decisionReason: z
-        .object({
-          capabilityRefIndex: z.number().int().min(0),
-          matchedShotType: PcdShotTypeSchema,
-          matchedEffectiveTier: IdentityTierSchema,
-          matchedOutputIntent: OutputIntentSchema,
-          tier3RulesApplied: z.array(z.string().min(1)).readonly(),
-          candidatesEvaluated: z.number().int().min(0),
-          candidatesAfterTier3Filter: z.number().int().min(0),
-          selectionRationale: z.string().min(1).max(200),
-        })
-        .readonly(),
+      decisionReason: PcdRoutingDecisionReasonSchema.readonly(),
     })
     .readonly(),
 ]);
