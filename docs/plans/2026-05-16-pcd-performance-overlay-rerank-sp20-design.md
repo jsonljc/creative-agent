@@ -66,14 +66,19 @@ SP20 is the first PCD slice to **read SP19's table for ranking**. It is also the
 >
 > **No other source edits.** SP12 license-gate, SP18 router, SP19 reader/writer/store/stamper, SP10A stamper, SP10B/C orchestrators, SP14 disclosure, SP15 script, SP16 router, SP17 widening, Prisma schema, and existing migrations are all preserved verbatim. Anti-pattern test #1 enforces via diff against the SP19 squash SHA `1d22d61`, with an explicit allowlist for the three SP13 edit sites above.
 
-**Guardrail C — composer-only version pinning + reader-stamped metricsVersion (user-clarified):**
+**Guardrail C — schema-owned version constant + bounded reader-importer allowlist (user-clarified post-review):**
 
-> Two parts (mirrors SP9/SP10A/SP18/SP19 lock with one SP20-specific clarification):
+> Three parts (mirrors SP9/SP10A/SP18/SP19 lock with two SP20-specific clarifications):
 >
-> 1. **Sole literal site.** Among non-test source files, the literal `"pcd-performance-overlay@"` appears in exactly one file: `performance-overlay-version.ts`. No reader, schema, builder, fixture, or selector source may inline the literal. Anti-pattern test #2 enforces.
-> 2. **Sole runtime import site.** Among non-test runtime sources, the symbol `PCD_PERFORMANCE_OVERLAY_VERSION` is imported by **exactly one file: the metrics reader/builder** (`packages/db/src/stores/prisma-pcd-creator-performance-metrics-reader.ts`). The selector does NOT import the version constant; it reads `metrics.metricsVersion` from the supplied map and writes that string into `metricsSnapshotVersion` on the decision. Tests are explicitly permitted to import the constant for literal-pin assertions; this is not a violation. Anti-pattern test #3 enforces both halves.
+> 1. **Package locality.** `PCD_PERFORMANCE_OVERLAY_VERSION` lives in the **schemas package** (`packages/schemas/src/pcd-performance-overlay-version.ts`) and is re-exported from the schemas barrel. Rationale: both `@creativeagent/db` and `@creativeagent/creative-pipeline` may legally depend on `@creativeagent/schemas`, but `@creativeagent/db` must NEVER reach into `@creativeagent/creative-pipeline` internals. Putting the constant in schemas means each reader can `import { PCD_PERFORMANCE_OVERLAY_VERSION } from "@creativeagent/schemas"` without violating layer rules.
+> 2. **Sole literal site.** Among non-test source files in the entire monorepo, the literal `"pcd-performance-overlay@"` appears in exactly one file: `packages/schemas/src/pcd-performance-overlay-version.ts`. No reader, schema, builder, fixture, or selector source may inline the literal. Anti-pattern test #2 enforces.
+> 3. **Bounded runtime importer allowlist.** Among non-test runtime sources, the symbol `PCD_PERFORMANCE_OVERLAY_VERSION` is imported by **exactly two files**:
+>    - `packages/db/src/stores/prisma-pcd-creator-performance-metrics-reader.ts`
+>    - `packages/db/src/stores/in-memory-pcd-creator-performance-metrics-reader.ts`
 >
-> Rationale (user-supplied): the metrics object IS the snapshot of the aggregation logic + window. The selector consumes the snapshot; it does not author one. Putting the version pin on the reader (the authoring boundary) and having the selector read-through prevents two writers stamping divergent versions on the same decision.
+>    The selector does NOT import the version constant; it reads `metrics.metricsVersion` from the supplied map and writes that string into `metricsSnapshotVersion` on the decision. Test files (`.test.ts`) and fixture files (`.fixture.ts`) are explicitly permitted to import the constant for literal-pin assertions and test-data construction; the anti-pattern test allowlists those file-extension patterns. Anti-pattern test #3 enforces both halves.
+>
+> Rationale (user-supplied): the metrics object IS the snapshot of the aggregation logic + window. The selector consumes the snapshot; it does not author one. Putting the version pin on the reader (the authoring boundary) and having the selector read-through prevents two writers stamping divergent versions on the same decision. Two readers (Prisma + in-memory) both stamp; the anti-pattern test enforces that NO OTHER runtime source does.
 
 **Guardrail D — no `crypto` in SP20:**
 
@@ -87,11 +92,11 @@ SP20 is the first PCD slice to **read SP19's table for ranking**. It is also the
 
 > No `Date.now()`, no `new Date()`, no DB reads, no I/O of any kind inside `selector.ts`. The new `performanceHistory` input is a pure data structure threaded in from the caller. Test: vary `now`, identical decision (SP15 J8 / SP19 anti-pattern test precedent extended to cover the new overlay code path).
 
-**Guardrail G — empty-history is SP13-equivalent (user-sharpened amendment to Q6):**
+**Guardrail G — empty-history is SP13-equivalent for selection outcome (user-sharpened amendment to Q6):**
 
 > When the supplied `performanceHistory` map is `undefined`, OR is defined but no entry exists for either candidate being compared, OR an entry exists for one or both candidates with `sampleSize === 0`, the SP20 sub-tiebreaker MUST return `0`. This guarantees:
 >
-> - SP20 at land time (table empty) produces byte-identical decisions to SP13 — verified by an explicit "empty-history is SP13-equivalent" test that runs the full selector test suite twice (once with `performanceHistory: undefined`, once with `performanceHistory` an empty map) and asserts byte-identical decisions.
+> - SP20 at land time (table empty) produces the SAME `selectedCreatorIdentityId` and the SAME values for every non-overlay decision field as SP13 would have produced. The two overlay-metadata fields — `performanceOverlayApplied` and `metricsSnapshotVersion` — are the ONLY permitted difference. "Byte-identical to SP13" applies to selection outcome + non-overlay fields, NOT to the entire decision object. The §6.1 test #1 wording is precise about this.
 > - A known weak performer is never penalized below a never-tested creator (deferred to SP20.1 if that policy is desired).
 >
 > Encoded in the comparator as:
@@ -147,19 +152,17 @@ All twelve open questions raised in brainstorming are answered above. For tracea
 
 ```
 packages/schemas/src/
-  pcd-creator-performance-metrics.ts          # NEW — CreatorPerformanceMetrics schema + type
+  pcd-performance-overlay-version.ts          # NEW — sole literal site for PCD_PERFORMANCE_OVERLAY_VERSION (schema-package locality per Guardrail C-1)
+  pcd-creator-performance-metrics.ts          # NEW — CreatorPerformanceMetrics schema + type (imports the constant from its sibling)
 
 packages/db/src/stores/
-  prisma-pcd-creator-performance-metrics-reader.ts   # NEW — SQL-aggregating reader; sole runtime importer of PCD_PERFORMANCE_OVERLAY_VERSION
-  in-memory-pcd-creator-performance-metrics-reader.ts # NEW — test double (matches SP12/13 in-memory store precedent)
+  prisma-pcd-creator-performance-metrics-reader.ts    # NEW — SQL-aggregating reader (1st allowed runtime importer of PCD_PERFORMANCE_OVERLAY_VERSION)
+  in-memory-pcd-creator-performance-metrics-reader.ts # NEW — runtime test double (2nd allowed runtime importer; matches SP12/13 in-memory store precedent)
 
 packages/creative-pipeline/src/pcd/selector/
-  performance-overlay-version.ts              # NEW — sole literal site for PCD_PERFORMANCE_OVERLAY_VERSION
+  build-creator-performance-metrics.fixture.ts # NEW — test fixture helper (.fixture.ts allowlist exemption)
 
 packages/creative-pipeline/src/pcd/selector/
-  build-creator-performance-metrics.fixture.ts # NEW — test fixture helper
-
-packages/creative-pipeline/test/pcd/
   sp20-anti-patterns.test.ts                  # NEW — 6 anti-pattern tests + allowlist for 3 SP13 edit sites
 ```
 
@@ -203,6 +206,21 @@ Everything else in `packages/schemas/`, `packages/db/`, `packages/creative-pipel
 // packages/schemas/src/pcd-creator-performance-metrics.ts
 import { z } from "zod";
 
+// Cross-field invariants (4 of 5) are enforced via .refine() chains so that
+// the schema is the authoritative shape contract — defense-in-depth at every
+// reader boundary, not a comment promise.
+//
+// The 5th invariant (metricsVersion === PCD_PERFORMANCE_OVERLAY_VERSION) is
+// NOT encoded as a z.literal in the schema. Two reasons:
+//   1. Intra-package import shape (constant lives at ./pcd-performance-overlay-version.js)
+//      stays trivially side-effect-free; introducing a z.literal would force the
+//      schema to depend on the constant at parse time, which is fine in practice
+//      but adds a load-order coupling for marginal benefit.
+//   2. The anti-pattern test #3 (single-importer assertion) + the reader's stamp
+//      site together guarantee the literal value at production-write time.
+// Tests in `pcd-creator-performance-metrics.test.ts` assert the version equality
+// at the reader-output boundary instead.
+
 export const CreatorPerformanceMetricsSchema = z
   .object({
     creatorIdentityId: z.string().min(1),
@@ -220,26 +238,45 @@ export const CreatorPerformanceMetricsSchema = z
     metricsVersion: z.string().min(1),
   })
   .strict()
+  .refine(
+    (m) => m.successCount + m.failureCount + m.manualSkipCount === m.sampleSize,
+    { path: ["sampleSize"], message: "counts must sum to sampleSize" },
+  )
+  .refine(
+    (m) =>
+      m.sampleSize === 0
+        ? m.successRate === 0 && m.medianLatencyMs === null
+        : m.medianLatencyMs !== null,
+    { path: ["medianLatencyMs"], message: "medianLatencyMs/successRate must match sampleSize" },
+  )
+  .refine(
+    (m) => m.windowEnd.getTime() > m.windowStart.getTime(),
+    { path: ["windowEnd"], message: "windowEnd must be after windowStart" },
+  )
   .readonly();
 export type CreatorPerformanceMetrics = z.infer<typeof CreatorPerformanceMetricsSchema>;
 ```
 
-**Invariants (reader contract, defense-in-depth Zod parse at the reader boundary):**
+**Invariants:**
 
-- `successCount + failureCount + manualSkipCount === sampleSize`.
-- `sampleSize === 0` ⇒ `medianLatencyMs === null` AND `successRate === 0`.
-- `sampleSize > 0` ⇒ `medianLatencyMs !== null`.
-- `windowEnd > windowStart`.
-- `metricsVersion === PCD_PERFORMANCE_OVERLAY_VERSION`.
+- (refine 1) `successCount + failureCount + manualSkipCount === sampleSize`.
+- (refine 2) `sampleSize === 0` ⇒ `medianLatencyMs === null` AND `successRate === 0`.
+- (refine 2 contrapositive) `sampleSize > 0` ⇒ `medianLatencyMs !== null`.
+- (refine 3) `windowEnd > windowStart`.
+- (reader contract + anti-pattern test, NOT schema-enforced) `metricsVersion === PCD_PERFORMANCE_OVERLAY_VERSION`.
 
 ### 4.2 `PCD_PERFORMANCE_OVERLAY_VERSION` (new pinned constant — 24th)
 
 ```ts
-// packages/creative-pipeline/src/pcd/selector/performance-overlay-version.ts
+// packages/schemas/src/pcd-performance-overlay-version.ts
 export const PCD_PERFORMANCE_OVERLAY_VERSION = "pcd-performance-overlay@1.0.0";
 ```
 
-Sole literal site. Sole runtime importer is the metrics reader (`packages/db/src/stores/prisma-pcd-creator-performance-metrics-reader.ts`).
+Lives in the schemas package per Guardrail C-1 (so `@creativeagent/db` can import it without reaching into `@creativeagent/creative-pipeline` internals).
+
+Sole literal site. Re-exported from `packages/schemas/src/index.ts`.
+
+Runtime importers (exactly two): `PrismaPcdCreatorPerformanceMetricsReader` and `InMemoryPcdCreatorPerformanceMetricsReader`. Both import as `import { PCD_PERFORMANCE_OVERLAY_VERSION } from "@creativeagent/schemas"`. The selector does NOT import the constant (Guardrail C-3).
 
 ### 4.3 SP13 schema widen
 
@@ -353,6 +390,7 @@ export class PrismaPcdCreatorPerformanceMetricsReader {
 ```
 
 **Implementation note (Guardrail H):**
+- Import the version constant via the schemas package: `import { PCD_PERFORMANCE_OVERLAY_VERSION } from "@creativeagent/schemas"`. Never reach into `@creativeagent/creative-pipeline` internals.
 - Aggregation is `GROUP BY creatorIdentityId` with `COUNT(*) FILTER (WHERE terminal_kind = 'success')`, parallel COUNTs for `failure` and `manual_skip`, and `percentile_cont(0.5) WITHIN GROUP (ORDER BY latency_ms)`.
 - Filter: `captured_at >= $since`.
 - **Creator linkage:** `PcdPerformanceSnapshot` rows are 1:1 with `AssetRecord`. Reader joins `PcdPerformanceSnapshot → AssetRecord → PcdIdentitySnapshot → creatorIdentityId` to resolve the creator for each performance row. (Verify this chain exists at implementation time; if `PcdIdentitySnapshot.creatorIdentityId` is not directly reachable from an `AssetRecord`, the plan's first task is to confirm the join path against the Prisma schema. Reader is the right place to bear this complexity per Guardrail H.)
@@ -400,7 +438,13 @@ At SP20 land time, step 3 in the runner returns an empty map (table is empty). S
 
 Building on the existing SP13 suite:
 
-1. **Empty-history equivalence (Guardrail G).** Run every existing SP13 test case twice: once with `performanceHistory: undefined`, once with `performanceHistory: new Map()`. Assert byte-identical decision bodies in both passes (`overlayApplied` flag and `metricsSnapshotVersion` slot differ predictably; all other fields identical).
+1. **Empty-history equivalence (Guardrail G).** Run an existing SP13 success-path test case in three modes: (a) `performanceHistory: undefined`, (b) `performanceHistory: new Map()` (empty map), (c) baseline SP13 (no overlay key at all). Assert:
+   - `selectedCreatorIdentityId` is identical in all three modes.
+   - All non-overlay decision fields are identical in all three modes.
+   - Mode (a) — `performanceOverlayApplied: false`, `metricsSnapshotVersion: null`.
+   - Mode (b) — `performanceOverlayApplied: true`, `metricsSnapshotVersion: null`.
+   - Mode (c) — `performanceOverlayApplied: false`, `metricsSnapshotVersion: null` (identical to mode a).
+   The two overlay-metadata fields are the ONLY allowed difference between modes; "byte-identical" applies to selection outcome + non-overlay fields, not to the entire decision object across modes a vs b.
 2. **Cold-start no-op (Guardrail G, both `sampleSize === 0` sides).** Three creators, license-equivalent; only one has metrics with `sampleSize > 0`. Comparator returns 0 between cold-start pairs → `creatorIdentityId` ASC tiebreak survives.
 3. **Performance sub-tiebreaker fires WITHIN bucket.** Two creators, identical lockType / priorityRank / effectiveFrom. Creator B has higher `successRate`. Assert B is selected.
 4. **Latency sub-sub-tiebreaker.** Two creators, identical `successRate` (e.g. both 1.0 with sampleSize ≥ 5). Lower `medianLatencyMs` wins.
@@ -431,7 +475,11 @@ Used by selector consumers in tests at SP21+. Ships in SP20 for parity with SP12
 
 1. **No source-body edits beyond the allowlist.** Diff against SP19 squash `1d22d61`. Allowlisted paths: the three sites in Guardrail B-1 plus the new SP20 files in §3.1 plus the 11 anti-pattern allowlist updates plus the schemas barrel widen. Any other changed source file fails.
 2. **Sole literal site for `"pcd-performance-overlay@"`.** Grep all non-test source files; assert hit count === 1 (`performance-overlay-version.ts`).
-3. **Sole runtime import site for `PCD_PERFORMANCE_OVERLAY_VERSION`.** Grep all non-test runtime source files; assert hit count === 1 (`prisma-pcd-creator-performance-metrics-reader.ts`). `selector.ts` must NOT import the constant.
+3. **Bounded runtime import allowlist for `PCD_PERFORMANCE_OVERLAY_VERSION`.** Grep all non-test, non-fixture runtime source files (excluding the declaring file itself). Allowlist (exactly two paths):
+   - `packages/db/src/stores/prisma-pcd-creator-performance-metrics-reader.ts`
+   - `packages/db/src/stores/in-memory-pcd-creator-performance-metrics-reader.ts`
+
+   Anti-pattern test asserts the sorted importer list equals this allowlist exactly, AND that `packages/creative-pipeline/src/pcd/selector/selector.ts` is NOT in the list.
 4. **No `crypto` in SP20 surface.** Grep the SP20 subdir + schema file + reader file for `from "crypto"` / `from "node:crypto"` / `createHash` / `randomUUID`. Zero hits.
 5. **No SP20-dated Prisma migration directory.** `ls packages/db/prisma/migrations/` returns no `2026-05-{16,17,18,...}` directory created by SP20.
 6. **Selector body contains no aggregation / median / sort symbols.** Grep `selector.ts` for `.sort(`, `.reduce(`, `percentile`, `median`, `quantile`. Zero hits. (`.filter` and `.map` are permitted — already used by SP13 compatible-filter and decision-population.)
