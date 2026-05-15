@@ -220,6 +220,12 @@ describe("SP13 anti-patterns", () => {
       if (file === "packages/creative-pipeline/src/pcd/sp12-anti-patterns.test.ts") continue;
       if (file === "packages/creative-pipeline/src/pcd/disclosure/sp14-anti-patterns.test.ts")
         continue;
+      // SP16 net-new files are out of scope (necessary maintenance — this
+      // SP test was written before SP16 territory existed; same precedent
+      // as prior SP allowlist additions).
+      if (file.startsWith("packages/creative-pipeline/src/pcd/synthetic-router/")) continue;
+      if (file === "packages/schemas/src/pcd-synthetic-router.ts") continue;
+      if (file === "packages/schemas/src/__tests__/pcd-synthetic-router.test.ts") continue;
 
       expect(allowedEdits.has(file), `SP13 modified disallowed file: ${file}`).toBe(true);
     }
