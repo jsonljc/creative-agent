@@ -138,6 +138,9 @@ model CreatorIdentitySynthetic {
   physicalDescriptors       Json
   dallePromptLocked         String
   klingDirection            Json
+  // SP17 — nullable; null = no Seedance direction authored for this creator.
+  // Domain code normalizes undefined → null at write time (see SP17 plan Task 4).
+  seedanceDirection         Json?
   voiceCaptionStyle         Json
 
   mutuallyExclusiveWithIds  String[]        @default([])
