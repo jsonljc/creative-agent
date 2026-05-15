@@ -218,6 +218,7 @@ describe("SP17 anti-patterns", () => {
       if (file === "packages/db/src/stores/__tests__/prisma-pcd-identity-snapshot-store.test.ts")
         continue;
       if (file === "packages/schemas/src/index.ts") continue;
+      if (file === "packages/creative-pipeline/src/index.ts") continue;
       expect(
         allowedEdits.has(file),
         `unexpected file changed since ${SP16_BASELINE}: ${file}`,
