@@ -87,22 +87,23 @@ git commit -m "docs(pcd): SP20 task 1 — Prisma join path verification"
 
 ---
 
-## Task 2: Pin `PCD_PERFORMANCE_OVERLAY_VERSION` (24th constant) + widen schemas barrel upfront
+## Task 2: Pin `PCD_PERFORMANCE_OVERLAY_VERSION` (24th constant, schemas-package locality) + widen schemas barrel upfront
 
 **Files:**
-- Create: `packages/creative-pipeline/src/pcd/selector/performance-overlay-version.ts`
-- Create: `packages/creative-pipeline/src/pcd/selector/performance-overlay-version.test.ts`
-- Modify: `packages/schemas/src/index.ts` (barrel re-export — placeholder only; the actual file lands in Task 3)
+- Create: `packages/schemas/src/pcd-performance-overlay-version.ts`
+- Create: `packages/schemas/src/pcd-performance-overlay-version.test.ts`
+- Create: `packages/schemas/src/pcd-creator-performance-metrics.ts` (one-line stub — Task 3 fills it out)
+- Modify: `packages/schemas/src/index.ts` (barrel widen with both new files)
 
-Guardrail C (sole literal site) + Guardrail I (schemas barrel widened upfront). The barrel re-export must reference the schema file before Task 3 creates it, so we add a stub schema file in this task too (one-line `export {}`), and Task 3 fleshes it out. This keeps each task self-contained and avoids "deep import path workarounds" called out by Guardrail I.
+Guardrail C-1 puts the constant in the schemas package so `@creativeagent/db` can import it without depending on `@creativeagent/creative-pipeline` internals. Guardrail C-2 makes this the sole literal site. Guardrail I requires the barrel widen to happen up-front.
 
 - [ ] **Step 1: Write the failing version-pin test**
 
-Create `packages/creative-pipeline/src/pcd/selector/performance-overlay-version.test.ts`:
+Create `packages/schemas/src/pcd-performance-overlay-version.test.ts`:
 
 ```ts
 import { describe, expect, it } from "vitest";
-import { PCD_PERFORMANCE_OVERLAY_VERSION } from "./performance-overlay-version.js";
+import { PCD_PERFORMANCE_OVERLAY_VERSION } from "./pcd-performance-overlay-version.js";
 
 describe("PCD_PERFORMANCE_OVERLAY_VERSION", () => {
   it("is the literal pcd-performance-overlay@1.0.0", () => {
@@ -114,29 +115,36 @@ describe("PCD_PERFORMANCE_OVERLAY_VERSION", () => {
 - [ ] **Step 2: Run the test, expect FAIL**
 
 ```
-pnpm --filter @creativeagent/creative-pipeline test -- performance-overlay-version
+pnpm --filter @creativeagent/schemas test -- pcd-performance-overlay-version
 ```
 
-Expected: FAIL with "Cannot find module './performance-overlay-version.js'".
+Expected: FAIL with "Cannot find module './pcd-performance-overlay-version.js'".
 
 - [ ] **Step 3: Implement the constant**
 
-Create `packages/creative-pipeline/src/pcd/selector/performance-overlay-version.ts`:
+Create `packages/schemas/src/pcd-performance-overlay-version.ts`:
 
 ```ts
-// SP20 — sole literal site for the performance-overlay pinned constant.
+// SP20 — sole literal site for the performance-overlay pinned constant
+// (24th PCD pinned constant).
+//
+// Guardrail C-1 (design §2.1): lives in the schemas package so that
+//   @creativeagent/db can depend on it without reaching into
+//   @creativeagent/creative-pipeline internals. Both packages legally
+//   depend on @creativeagent/schemas; neither can legally depend on the
+//   other's internals.
+//
+// Guardrail C-2 (design §2.1): this file is the only non-test source
+// file in the entire monorepo that contains the literal
+// "pcd-performance-overlay@". Anti-pattern test #2 enforces.
+//
+// Guardrail C-3 (design §2.1): exactly two non-test runtime sources
+// import this symbol — the Prisma and in-memory CreatorPerformanceMetrics
+// readers under packages/db/src/stores/. The SP13 selector does NOT
+// import it; the selector reads metrics.metricsVersion through from the
+// supplied performanceHistory map. Anti-pattern test #3 enforces.
+//
 // MERGE-BACK: stays at @creativeagent/* package locality; rename pass at merge.
-//
-// Guardrail C (design §2.1):
-//   - This file is the only non-test source file that contains the literal
-//     "pcd-performance-overlay@".
-//   - The metrics reader (packages/db/src/stores/
-//     prisma-pcd-creator-performance-metrics-reader.ts) is the only non-test
-//     runtime source file that imports this symbol. The SP13 selector does
-//     NOT import it; the selector reads metrics.metricsVersion through from
-//     the supplied performanceHistory map.
-//
-// Anti-pattern test (sp20-anti-patterns.test.ts) enforces both halves.
 
 export const PCD_PERFORMANCE_OVERLAY_VERSION = "pcd-performance-overlay@1.0.0";
 ```
@@ -144,23 +152,24 @@ export const PCD_PERFORMANCE_OVERLAY_VERSION = "pcd-performance-overlay@1.0.0";
 - [ ] **Step 4: Run the test, expect PASS**
 
 ```
-pnpm --filter @creativeagent/creative-pipeline test -- performance-overlay-version
+pnpm --filter @creativeagent/schemas test -- pcd-performance-overlay-version
 ```
 
 Expected: PASS (1 test).
 
-- [ ] **Step 5: Add stub schema file + barrel re-export**
+- [ ] **Step 5: Add stub schema file + barrel widen**
 
-Create `packages/schemas/src/pcd-creator-performance-metrics.ts` (stub — Task 3 fills it out):
+Create `packages/schemas/src/pcd-creator-performance-metrics.ts` (stub — Task 3 fills it):
 
 ```ts
 // SP20 — CreatorPerformanceMetrics schema. Stub; Task 3 fills the body.
 export {};
 ```
 
-Modify `packages/schemas/src/index.ts` to add the re-export. Locate the existing `export * from "./pcd-performance-snapshot.js";` line (or the alphabetically-adjacent SP19 export) and add immediately after it:
+Modify `packages/schemas/src/index.ts` to add two re-exports. Locate the existing `export * from "./pcd-performance-snapshot.js";` line (or the alphabetically-adjacent SP19 export) and add immediately after it:
 
 ```ts
+export * from "./pcd-performance-overlay-version.js";
 export * from "./pcd-creator-performance-metrics.js";
 ```
 
@@ -170,16 +179,16 @@ export * from "./pcd-creator-performance-metrics.js";
 pnpm typecheck
 ```
 
-Expected: clean. The stub schema exports nothing, but the barrel widen is in place per Guardrail I.
+Expected: clean. The schema file is a stub but the barrel widen + the version constant are in place per Guardrails C-1 and I.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/creative-pipeline/src/pcd/selector/performance-overlay-version.ts \
-        packages/creative-pipeline/src/pcd/selector/performance-overlay-version.test.ts \
+git add packages/schemas/src/pcd-performance-overlay-version.ts \
+        packages/schemas/src/pcd-performance-overlay-version.test.ts \
         packages/schemas/src/pcd-creator-performance-metrics.ts \
         packages/schemas/src/index.ts
-git commit -m "feat(pcd): SP20 task 2 — pin PCD_PERFORMANCE_OVERLAY_VERSION + widen schemas barrel"
+git commit -m "feat(pcd): SP20 task 2 — pin PCD_PERFORMANCE_OVERLAY_VERSION in schemas package + widen barrel"
 ```
 
 ---
@@ -190,7 +199,7 @@ git commit -m "feat(pcd): SP20 task 2 — pin PCD_PERFORMANCE_OVERLAY_VERSION + 
 - Modify: `packages/schemas/src/pcd-creator-performance-metrics.ts` (flesh out the Task 2 stub)
 - Create: `packages/schemas/src/pcd-creator-performance-metrics.test.ts`
 
-- [ ] **Step 1: Write the failing schema test**
+- [ ] **Step 1: Write the failing schema test (primitive + invariant coverage)**
 
 Create `packages/schemas/src/pcd-creator-performance-metrics.test.ts`:
 
@@ -214,10 +223,9 @@ const baseline: CreatorPerformanceMetrics = {
   metricsVersion: "pcd-performance-overlay@1.0.0",
 };
 
-describe("CreatorPerformanceMetricsSchema", () => {
+describe("CreatorPerformanceMetricsSchema — primitive shape", () => {
   it("accepts a valid populated record", () => {
-    const parsed = CreatorPerformanceMetricsSchema.parse(baseline);
-    expect(parsed).toEqual(baseline);
+    expect(CreatorPerformanceMetricsSchema.parse(baseline)).toEqual(baseline);
   });
 
   it("accepts a cold-start record (sampleSize 0, null latency, 0 success rate)", () => {
@@ -263,6 +271,77 @@ describe("CreatorPerformanceMetricsSchema", () => {
     ).toThrow();
   });
 });
+
+describe("CreatorPerformanceMetricsSchema — cross-field invariants (.refine)", () => {
+  it("rejects when successCount + failureCount + manualSkipCount !== sampleSize", () => {
+    expect(() =>
+      CreatorPerformanceMetricsSchema.parse({
+        ...baseline,
+        sampleSize: 10,
+        successCount: 7,
+        failureCount: 2,
+        manualSkipCount: 0, // sum=9, not 10
+      }),
+    ).toThrow(/counts must sum to sampleSize/);
+  });
+
+  it("rejects when sampleSize === 0 but medianLatencyMs is non-null", () => {
+    expect(() =>
+      CreatorPerformanceMetricsSchema.parse({
+        ...baseline,
+        sampleSize: 0,
+        successCount: 0,
+        failureCount: 0,
+        manualSkipCount: 0,
+        successRate: 0,
+        medianLatencyMs: 1000, // must be null when sampleSize 0
+      }),
+    ).toThrow(/medianLatencyMs/);
+  });
+
+  it("rejects when sampleSize === 0 but successRate !== 0", () => {
+    expect(() =>
+      CreatorPerformanceMetricsSchema.parse({
+        ...baseline,
+        sampleSize: 0,
+        successCount: 0,
+        failureCount: 0,
+        manualSkipCount: 0,
+        successRate: 0.5, // must be 0 when sampleSize 0
+        medianLatencyMs: null,
+      }),
+    ).toThrow(/medianLatencyMs/);
+  });
+
+  it("rejects when sampleSize > 0 but medianLatencyMs is null", () => {
+    expect(() =>
+      CreatorPerformanceMetricsSchema.parse({
+        ...baseline,
+        medianLatencyMs: null, // must be non-null when sampleSize > 0
+      }),
+    ).toThrow(/medianLatencyMs/);
+  });
+
+  it("rejects when windowEnd <= windowStart", () => {
+    expect(() =>
+      CreatorPerformanceMetricsSchema.parse({
+        ...baseline,
+        windowStart: new Date("2026-05-16T00:00:00Z"),
+        windowEnd: new Date("2026-05-16T00:00:00Z"), // equal — rejected
+      }),
+    ).toThrow(/windowEnd must be after windowStart/);
+  });
+
+  it("accepts when windowEnd > windowStart by even one millisecond", () => {
+    expect(() =>
+      CreatorPerformanceMetricsSchema.parse({
+        ...baseline,
+        windowStart: new Date("2026-05-16T00:00:00.000Z"),
+        windowEnd: new Date("2026-05-16T00:00:00.001Z"),
+      }),
+    ).not.toThrow();
+  });
+});
 ```
 
 - [ ] **Step 2: Run, expect FAIL**
@@ -273,7 +352,7 @@ pnpm --filter @creativeagent/schemas test -- pcd-creator-performance-metrics
 
 Expected: FAIL — schema is the Task-2 stub.
 
-- [ ] **Step 3: Implement the schema**
+- [ ] **Step 3: Implement the schema (with three .refine() blocks)**
 
 Replace `packages/schemas/src/pcd-creator-performance-metrics.ts` body:
 
@@ -285,13 +364,17 @@ Replace `packages/schemas/src/pcd-creator-performance-metrics.ts` body:
 // MERGE-BACK: SP20.1 may add byShotType?: Record<PcdShotType, CreatorPerformanceMetrics>
 // MERGE-BACK: SP20.5 may add costVarianceUsd?: number — joins SP10A forecast × SP19 actual.
 //
-// Reader contract invariants (defense-in-depth Zod parse enforces shape; the
-// reader is responsible for satisfying the cross-field invariants below):
+// Cross-field invariants (enforced via .refine() — defense-in-depth at every
+// reader boundary, not a comment promise):
 //   - successCount + failureCount + manualSkipCount === sampleSize
 //   - sampleSize === 0  ⇒ medianLatencyMs === null AND successRate === 0
 //   - sampleSize > 0    ⇒ medianLatencyMs !== null
 //   - windowEnd > windowStart
+// NOT enforced in schema (would couple schema load order to constant):
 //   - metricsVersion === PCD_PERFORMANCE_OVERLAY_VERSION
+//   Anti-pattern test #3 + the bounded reader-importer allowlist (only two
+//   non-test runtime sources import the constant) together guarantee this at
+//   production-write time. Tests assert it at the reader-output boundary.
 
 import { z } from "zod";
 
@@ -309,10 +392,30 @@ export const CreatorPerformanceMetricsSchema = z
     metricsVersion: z.string().min(1),
   })
   .strict()
+  .refine(
+    (m) => m.successCount + m.failureCount + m.manualSkipCount === m.sampleSize,
+    { path: ["sampleSize"], message: "counts must sum to sampleSize" },
+  )
+  .refine(
+    (m) =>
+      m.sampleSize === 0
+        ? m.successRate === 0 && m.medianLatencyMs === null
+        : m.medianLatencyMs !== null,
+    {
+      path: ["medianLatencyMs"],
+      message: "medianLatencyMs/successRate must match sampleSize",
+    },
+  )
+  .refine(
+    (m) => m.windowEnd.getTime() > m.windowStart.getTime(),
+    { path: ["windowEnd"], message: "windowEnd must be after windowStart" },
+  )
   .readonly();
 
 export type CreatorPerformanceMetrics = z.infer<typeof CreatorPerformanceMetricsSchema>;
 ```
+
+**Note on `.readonly()` + `.refine()` ordering:** Zod 3.x permits `.refine` to follow `.strict` on a `ZodObject`. The `.readonly()` call must come LAST (after all refines), because once a Zod schema is wrapped in `.readonly()` it changes type identity and downstream chaining is more limited. The order above (`object().strict().refine().refine().refine().readonly()`) is the canonical Zod 3.x sequence.
 
 - [ ] **Step 4: Run, expect PASS**
 
@@ -391,8 +494,12 @@ Expected: FAIL — module not found.
 Create `packages/creative-pipeline/src/pcd/selector/build-creator-performance-metrics.fixture.ts`:
 
 ```ts
-import type { CreatorPerformanceMetrics } from "@creativeagent/schemas";
-import { PCD_PERFORMANCE_OVERLAY_VERSION } from "./performance-overlay-version.js";
+// SP20 test fixture — builds a Zod-valid CreatorPerformanceMetrics with
+// sensible defaults; accepts partial overrides. Imports the version
+// constant from @creativeagent/schemas per Guardrail C-1 (schemas-owned).
+// .fixture.ts files are allowlisted by anti-pattern test #3 as permitted
+// importers of PCD_PERFORMANCE_OVERLAY_VERSION.
+import { PCD_PERFORMANCE_OVERLAY_VERSION, type CreatorPerformanceMetrics } from "@creativeagent/schemas";
 
 const BASELINE: CreatorPerformanceMetrics = {
   creatorIdentityId: "creator-baseline",
@@ -414,7 +521,7 @@ export function buildCreatorPerformanceMetrics(
 }
 ```
 
-Note: the fixture file is in `packages/creative-pipeline/src/pcd/selector/` and imports `PCD_PERFORMANCE_OVERLAY_VERSION` from the sibling version file. The anti-pattern test in Task 12 will explicitly allowlist fixture files (`.fixture.ts`) as a permitted importer alongside the metrics reader. This keeps Guardrail C's intent ("selector body doesn't import the constant") while permitting test fixtures.
+Note: anti-pattern test #3 (Task 11) explicitly allowlists `.fixture.ts` files as permitted importers of `PCD_PERFORMANCE_OVERLAY_VERSION` so this file does not violate the runtime-importer bound.
 
 - [ ] **Step 4: Run, expect PASS**
 
@@ -522,13 +629,19 @@ Create `packages/db/src/stores/in-memory-pcd-creator-performance-metrics-reader.
 
 ```ts
 // SP20 — in-memory CreatorPerformanceMetrics reader.
-// Test double for SP21+ composer tests; not used by SP20 selector tests
-// (those use a plain Map<string, CreatorPerformanceMetrics>).
+// Runtime test double for SP21+ composer tests; not used by SP20 selector
+// tests (those use a plain Map<string, CreatorPerformanceMetrics>).
+//
+// Imports the version constant from @creativeagent/schemas per Guardrail C-1
+// (schema-owned constant). One of the two allowlisted runtime importers of
+// PCD_PERFORMANCE_OVERLAY_VERSION (anti-pattern test #3).
 //
 // MERGE-BACK: shipped at @creativeagent/db package locality; rename pass at merge.
 
-import type { CreatorPerformanceMetrics } from "@creativeagent/schemas";
-import { PCD_PERFORMANCE_OVERLAY_VERSION } from "../../../creative-pipeline/src/pcd/selector/performance-overlay-version.js";
+import {
+  PCD_PERFORMANCE_OVERLAY_VERSION,
+  type CreatorPerformanceMetrics,
+} from "@creativeagent/schemas";
 
 export type FindMetricsForCreatorsInput = {
   creatorIdentityIds: readonly string[];
@@ -567,12 +680,7 @@ export class InMemoryPcdCreatorPerformanceMetricsReader {
 }
 ```
 
-**Important — verify the relative import path** to `performance-overlay-version.ts` works from `packages/db/src/stores/`. The two packages live as siblings under `packages/`; cross-package imports normally go through the package barrel. If the cross-package relative import causes a build break:
-
-- **Fix:** Move `PCD_PERFORMANCE_OVERLAY_VERSION` to a new sibling file in `packages/db/src/` (e.g., `packages/db/src/pcd-performance-overlay-version.ts`) and re-export from there, OR re-export from a new `@creativeagent/schemas/pcd-performance-overlay-version` location. Update Task 2's file location.
-- If the import resolves cleanly (TypeScript projects via `tsconfig.json` paths or pnpm workspace symlinks), proceed as-is.
-
-Decide at this task; document the chosen location in a one-line comment at the top of the version file.
+The import resolves through the workspace symlink (`@creativeagent/schemas` is a workspace package). No cross-package relative-path hack. This is the architecturally correct shape: `@creativeagent/db` depends on `@creativeagent/schemas`, never on `@creativeagent/creative-pipeline`.
 
 - [ ] **Step 4: Run, expect PASS**
 
@@ -756,7 +864,8 @@ Create `packages/db/src/stores/prisma-pcd-creator-performance-metrics-reader.ts`
 // caller-supplied window. Computes sampleSize, per-terminal-kind counts,
 // successRate, and medianLatencyMs entirely at the DB boundary
 // (Guardrail H). Stamps every returned entry with
-// PCD_PERFORMANCE_OVERLAY_VERSION (Guardrail C-2).
+// PCD_PERFORMANCE_OVERLAY_VERSION (Guardrail C-3). One of the two allowlisted
+// runtime importers of the version constant (anti-pattern test #3).
 //
 // MERGE-BACK: composer/runner instantiates this reader and threads its
 // output into selectSyntheticCreator via the performanceHistory input.
@@ -768,8 +877,10 @@ Create `packages/db/src/stores/prisma-pcd-creator-performance-metrics-reader.ts`
 //   AssetRecord.creatorIdentityId        → grouping key
 
 import { Prisma, type PrismaClient } from "@prisma/client";
-import type { CreatorPerformanceMetrics } from "@creativeagent/schemas";
-import { PCD_PERFORMANCE_OVERLAY_VERSION } from "../../../creative-pipeline/src/pcd/selector/performance-overlay-version.js";
+import {
+  PCD_PERFORMANCE_OVERLAY_VERSION,
+  type CreatorPerformanceMetrics,
+} from "@creativeagent/schemas";
 
 export type FindMetricsForCreatorsInput = {
   creatorIdentityIds: readonly string[];
@@ -1421,33 +1532,57 @@ describe("selectSyntheticCreator — SP20 Guardrail F: now-insensitive with over
 });
 ```
 
-- [ ] **Step 3: Add Guardrail-G byte-equivalence tests**
+- [ ] **Step 3: Add Guardrail-G three-mode equivalence tests**
+
+Per design Guardrail G + §6.1 test #1: "byte-identical to SP13" applies to **selection outcome + all non-overlay fields**, NOT to the entire decision object across overlay/non-overlay invocations. The two overlay-metadata fields (`performanceOverlayApplied`, `metricsSnapshotVersion`) ARE permitted to differ between modes.
 
 ```ts
-describe("selectSyntheticCreator — SP20 Guardrail G: empty-history is SP13-equivalent", () => {
-  it("undefined performanceHistory yields SP13-equivalent decision (modulo overlay metadata)", () => {
+describe("selectSyntheticCreator — SP20 Guardrail G: three-mode empty-history equivalence", () => {
+  function nonOverlayFields(d: SyntheticCreatorSelectionDecision) {
+    if (!d.allowed) return d;
+    const { performanceOverlayApplied: _a, metricsSnapshotVersion: _b, ...rest } = d;
+    return rest;
+  }
+
+  it("mode (a) — undefined performanceHistory: SP13-equivalent on selection outcome + non-overlay fields; overlay metadata both 'off'", () => {
     const sp13 = selectSyntheticCreator(baseInput());
-    const sp20Undefined = selectSyntheticCreator({ ...baseInput() });
-    expect(sp20Undefined).toEqual(sp13);
+    const sp20Undefined = selectSyntheticCreator({ ...baseInput() }); // key omitted entirely
+    expect(nonOverlayFields(sp20Undefined)).toEqual(nonOverlayFields(sp13));
+    if (sp20Undefined.allowed) {
+      expect(sp20Undefined.performanceOverlayApplied).toBe(false);
+      expect(sp20Undefined.metricsSnapshotVersion).toBeNull();
+    }
   });
 
-  it("empty Map performanceHistory yields SP13-equivalent decision body except metricsSnapshotVersion=null and performanceOverlayApplied=true", () => {
+  it("mode (b) — empty Map performanceHistory: same selection outcome + non-overlay fields as SP13; overlay metadata { applied: true, version: null }", () => {
     const sp13 = selectSyntheticCreator(baseInput());
     const sp20EmptyMap = selectSyntheticCreator({
       ...baseInput(),
       performanceHistory: new Map<string, CreatorPerformanceMetrics>(),
     });
-    if (sp13.allowed && sp20EmptyMap.allowed) {
+    expect(nonOverlayFields(sp20EmptyMap)).toEqual(nonOverlayFields(sp13));
+    if (sp20EmptyMap.allowed) {
       expect(sp20EmptyMap.performanceOverlayApplied).toBe(true);
       expect(sp20EmptyMap.metricsSnapshotVersion).toBeNull();
-      // Every other field is identical.
-      const { performanceOverlayApplied: _a, metricsSnapshotVersion: _b, ...rest13 } = sp13;
-      const { performanceOverlayApplied: _c, metricsSnapshotVersion: _d, ...rest20 } = sp20EmptyMap;
-      expect(rest20).toEqual(rest13);
     }
   });
 
-  it("performanceHistory with only cold-start entries yields SP13-equivalent ordering", () => {
+  it("modes (a) and (b) differ ONLY in the two overlay-metadata fields", () => {
+    const a = selectSyntheticCreator({ ...baseInput() });
+    const b = selectSyntheticCreator({
+      ...baseInput(),
+      performanceHistory: new Map<string, CreatorPerformanceMetrics>(),
+    });
+    expect(nonOverlayFields(a)).toEqual(nonOverlayFields(b));
+    if (a.allowed && b.allowed) {
+      expect(a.performanceOverlayApplied).toBe(false);
+      expect(b.performanceOverlayApplied).toBe(true);
+      expect(a.metricsSnapshotVersion).toBeNull();
+      expect(b.metricsSnapshotVersion).toBeNull();
+    }
+  });
+
+  it("cold-start-only performanceHistory yields SP13-equivalent selection in a tied bucket", () => {
     const sp13 = selectSyntheticCreator(twoEquivalentCandidatesInput());
     const coldOnly = new Map<string, CreatorPerformanceMetrics>([
       ["creator-A", buildCreatorPerformanceMetrics({ creatorIdentityId: "creator-A", sampleSize: 0, successCount: 0, failureCount: 0, manualSkipCount: 0, successRate: 0, medianLatencyMs: null })],
@@ -1526,10 +1661,10 @@ const SP20_ALLOWLISTED_EDITS: ReadonlyArray<string> = [
   // Barrel widen (Guardrail I).
   "packages/schemas/src/index.ts",
   // SP20-new files (§3.1 of design).
+  "packages/schemas/src/pcd-performance-overlay-version.ts",
+  "packages/schemas/src/pcd-performance-overlay-version.test.ts",
   "packages/schemas/src/pcd-creator-performance-metrics.ts",
   "packages/schemas/src/pcd-creator-performance-metrics.test.ts",
-  "packages/creative-pipeline/src/pcd/selector/performance-overlay-version.ts",
-  "packages/creative-pipeline/src/pcd/selector/performance-overlay-version.test.ts",
   "packages/creative-pipeline/src/pcd/selector/build-creator-performance-metrics.fixture.ts",
   "packages/creative-pipeline/src/pcd/selector/build-creator-performance-metrics.fixture.test.ts",
   "packages/creative-pipeline/src/pcd/selector/sp20-anti-patterns.test.ts",
@@ -1591,7 +1726,7 @@ describe("SP20 anti-patterns", () => {
     expect(offenders, `Unallowlisted edits since ${FREEZE_SHA}: ${offenders.join(", ")}`).toEqual([]);
   });
 
-  it('#2 sole literal site for "pcd-performance-overlay@" — exactly one non-test source file', () => {
+  it('#2 sole literal site for "pcd-performance-overlay@" — exactly one non-test source file in the schemas package', () => {
     const files = listAllSourceFiles(join(REPO_ROOT, "packages"));
     const hits: string[] = [];
     for (const f of files) {
@@ -1600,17 +1735,20 @@ describe("SP20 anti-patterns", () => {
       if (body.includes("pcd-performance-overlay@")) hits.push(relative(REPO_ROOT, f));
     }
     expect(hits).toEqual([
-      "packages/creative-pipeline/src/pcd/selector/performance-overlay-version.ts",
+      "packages/schemas/src/pcd-performance-overlay-version.ts",
     ]);
   });
 
-  it("#3 sole runtime importer of PCD_PERFORMANCE_OVERLAY_VERSION — exactly the metrics reader", () => {
+  it("#3 bounded runtime importer allowlist for PCD_PERFORMANCE_OVERLAY_VERSION — exactly the two DB readers", () => {
     const files = listAllSourceFiles(join(REPO_ROOT, "packages"));
     const importers: string[] = [];
     for (const f of files) {
       if (isTest(f) || isFixture(f)) continue;
-      if (f.endsWith("performance-overlay-version.ts")) continue; // defining file
+      if (f.endsWith("pcd-performance-overlay-version.ts")) continue; // declaring file
       const body = readFileSync(f, "utf8");
+      // Detect any reference to the symbol (import or use). Skip the declaring
+      // file (handled above) and skip the schemas barrel (re-exports `*` are
+      // legitimate and do not name the symbol literally).
       if (/PCD_PERFORMANCE_OVERLAY_VERSION/.test(body)) importers.push(relative(REPO_ROOT, f));
     }
     expect(importers.sort()).toEqual([
@@ -1623,8 +1761,8 @@ describe("SP20 anti-patterns", () => {
 
   it("#4 no `crypto` imports in SP20 surface files", () => {
     const sp20Files = [
+      "packages/schemas/src/pcd-performance-overlay-version.ts",
       "packages/schemas/src/pcd-creator-performance-metrics.ts",
-      "packages/creative-pipeline/src/pcd/selector/performance-overlay-version.ts",
       "packages/creative-pipeline/src/pcd/selector/build-creator-performance-metrics.fixture.ts",
       "packages/creative-pipeline/src/pcd/selector/sp20-anti-patterns.test.ts",
       "packages/db/src/stores/in-memory-pcd-creator-performance-metrics-reader.ts",
@@ -1821,7 +1959,7 @@ For each requirement, confirm:
 grep -rn "pcd-performance-overlay@" packages/ --include="*.ts" | grep -v "\.test\.ts" | grep -v "\.fixture\.ts"
 ```
 
-Expected: exactly one hit, in `packages/creative-pipeline/src/pcd/selector/performance-overlay-version.ts`.
+Expected: exactly one hit, in `packages/schemas/src/pcd-performance-overlay-version.ts`.
 
 - [ ] **Step 4: Run the SP20 anti-pattern test in isolation**
 
