@@ -57,6 +57,7 @@ export class PrismaCreatorIdentitySyntheticReader {
     physicalDescriptors: unknown;
     dallePromptLocked: string;
     klingDirection: unknown;
+    seedanceDirection: unknown;
     voiceCaptionStyle: unknown;
     mutuallyExclusiveWithIds: string[];
     status: string;
@@ -72,6 +73,9 @@ export class PrismaCreatorIdentitySyntheticReader {
       physicalDescriptors: row.physicalDescriptors,
       dallePromptLocked: row.dallePromptLocked,
       klingDirection: row.klingDirection,
+      // SP17 — round-trip the nullable seedance column. The schema's
+      // nullish() accepts both null and undefined; we pass through as-is.
+      seedanceDirection: row.seedanceDirection ?? null,
       voiceCaptionStyle: row.voiceCaptionStyle,
       mutuallyExclusiveWithIds: row.mutuallyExclusiveWithIds,
       status: row.status,
