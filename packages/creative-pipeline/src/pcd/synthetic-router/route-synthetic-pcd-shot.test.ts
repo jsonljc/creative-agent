@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { PcdRoutingDecisionSchema } from "@creativeagent/schemas";
+import {
+  PcdRoutingDecisionSchema,
+  type OutputIntent,
+  type PcdShotType,
+} from "@creativeagent/schemas";
 import {
   routeSyntheticPcdShot,
   buildSyntheticSelectionRationale,
@@ -367,11 +371,13 @@ describe("routeSyntheticPcdShot — synthetic-pairing success (Step 4)", () => {
           kind: "synthetic_pairing",
           imageProvider: "dalle",
           videoProvider: "kling",
+          videoProviderChoice: "kling",
           pairingRefIndex: 0,
           pairingVersion: PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION,
           syntheticRouterVersion: PCD_SYNTHETIC_ROUTER_VERSION,
         });
         if (result.kind !== "synthetic_pairing" || result.allowed !== true) return;
+        if (result.videoProvider !== "kling") throw new Error("expected kling branch");
         // Locked-artifact byte equality.
         expect(result.dallePromptLocked).toBe(cheryl.dallePromptLocked);
         expect(result.klingDirection).toEqual(cheryl.klingDirection);
@@ -409,13 +415,15 @@ describe("routeSyntheticPcdShot — synthetic-pairing success (Step 4)", () => {
     if (result.kind !== "synthetic_pairing" || result.allowed !== true) {
       throw new Error("expected synthetic_pairing allowed");
     }
+    if (result.videoProvider !== "kling") throw new Error("expected kling branch");
+    expect(result.videoProviderChoice).toBe("kling");
     expect(result.klingDirection.setting).toBe("Different setting!");
   });
 });
 
 describe("buildSyntheticSelectionRationale", () => {
   it('contains "synthetic-pairing", "dalle+kling", tier number, shotType, outputIntent', () => {
-    const out = buildSyntheticSelectionRationale(3, "simple_ugc", "draft");
+    const out = buildSyntheticSelectionRationale(3, "simple_ugc", "draft", "kling");
     expect(out).toContain("synthetic-pairing");
     expect(out).toContain("dalle+kling");
     expect(out).toContain("tier=3");
@@ -427,18 +435,216 @@ describe("buildSyntheticSelectionRationale", () => {
     for (const tier of [1, 2, 3] as const) {
       for (const shot of VIDEO_SHOT_TYPES) {
         for (const intent of OUTPUT_INTENTS) {
-          expect(buildSyntheticSelectionRationale(tier, shot, intent).length).toBeLessThanOrEqual(
-            200,
-          );
+          expect(
+            buildSyntheticSelectionRationale(tier, shot, intent, "kling").length,
+          ).toBeLessThanOrEqual(200);
         }
       }
     }
   });
 
   it("template form mirrors SP4's buildSelectionRationale shape (tier=, shot=, intent=, →)", () => {
-    expect(buildSyntheticSelectionRationale(3, "talking_head", "preview")).toBe(
+    expect(buildSyntheticSelectionRationale(3, "talking_head", "preview", "kling")).toBe(
       "synthetic-pairing tier=3 shot=talking_head intent=preview → dalle+kling",
     );
+  });
+});
+
+describe("buildSyntheticSelectionRationale (SP17 — 4th arg videoProvider)", () => {
+  it("includes 'dalle+kling' when videoProvider is kling", () => {
+    const out = buildSyntheticSelectionRationale(3, "simple_ugc", "draft", "kling");
+    expect(out).toContain("dalle+kling");
+    expect(out).toContain("tier=3");
+    expect(out).toContain("shot=simple_ugc");
+    expect(out).toContain("intent=draft");
+  });
+
+  it("includes 'dalle+seedance' when videoProvider is seedance", () => {
+    const out = buildSyntheticSelectionRationale(3, "product_demo", "final_export", "seedance");
+    expect(out).toContain("dalle+seedance");
+    expect(out).toContain("tier=3");
+    expect(out).toContain("shot=product_demo");
+    expect(out).toContain("intent=final_export");
+  });
+
+  it("caps output at 200 chars", () => {
+    const out = buildSyntheticSelectionRationale(3, "simple_ugc", "draft", "seedance");
+    expect(out.length).toBeLessThanOrEqual(200);
+  });
+});
+
+describe("routeSyntheticPcdShot — Step 5 success branches (SP17 — per-provider)", () => {
+  const videoShots: PcdShotType[] = [
+    "simple_ugc",
+    "talking_head",
+    "product_demo",
+    "product_in_hand",
+    "face_closeup",
+    "label_closeup",
+    "object_insert",
+  ];
+  const intents: OutputIntent[] = ["draft", "preview", "final_export", "meta_draft"];
+
+  it("kling success carries videoProviderChoice='kling' on every video shot × intent (28 combos)", async () => {
+    const baseSynth = makeInput().syntheticIdentity;
+    for (const shotType of videoShots) {
+      for (const outputIntent of intents) {
+        const log = { calls: 0 };
+        const stores: ProviderRouterStores = {
+          campaignTakeStore: makeCampaignTakeStore(false, log),
+        };
+        const decision = await routeSyntheticPcdShot(
+          { ...makeInput(), shotType, outputIntent, videoProviderChoice: "kling" },
+          stores,
+        );
+        expect(decision.allowed).toBe(true);
+        if (decision.allowed === true && decision.kind === "synthetic_pairing") {
+          expect(decision.videoProvider).toBe("kling");
+          expect(decision.videoProviderChoice).toBe("kling");
+          expect(decision.imageProvider).toBe("dalle");
+          if (decision.videoProvider === "kling") {
+            expect(decision.klingDirection).toEqual(baseSynth.klingDirection);
+          }
+          expect("seedanceDirection" in decision).toBe(false);
+          expect(decision.pairingRefIndex).toBe(0);
+          expect(decision.pairingVersion).toBe("pcd-synthetic-provider-pairing@1.1.0");
+          expect(decision.syntheticRouterVersion).toBe("pcd-synthetic-router@1.1.0");
+        }
+      }
+    }
+  });
+
+  it("seedance success carries videoProviderChoice='seedance' on every video shot × intent (28 combos, populated fixture)", async () => {
+    const seedanceDir = {
+      setting: "Bright counter",
+      motion: "Hand reveal",
+      energy: "Warm",
+      lighting: "Soft window",
+      avoid: ["Cuts"],
+    };
+    const populated = {
+      ...makeInput().syntheticIdentity,
+      seedanceDirection: seedanceDir,
+    };
+    for (const shotType of videoShots) {
+      for (const outputIntent of intents) {
+        const log = { calls: 0 };
+        const stores: ProviderRouterStores = {
+          campaignTakeStore: makeCampaignTakeStore(false, log),
+        };
+        const decision = await routeSyntheticPcdShot(
+          {
+            ...makeInput(),
+            shotType,
+            outputIntent,
+            videoProviderChoice: "seedance",
+            syntheticIdentity: populated,
+          },
+          stores,
+        );
+        expect(decision.allowed).toBe(true);
+        if (decision.allowed === true && decision.kind === "synthetic_pairing") {
+          expect(decision.videoProvider).toBe("seedance");
+          expect(decision.videoProviderChoice).toBe("seedance");
+          expect(decision.imageProvider).toBe("dalle");
+          if (decision.videoProvider === "seedance") {
+            expect(decision.seedanceDirection).toEqual(seedanceDir);
+          }
+          expect("klingDirection" in decision).toBe(false);
+          expect(decision.pairingRefIndex).toBe(1);
+          expect(decision.pairingVersion).toBe("pcd-synthetic-provider-pairing@1.1.0");
+          expect(decision.syntheticRouterVersion).toBe("pcd-synthetic-router@1.1.0");
+        }
+      }
+    }
+  });
+
+  it("locked artifacts byte-equality — kling direction shifts when input shifts", async () => {
+    const log1 = { calls: 0 };
+    const stores1: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log1),
+    };
+    const dec1 = await routeSyntheticPcdShot(
+      { ...makeInput(), videoProviderChoice: "kling" },
+      stores1,
+    );
+    const log2 = { calls: 0 };
+    const stores2: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log2),
+    };
+    const dec2 = await routeSyntheticPcdShot(
+      {
+        ...makeInput(),
+        videoProviderChoice: "kling",
+        syntheticIdentity: {
+          ...makeInput().syntheticIdentity,
+          klingDirection: {
+            ...makeInput().syntheticIdentity.klingDirection,
+            setting: "DIFFERENT",
+          },
+        },
+      },
+      stores2,
+    );
+    if (dec1.allowed === true && dec1.kind === "synthetic_pairing" && dec1.videoProvider === "kling") {
+      if (
+        dec2.allowed === true &&
+        dec2.kind === "synthetic_pairing" &&
+        dec2.videoProvider === "kling"
+      ) {
+        expect(dec1.klingDirection.setting).not.toBe(dec2.klingDirection.setting);
+        expect(dec2.klingDirection.setting).toBe("DIFFERENT");
+      }
+    }
+  });
+
+  it("locked artifacts byte-equality — seedance direction shifts when input shifts", async () => {
+    const sdA = {
+      setting: "Bright counter A",
+      motion: "M",
+      energy: "E",
+      lighting: "L",
+      avoid: ["x"],
+    };
+    const sdB = { ...sdA, setting: "Bright counter B" };
+    const logA = { calls: 0 };
+    const storesA: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, logA),
+    };
+    const decA = await routeSyntheticPcdShot(
+      {
+        ...makeInput(),
+        videoProviderChoice: "seedance",
+        syntheticIdentity: { ...makeInput().syntheticIdentity, seedanceDirection: sdA },
+      },
+      storesA,
+    );
+    const logB = { calls: 0 };
+    const storesB: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, logB),
+    };
+    const decB = await routeSyntheticPcdShot(
+      {
+        ...makeInput(),
+        videoProviderChoice: "seedance",
+        syntheticIdentity: { ...makeInput().syntheticIdentity, seedanceDirection: sdB },
+      },
+      storesB,
+    );
+    if (
+      decA.allowed === true &&
+      decA.kind === "synthetic_pairing" &&
+      decA.videoProvider === "seedance"
+    ) {
+      if (
+        decB.allowed === true &&
+        decB.kind === "synthetic_pairing" &&
+        decB.videoProvider === "seedance"
+      ) {
+        expect(decA.seedanceDirection.setting).toBe("Bright counter A");
+        expect(decB.seedanceDirection.setting).toBe("Bright counter B");
+      }
+    }
   });
 });
 

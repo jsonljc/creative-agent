@@ -12,8 +12,11 @@
 //   3. Tier policy gate (SP2's decidePcdGenerationAccess) — denial path. [Task 7]
 //   4. Direction-authored check (NEW, SP17) — NO_DIRECTION_AUTHORED denial
 //      if the chosen-provider direction is null.
-//   5. Build synthetic pairing decision (locked artifacts read verbatim
-//      from input.syntheticIdentity).
+//   5. Build synthetic pairing decision, per-provider branch (locked
+//      artifacts read verbatim from input.syntheticIdentity). Kling success
+//      returns Branch 3 of the union (klingDirection only); Seedance success
+//      returns Branch 4 (seedanceDirection only). videoProvider ===
+//      videoProviderChoice by zod literal-equality per branch.
 //
 // Algorithm is intentionally tier3-rule-free for the synthetic path: the
 // locked pairing supersedes generic capability filtering by design
@@ -47,8 +50,9 @@ export function buildSyntheticSelectionRationale(
   effectiveTier: IdentityTier,
   shotType: PcdShotType,
   outputIntent: OutputIntent,
+  videoProvider: "kling" | "seedance",
 ): string {
-  const out = `synthetic-pairing tier=${effectiveTier} shot=${shotType} intent=${outputIntent} → dalle+kling`;
+  const out = `synthetic-pairing tier=${effectiveTier} shot=${shotType} intent=${outputIntent} → dalle+${videoProvider}`;
   return out.length > 200 ? out.slice(0, 200) : out;
 }
 
@@ -145,30 +149,63 @@ export async function routeSyntheticPcdShot(
     };
   }
 
-  // Step 5 — Build synthetic pairing decision. Locked artifacts read
-  // verbatim from input.syntheticIdentity. No transformation, no hashing
+  // Step 5 — Build synthetic pairing decision, per-provider branch.
+  // videoProviderChoice and videoProvider are zod-literal-equal by branch
+  // (Q9 schema-level lock). pairing.videoProvider matches videoProviderChoice
+  // by construction (Step 1 matched on that 3-tuple key). Locked artifacts
+  // read verbatim from input.syntheticIdentity. No transformation, no hashing
   // (SP17 owns dallePromptLocked → hash at persistence time).
   const matchedShotType = input.shotType;
   const matchedOutputIntent = input.outputIntent;
+  const decisionReason = {
+    matchedShotType,
+    matchedOutputIntent,
+    selectionRationale: buildSyntheticSelectionRationale(
+      input.resolvedContext.effectiveTier,
+      matchedShotType,
+      matchedOutputIntent,
+      input.videoProviderChoice,
+    ),
+  };
+
+  if (input.videoProviderChoice === "kling") {
+    return {
+      allowed: true,
+      kind: "synthetic_pairing",
+      accessDecision,
+      imageProvider: "dalle",
+      videoProvider: "kling",
+      videoProviderChoice: "kling",
+      dallePromptLocked: input.syntheticIdentity.dallePromptLocked,
+      klingDirection: input.syntheticIdentity.klingDirection,
+      pairingRefIndex,
+      pairingVersion: PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION,
+      syntheticRouterVersion: PCD_SYNTHETIC_ROUTER_VERSION,
+      decisionReason,
+    };
+  }
+  // input.videoProviderChoice === "seedance" (narrowed by union exhaustion).
+  // seedanceDirection (the Step 0 normalized local) is non-null here —
+  // narrowed by Step 4's null check / early return. Re-derive from the
+  // normalized local rather than from `direction` so TypeScript narrows
+  // cleanly without a cast (design J1: Step 0 normalization is the source
+  // of truth for the seedance direction).
+  if (seedanceDirection === null) {
+    // Unreachable: Step 4 returned for the null case on this branch.
+    throw new Error("seedanceDirection unexpectedly null after Step 4 guard");
+  }
   return {
     allowed: true,
     kind: "synthetic_pairing",
     accessDecision,
-    imageProvider: pairing.imageProvider,
-    videoProvider: pairing.videoProvider,
+    imageProvider: "dalle",
+    videoProvider: "seedance",
+    videoProviderChoice: "seedance",
     dallePromptLocked: input.syntheticIdentity.dallePromptLocked,
-    klingDirection: input.syntheticIdentity.klingDirection,
+    seedanceDirection,
     pairingRefIndex,
     pairingVersion: PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION,
     syntheticRouterVersion: PCD_SYNTHETIC_ROUTER_VERSION,
-    decisionReason: {
-      matchedShotType,
-      matchedOutputIntent,
-      selectionRationale: buildSyntheticSelectionRationale(
-        input.resolvedContext.effectiveTier,
-        matchedShotType,
-        matchedOutputIntent,
-      ),
-    },
+    decisionReason,
   };
 }
