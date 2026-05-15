@@ -40,3 +40,7 @@ export * from "./pcd-synthetic-routing-provenance.js";
 
 // SP19 — PcdPerformanceSnapshot
 export * from "./pcd-performance-snapshot.js";
+
+// SP20 — performance-overlay version constant + CreatorPerformanceMetrics schema
+export * from "./pcd-performance-overlay-version.js";
+export * from "./pcd-creator-performance-metrics.js";
