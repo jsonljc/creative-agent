@@ -52,6 +52,11 @@ export type RouteSyntheticPcdShotInput = {
   syntheticIdentity: CreatorIdentitySyntheticPayload;
   shotType: PcdShotType;
   outputIntent: OutputIntent;
+  // SP17 — end-user selection of the video provider, supplied by the SP21
+  // composer (or equivalent caller). Matrix gates legality; the chosen
+  // provider must have an authored direction on the synthetic identity or
+  // the router denies with NO_DIRECTION_AUTHORED_FOR_VIDEO_PROVIDER.
+  videoProviderChoice: "kling" | "seedance";
   approvedCampaignContext: ApprovedCampaignContext;
 };
 

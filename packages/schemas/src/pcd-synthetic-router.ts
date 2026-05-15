@@ -30,7 +30,7 @@
 // line 263. Whether SP17 also persists klingDirection verbatim, or
 // hashes it, is SP17's decision.
 import { z } from "zod";
-import { KlingDirectionSchema } from "./creator-identity-synthetic.js";
+import { KlingDirectionSchema, SeedanceDirectionSchema } from "./creator-identity-synthetic.js";
 import {
   IdentityTierSchema,
   OutputIntentSchema,
@@ -87,13 +87,13 @@ export const PcdRoutingDecisionSchema = z.union([
 ]);
 export type PcdRoutingDecisionParsed = z.infer<typeof PcdRoutingDecisionSchema>;
 
-// NB: `z.union` not `z.discriminatedUnion`. Same NB carve-out as SP13 /
-// SP14 / SP15 — Zod 3.x's discriminatedUnion factory does not see literal
-// discriminators on branches wrapped in `.readonly()`. `z.union` parses
-// by trying members in order; semantically equivalent for our three-
-// branch decision shape.
+// NB: `z.union` not `z.discriminatedUnion`. Same NB carve-out as SP13/SP14/
+// SP15/SP16 — Zod 3.x's discriminatedUnion factory does not see literal
+// discriminators on branches wrapped in `.readonly()`. `z.union` parses by
+// trying members in order; semantically equivalent for our five-branch
+// decision shape.
 export const SyntheticPcdRoutingDecisionSchema = z.union([
-  // Synthetic path — tier policy denied.
+  // Branch 1 — Synthetic path, tier policy denied (UNCHANGED from SP16).
   z
     .object({
       allowed: z.literal(false),
@@ -103,7 +103,24 @@ export const SyntheticPcdRoutingDecisionSchema = z.union([
       syntheticRouterVersion: z.string().min(1),
     })
     .readonly(),
-  // Synthetic path — allowed.
+
+  // Branch 2 — Synthetic path, no direction authored for chosen provider (NEW, SP17).
+  // Distinct denial kind — NEVER conflated with ACCESS_POLICY, NEVER silently
+  // degraded to the other provider.
+  z
+    .object({
+      allowed: z.literal(false),
+      kind: z.literal("synthetic_pairing"),
+      denialKind: z.literal("NO_DIRECTION_AUTHORED_FOR_VIDEO_PROVIDER"),
+      videoProviderChoice: z.union([z.literal("kling"), z.literal("seedance")]),
+      accessDecision: PcdTierDecisionSchema.readonly(),
+      syntheticRouterVersion: z.string().min(1),
+    })
+    .readonly(),
+
+  // Branch 3 — Synthetic path, allowed, KLING. Mirrors SP16 success branch
+  // verbatim, plus videoProviderChoice echo (per-branch z.literal equality
+  // lock: videoProvider === videoProviderChoice is structurally guaranteed).
   z
     .object({
       allowed: z.literal(true),
@@ -111,6 +128,7 @@ export const SyntheticPcdRoutingDecisionSchema = z.union([
       accessDecision: PcdTierDecisionSchema.readonly(),
       imageProvider: z.literal("dalle"),
       videoProvider: z.literal("kling"),
+      videoProviderChoice: z.literal("kling"),
       dallePromptLocked: z.string().min(1).max(4000),
       klingDirection: KlingDirectionSchema,
       pairingRefIndex: z.number().int().min(0),
@@ -125,7 +143,38 @@ export const SyntheticPcdRoutingDecisionSchema = z.union([
         .readonly(),
     })
     .readonly(),
-  // Delegation path — out-of-pairing shot type, SP4 ran.
+
+  // Branch 4 — Synthetic path, allowed, SEEDANCE (NEW, SP17).
+  z
+    .object({
+      allowed: z.literal(true),
+      kind: z.literal("synthetic_pairing"),
+      accessDecision: PcdTierDecisionSchema.readonly(),
+      imageProvider: z.literal("dalle"),
+      videoProvider: z.literal("seedance"),
+      videoProviderChoice: z.literal("seedance"),
+      dallePromptLocked: z.string().min(1).max(4000),
+      seedanceDirection: SeedanceDirectionSchema,
+      pairingRefIndex: z.number().int().min(0),
+      pairingVersion: z.string().min(1),
+      syntheticRouterVersion: z.string().min(1),
+      decisionReason: z
+        .object({
+          matchedShotType: PcdShotTypeSchema,
+          matchedOutputIntent: OutputIntentSchema,
+          selectionRationale: z.string().min(1).max(200),
+        })
+        .readonly(),
+    })
+    .readonly(),
+
+  // Branch 5 — Delegation (UNCHANGED from SP16).
+  // reason: "shot_type_not_in_synthetic_pairing" is the SP16 legacy literal.
+  // In SP17 it now covers any out-of-pairing tuple (shot type, output intent,
+  // OR videoProviderChoice). A future provider-narrowing slice that introduces
+  // a separate denial path should rename the literal then. videoProviderChoice
+  // is NOT echoed: delegation means the synthetic surface was bypassed and
+  // SP4's decision is authoritative.
   z
     .object({
       kind: z.literal("delegated_to_generic_router"),
