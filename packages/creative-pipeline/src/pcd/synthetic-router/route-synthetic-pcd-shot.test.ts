@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { PcdRoutingDecisionSchema } from "@creativeagent/schemas";
+import {
+  PcdRoutingDecisionSchema,
+  type OutputIntent,
+  type PcdShotType,
+} from "@creativeagent/schemas";
 import {
   routeSyntheticPcdShot,
   buildSyntheticSelectionRationale,
@@ -56,6 +60,7 @@ function makeInput(
     syntheticIdentity: cheryl,
     shotType: "simple_ugc",
     outputIntent: "draft",
+    videoProviderChoice: "kling",
     approvedCampaignContext: NO_CAMPAIGN,
     ...overrides,
   };
@@ -152,6 +157,65 @@ describe("routeSyntheticPcdShot — delegation branch (out-of-pairing shot types
     const result = await routeSyntheticPcdShot(makeInput({ shotType: "script_only" }), stores);
     if (result.kind !== "delegated_to_generic_router") throw new Error("expected delegation");
     expect(result.syntheticRouterVersion).toBe(PCD_SYNTHETIC_ROUTER_VERSION);
+  });
+});
+
+describe("routeSyntheticPcdShot — Step 2 delegation (SP17 — videoProviderChoice plumbed)", () => {
+  it("delegates with videoProviderChoice=kling on script_only", async () => {
+    const log = { calls: 0 };
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log),
+    };
+    const decision = await routeSyntheticPcdShot(
+      makeInput({
+        shotType: "script_only",
+        outputIntent: "draft",
+        videoProviderChoice: "kling",
+      }),
+      stores,
+    );
+    expect(decision.kind).toBe("delegated_to_generic_router");
+    if (decision.kind === "delegated_to_generic_router") {
+      expect(decision.reason).toBe("shot_type_not_in_synthetic_pairing");
+    }
+    expect("videoProviderChoice" in decision).toBe(false);
+  });
+
+  it("delegates with videoProviderChoice=seedance on script_only (same behavior; choice not echoed)", async () => {
+    const log = { calls: 0 };
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log),
+    };
+    const decision = await routeSyntheticPcdShot(
+      makeInput({
+        shotType: "script_only",
+        outputIntent: "draft",
+        videoProviderChoice: "seedance",
+      }),
+      stores,
+    );
+    expect(decision.kind).toBe("delegated_to_generic_router");
+    if (decision.kind === "delegated_to_generic_router") {
+      expect(decision.reason).toBe("shot_type_not_in_synthetic_pairing");
+    }
+    expect("videoProviderChoice" in decision).toBe(false);
+  });
+
+  it("delegates on storyboard for either provider choice", async () => {
+    for (const choice of ["kling", "seedance"] as const) {
+      const log = { calls: 0 };
+      const stores: ProviderRouterStores = {
+        campaignTakeStore: makeCampaignTakeStore(false, log),
+      };
+      const decision = await routeSyntheticPcdShot(
+        makeInput({ shotType: "storyboard", outputIntent: "draft", videoProviderChoice: choice }),
+        stores,
+      );
+      expect(decision.kind).toBe("delegated_to_generic_router");
+      if (decision.kind === "delegated_to_generic_router") {
+        expect(decision.reason).toBe("shot_type_not_in_synthetic_pairing");
+      }
+    }
   });
 });
 
@@ -307,11 +371,13 @@ describe("routeSyntheticPcdShot — synthetic-pairing success (Step 4)", () => {
           kind: "synthetic_pairing",
           imageProvider: "dalle",
           videoProvider: "kling",
+          videoProviderChoice: "kling",
           pairingRefIndex: 0,
           pairingVersion: PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION,
           syntheticRouterVersion: PCD_SYNTHETIC_ROUTER_VERSION,
         });
         if (result.kind !== "synthetic_pairing" || result.allowed !== true) return;
+        if (result.videoProvider !== "kling") throw new Error("expected kling branch");
         // Locked-artifact byte equality.
         expect(result.dallePromptLocked).toBe(cheryl.dallePromptLocked);
         expect(result.klingDirection).toEqual(cheryl.klingDirection);
@@ -349,13 +415,15 @@ describe("routeSyntheticPcdShot — synthetic-pairing success (Step 4)", () => {
     if (result.kind !== "synthetic_pairing" || result.allowed !== true) {
       throw new Error("expected synthetic_pairing allowed");
     }
+    if (result.videoProvider !== "kling") throw new Error("expected kling branch");
+    expect(result.videoProviderChoice).toBe("kling");
     expect(result.klingDirection.setting).toBe("Different setting!");
   });
 });
 
 describe("buildSyntheticSelectionRationale", () => {
   it('contains "synthetic-pairing", "dalle+kling", tier number, shotType, outputIntent', () => {
-    const out = buildSyntheticSelectionRationale(3, "simple_ugc", "draft");
+    const out = buildSyntheticSelectionRationale(3, "simple_ugc", "draft", "kling");
     expect(out).toContain("synthetic-pairing");
     expect(out).toContain("dalle+kling");
     expect(out).toContain("tier=3");
@@ -367,18 +435,341 @@ describe("buildSyntheticSelectionRationale", () => {
     for (const tier of [1, 2, 3] as const) {
       for (const shot of VIDEO_SHOT_TYPES) {
         for (const intent of OUTPUT_INTENTS) {
-          expect(buildSyntheticSelectionRationale(tier, shot, intent).length).toBeLessThanOrEqual(
-            200,
-          );
+          expect(
+            buildSyntheticSelectionRationale(tier, shot, intent, "kling").length,
+          ).toBeLessThanOrEqual(200);
         }
       }
     }
   });
 
   it("template form mirrors SP4's buildSelectionRationale shape (tier=, shot=, intent=, →)", () => {
-    expect(buildSyntheticSelectionRationale(3, "talking_head", "preview")).toBe(
+    expect(buildSyntheticSelectionRationale(3, "talking_head", "preview", "kling")).toBe(
       "synthetic-pairing tier=3 shot=talking_head intent=preview → dalle+kling",
     );
+  });
+});
+
+describe("buildSyntheticSelectionRationale (SP17 — 4th arg videoProvider)", () => {
+  it("includes 'dalle+kling' when videoProvider is kling", () => {
+    const out = buildSyntheticSelectionRationale(3, "simple_ugc", "draft", "kling");
+    expect(out).toContain("dalle+kling");
+    expect(out).toContain("tier=3");
+    expect(out).toContain("shot=simple_ugc");
+    expect(out).toContain("intent=draft");
+  });
+
+  it("includes 'dalle+seedance' when videoProvider is seedance", () => {
+    const out = buildSyntheticSelectionRationale(3, "product_demo", "final_export", "seedance");
+    expect(out).toContain("dalle+seedance");
+    expect(out).toContain("tier=3");
+    expect(out).toContain("shot=product_demo");
+    expect(out).toContain("intent=final_export");
+  });
+
+  it("caps output at 200 chars", () => {
+    const out = buildSyntheticSelectionRationale(3, "simple_ugc", "draft", "seedance");
+    expect(out.length).toBeLessThanOrEqual(200);
+  });
+});
+
+describe("routeSyntheticPcdShot — Step 5 success branches (SP17 — per-provider)", () => {
+  const videoShots: PcdShotType[] = [
+    "simple_ugc",
+    "talking_head",
+    "product_demo",
+    "product_in_hand",
+    "face_closeup",
+    "label_closeup",
+    "object_insert",
+  ];
+  const intents: OutputIntent[] = ["draft", "preview", "final_export", "meta_draft"];
+
+  it("kling success carries videoProviderChoice='kling' on every video shot × intent (28 combos)", async () => {
+    const baseSynth = makeInput().syntheticIdentity;
+    for (const shotType of videoShots) {
+      for (const outputIntent of intents) {
+        const log = { calls: 0 };
+        const stores: ProviderRouterStores = {
+          campaignTakeStore: makeCampaignTakeStore(false, log),
+        };
+        const decision = await routeSyntheticPcdShot(
+          { ...makeInput(), shotType, outputIntent, videoProviderChoice: "kling" },
+          stores,
+        );
+        expect(decision.allowed).toBe(true);
+        if (decision.allowed === true && decision.kind === "synthetic_pairing") {
+          expect(decision.videoProvider).toBe("kling");
+          expect(decision.videoProviderChoice).toBe("kling");
+          expect(decision.imageProvider).toBe("dalle");
+          if (decision.videoProvider === "kling") {
+            expect(decision.klingDirection).toEqual(baseSynth.klingDirection);
+          }
+          expect("seedanceDirection" in decision).toBe(false);
+          expect(decision.pairingRefIndex).toBe(0);
+          expect(decision.pairingVersion).toBe("pcd-synthetic-provider-pairing@1.1.0");
+          expect(decision.syntheticRouterVersion).toBe("pcd-synthetic-router@1.1.0");
+        }
+      }
+    }
+  });
+
+  it("seedance success carries videoProviderChoice='seedance' on every video shot × intent (28 combos, populated fixture)", async () => {
+    const seedanceDir = {
+      setting: "Bright counter",
+      motion: "Hand reveal",
+      energy: "Warm",
+      lighting: "Soft window",
+      avoid: ["Cuts"],
+    };
+    const populated = {
+      ...makeInput().syntheticIdentity,
+      seedanceDirection: seedanceDir,
+    };
+    for (const shotType of videoShots) {
+      for (const outputIntent of intents) {
+        const log = { calls: 0 };
+        const stores: ProviderRouterStores = {
+          campaignTakeStore: makeCampaignTakeStore(false, log),
+        };
+        const decision = await routeSyntheticPcdShot(
+          {
+            ...makeInput(),
+            shotType,
+            outputIntent,
+            videoProviderChoice: "seedance",
+            syntheticIdentity: populated,
+          },
+          stores,
+        );
+        expect(decision.allowed).toBe(true);
+        if (decision.allowed === true && decision.kind === "synthetic_pairing") {
+          expect(decision.videoProvider).toBe("seedance");
+          expect(decision.videoProviderChoice).toBe("seedance");
+          expect(decision.imageProvider).toBe("dalle");
+          if (decision.videoProvider === "seedance") {
+            expect(decision.seedanceDirection).toEqual(seedanceDir);
+          }
+          expect("klingDirection" in decision).toBe(false);
+          expect(decision.pairingRefIndex).toBe(1);
+          expect(decision.pairingVersion).toBe("pcd-synthetic-provider-pairing@1.1.0");
+          expect(decision.syntheticRouterVersion).toBe("pcd-synthetic-router@1.1.0");
+        }
+      }
+    }
+  });
+
+  it("locked artifacts byte-equality — kling direction shifts when input shifts", async () => {
+    const log1 = { calls: 0 };
+    const stores1: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log1),
+    };
+    const dec1 = await routeSyntheticPcdShot(
+      { ...makeInput(), videoProviderChoice: "kling" },
+      stores1,
+    );
+    const log2 = { calls: 0 };
+    const stores2: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log2),
+    };
+    const dec2 = await routeSyntheticPcdShot(
+      {
+        ...makeInput(),
+        videoProviderChoice: "kling",
+        syntheticIdentity: {
+          ...makeInput().syntheticIdentity,
+          klingDirection: {
+            ...makeInput().syntheticIdentity.klingDirection,
+            setting: "DIFFERENT",
+          },
+        },
+      },
+      stores2,
+    );
+    if (
+      dec1.allowed === true &&
+      dec1.kind === "synthetic_pairing" &&
+      dec1.videoProvider === "kling"
+    ) {
+      if (
+        dec2.allowed === true &&
+        dec2.kind === "synthetic_pairing" &&
+        dec2.videoProvider === "kling"
+      ) {
+        expect(dec1.klingDirection.setting).not.toBe(dec2.klingDirection.setting);
+        expect(dec2.klingDirection.setting).toBe("DIFFERENT");
+      }
+    }
+  });
+
+  it("locked artifacts byte-equality — seedance direction shifts when input shifts", async () => {
+    const sdA = {
+      setting: "Bright counter A",
+      motion: "M",
+      energy: "E",
+      lighting: "L",
+      avoid: ["x"],
+    };
+    const sdB = { ...sdA, setting: "Bright counter B" };
+    const logA = { calls: 0 };
+    const storesA: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, logA),
+    };
+    const decA = await routeSyntheticPcdShot(
+      {
+        ...makeInput(),
+        videoProviderChoice: "seedance",
+        syntheticIdentity: { ...makeInput().syntheticIdentity, seedanceDirection: sdA },
+      },
+      storesA,
+    );
+    const logB = { calls: 0 };
+    const storesB: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, logB),
+    };
+    const decB = await routeSyntheticPcdShot(
+      {
+        ...makeInput(),
+        videoProviderChoice: "seedance",
+        syntheticIdentity: { ...makeInput().syntheticIdentity, seedanceDirection: sdB },
+      },
+      storesB,
+    );
+    if (
+      decA.allowed === true &&
+      decA.kind === "synthetic_pairing" &&
+      decA.videoProvider === "seedance"
+    ) {
+      if (
+        decB.allowed === true &&
+        decB.kind === "synthetic_pairing" &&
+        decB.videoProvider === "seedance"
+      ) {
+        expect(decA.seedanceDirection.setting).toBe("Bright counter A");
+        expect(decB.seedanceDirection.setting).toBe("Bright counter B");
+      }
+    }
+  });
+});
+
+describe("routeSyntheticPcdShot — determinism (SP17)", () => {
+  function makeStores(): ProviderRouterStores {
+    const log = { calls: 0 };
+    return { campaignTakeStore: makeCampaignTakeStore(false, log) };
+  }
+
+  it("identical inputs → deep-equal decisions (kling)", async () => {
+    const inputs = { ...makeInput(), videoProviderChoice: "kling" as const };
+    const a = await routeSyntheticPcdShot(inputs, makeStores());
+    const b = await routeSyntheticPcdShot(inputs, makeStores());
+    expect(a).toEqual(b);
+  });
+
+  it("identical inputs → deep-equal decisions (seedance, populated)", async () => {
+    const seedanceDir = {
+      setting: "S",
+      motion: "M",
+      energy: "E",
+      lighting: "L",
+      avoid: ["x"],
+    };
+    const baseSynth = makeInput().syntheticIdentity;
+    const inputs = {
+      ...makeInput(),
+      videoProviderChoice: "seedance" as const,
+      syntheticIdentity: { ...baseSynth, seedanceDirection: seedanceDir },
+    };
+    const a = await routeSyntheticPcdShot(inputs, makeStores());
+    const b = await routeSyntheticPcdShot(inputs, makeStores());
+    expect(a).toEqual(b);
+  });
+
+  it("approvedCampaignContext does NOT perturb synthetic-path output (U3)", async () => {
+    const baseSynth = { ...makeInput(), videoProviderChoice: "kling" as const };
+    const ctxA: ApprovedCampaignContext = {
+      kind: "campaign",
+      organizationId: "org-1",
+      campaignId: "camp_A",
+    };
+    const ctxB: ApprovedCampaignContext = {
+      kind: "campaign",
+      organizationId: "org-1",
+      campaignId: "camp_B",
+    };
+    const decA = await routeSyntheticPcdShot(
+      { ...baseSynth, approvedCampaignContext: ctxA },
+      makeStores(),
+    );
+    const decB = await routeSyntheticPcdShot(
+      { ...baseSynth, approvedCampaignContext: ctxB },
+      makeStores(),
+    );
+    expect(decA).toEqual(decB);
+  });
+
+  it("approvedCampaignContext DOES participate on delegation path (structurally)", async () => {
+    // script_only forces delegation; SP4 may or may not consult campaign
+    // context. Both runs should be delegated; we only assert structural
+    // validity, not differential perturbation (that's SP4's concern).
+    const baseDel = {
+      ...makeInput(),
+      shotType: "script_only" as const,
+      outputIntent: "draft" as const,
+      videoProviderChoice: "kling" as const,
+    };
+    const ctxNone: ApprovedCampaignContext = { kind: "none" };
+    const ctxCamp: ApprovedCampaignContext = {
+      kind: "campaign",
+      organizationId: "org-1",
+      campaignId: "camp_x",
+    };
+    const decNone = await routeSyntheticPcdShot(
+      { ...baseDel, approvedCampaignContext: ctxNone },
+      makeStores(),
+    );
+    const decCamp = await routeSyntheticPcdShot(
+      { ...baseDel, approvedCampaignContext: ctxCamp },
+      makeStores(),
+    );
+    expect(decNone.kind).toBe("delegated_to_generic_router");
+    expect(decCamp.kind).toBe("delegated_to_generic_router");
+  });
+
+  it("dallePromptLocked byte-equality holds on both providers", async () => {
+    const customPrompt = "Custom DALL-E prompt for byte-equality test";
+    const seedanceDir = {
+      setting: "S",
+      motion: "M",
+      energy: "E",
+      lighting: "L",
+      avoid: ["x"],
+    };
+    const baseCustom = {
+      ...makeInput(),
+      syntheticIdentity: {
+        ...makeInput().syntheticIdentity,
+        dallePromptLocked: customPrompt,
+        seedanceDirection: seedanceDir,
+      },
+    };
+    const decKling = await routeSyntheticPcdShot(
+      { ...baseCustom, videoProviderChoice: "kling" as const },
+      makeStores(),
+    );
+    const decSeedance = await routeSyntheticPcdShot(
+      { ...baseCustom, videoProviderChoice: "seedance" as const },
+      makeStores(),
+    );
+    if (decKling.allowed === true && decKling.kind === "synthetic_pairing") {
+      expect(decKling.dallePromptLocked).toBe(customPrompt);
+    } else {
+      throw new Error("expected kling-success");
+    }
+    if (decSeedance.allowed === true && decSeedance.kind === "synthetic_pairing") {
+      expect(decSeedance.dallePromptLocked).toBe(customPrompt);
+    } else {
+      throw new Error("expected seedance-success");
+    }
   });
 });
 
@@ -448,6 +839,112 @@ describe("routeSyntheticPcdShot — stores discipline", () => {
     // (the synthetic path would have set imageProvider/videoProvider, not
     // selectedProvider).
     expect(result.sp4Decision.selectedProvider).toBe("openai_text");
+  });
+});
+
+describe("routeSyntheticPcdShot — Step 4 NO_DIRECTION_AUTHORED_FOR_VIDEO_PROVIDER (SP17)", () => {
+  it("denies when videoProviderChoice=seedance and seedanceDirection is null", async () => {
+    const log = { calls: 0 };
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log),
+    };
+    const decision = await routeSyntheticPcdShot(
+      {
+        ...makeInput(),
+        videoProviderChoice: "seedance",
+        syntheticIdentity: {
+          ...makeInput().syntheticIdentity,
+          seedanceDirection: null,
+        },
+      },
+      stores,
+    );
+    expect(decision.allowed).toBe(false);
+    expect(decision.kind).toBe("synthetic_pairing");
+    if (decision.allowed === false && decision.kind === "synthetic_pairing") {
+      expect(decision.denialKind).toBe("NO_DIRECTION_AUTHORED_FOR_VIDEO_PROVIDER");
+      if (decision.denialKind === "NO_DIRECTION_AUTHORED_FOR_VIDEO_PROVIDER") {
+        expect(decision.videoProviderChoice).toBe("seedance");
+      }
+      expect(decision.syntheticRouterVersion).toBe("pcd-synthetic-router@1.1.0");
+    }
+  });
+
+  it("denies when videoProviderChoice=seedance and seedanceDirection field is omitted (undefined → null)", async () => {
+    const log = { calls: 0 };
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log),
+    };
+    const input = makeInput();
+    const { seedanceDirection: _omit, ...identityMinusSeedance } = input.syntheticIdentity;
+    const decision = await routeSyntheticPcdShot(
+      {
+        ...input,
+        videoProviderChoice: "seedance",
+        syntheticIdentity: identityMinusSeedance as typeof input.syntheticIdentity,
+      },
+      stores,
+    );
+    expect(decision.allowed).toBe(false);
+    if (decision.allowed === false && decision.kind === "synthetic_pairing") {
+      expect(decision.denialKind).toBe("NO_DIRECTION_AUTHORED_FOR_VIDEO_PROVIDER");
+    }
+  });
+
+  it("does NOT deny when videoProviderChoice=kling (klingDirection is always populated on SP11 payload)", async () => {
+    const log = { calls: 0 };
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log),
+    };
+    const decision = await routeSyntheticPcdShot(
+      {
+        ...makeInput(),
+        videoProviderChoice: "kling",
+        syntheticIdentity: { ...makeInput().syntheticIdentity, seedanceDirection: null },
+      },
+      stores,
+    );
+    // klingDirection is non-nullable on the SP11 payload schema, so the kling
+    // choice never hits NO_DIRECTION_AUTHORED. With the tier-3 fixture the
+    // decision should be allowed; assert that decisively rather than only
+    // negating the unreachable denial kind.
+    expect(decision.allowed).toBe(true);
+  });
+
+  it("step ordering: ACCESS_POLICY fires before NO_DIRECTION_AUTHORED", async () => {
+    // Build an input that would trigger BOTH ACCESS_POLICY and NO_DIRECTION
+    // if Step 4 ran in isolation. Expected: ACCESS_POLICY denial (Step 3 fires
+    // first), NOT NO_DIRECTION.
+    //
+    // Reuse the SP16 ACCESS_POLICY-triggering fixture: tier-1 + simple_ugc +
+    // final_export (final_export needs both tiers >= 2). Combine with
+    // seedance + null seedanceDirection so Step 4 would also fire.
+    const log = { calls: 0 };
+    const stores: ProviderRouterStores = {
+      campaignTakeStore: makeCampaignTakeStore(false, log),
+    };
+    const tierDeniedInput = makeInput({
+      resolvedContext: makeContext({
+        productTierAtResolution: 1,
+        creatorTierAtResolution: 1,
+        effectiveTier: 1,
+        allowedOutputTier: 1,
+      }),
+      shotType: "simple_ugc",
+      outputIntent: "final_export",
+    });
+    const decision = await routeSyntheticPcdShot(
+      {
+        ...tierDeniedInput,
+        videoProviderChoice: "seedance",
+        syntheticIdentity: { ...tierDeniedInput.syntheticIdentity, seedanceDirection: null },
+      },
+      stores,
+    );
+    expect(decision.allowed).toBe(false);
+    if (decision.allowed === false && decision.kind === "synthetic_pairing") {
+      expect(decision.denialKind).toBe("ACCESS_POLICY");
+    }
   });
 });
 

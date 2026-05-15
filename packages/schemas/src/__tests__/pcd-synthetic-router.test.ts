@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   PcdRoutingDecisionSchema,
+  type SyntheticPcdRoutingDecision,
   SyntheticPcdRoutingDecisionSchema,
 } from "../pcd-synthetic-router.js";
 
@@ -110,17 +111,22 @@ describe("PcdRoutingDecisionSchema", () => {
   });
 });
 
+// SP17 — `goodSyntheticAllowed` widened with `videoProviderChoice: "kling"`
+// to satisfy Branch 3's per-branch literal equality lock. Existing version
+// string fixtures bumped 1.0.0 → 1.1.0 to match SP17's pinned constants
+// (cosmetic; the schema only requires `.string().min(1)`).
 const goodSyntheticAllowed = {
   allowed: true as const,
   kind: "synthetic_pairing" as const,
   accessDecision: goodAccessDecisionAllowed,
   imageProvider: "dalle" as const,
   videoProvider: "kling" as const,
+  videoProviderChoice: "kling" as const,
   dallePromptLocked: "Vertical lo-fi selfie photo. Young Chinese woman, 23.",
   klingDirection: goodKlingDirection,
   pairingRefIndex: 0,
-  pairingVersion: "pcd-synthetic-provider-pairing@1.0.0",
-  syntheticRouterVersion: "pcd-synthetic-router@1.0.0",
+  pairingVersion: "pcd-synthetic-provider-pairing@1.1.0",
+  syntheticRouterVersion: "pcd-synthetic-router@1.1.0",
   decisionReason: {
     matchedShotType: "simple_ugc" as const,
     matchedOutputIntent: "draft" as const,
@@ -133,7 +139,7 @@ const goodSyntheticDenied = {
   kind: "synthetic_pairing" as const,
   denialKind: "ACCESS_POLICY" as const,
   accessDecision: goodAccessDecisionDenied,
-  syntheticRouterVersion: "pcd-synthetic-router@1.0.0",
+  syntheticRouterVersion: "pcd-synthetic-router@1.1.0",
 };
 
 const goodDelegated = {
@@ -166,7 +172,7 @@ const goodDelegated = {
       selectionRationale: "tier=3 shot=script_only intent=draft → openai_text (no tier3 rules)",
     },
   },
-  syntheticRouterVersion: "pcd-synthetic-router@1.0.0",
+  syntheticRouterVersion: "pcd-synthetic-router@1.1.0",
 };
 
 describe("SyntheticPcdRoutingDecisionSchema", () => {
@@ -238,5 +244,211 @@ describe("SyntheticPcdRoutingDecisionSchema", () => {
     expect(() =>
       SyntheticPcdRoutingDecisionSchema.parse({ ...goodDelegated, reason: "other_reason" }),
     ).toThrow();
+  });
+});
+
+describe("SyntheticPcdRoutingDecisionSchema — SP17 v2 (5 branches)", () => {
+  // Re-uses the file-level `goodAccessDecisionAllowed` / `goodAccessDecisionDenied`
+  // / `goodKlingDirection` fixtures (PcdTierDecisionSchema shape is
+  // {allowed, effectiveTier, requiredAvatarTier?, requiredProductTier?,
+  // reason?, requiredActions?} — the SP2 source of truth, simpler than the
+  // hypothetical shape the SP17 task body sketches).
+  const goodSeedanceDirection = {
+    setting: "Bright kitchen counter",
+    motion: "Hand reveal then pause",
+    energy: "Warm and confident",
+    lighting: "Soft window key",
+    avoid: ["Hard cuts"],
+  } as const;
+
+  it("accepts a kling-success decision with videoProviderChoice === 'kling'", () => {
+    const dec: SyntheticPcdRoutingDecision = {
+      allowed: true,
+      kind: "synthetic_pairing",
+      accessDecision: goodAccessDecisionAllowed,
+      imageProvider: "dalle",
+      videoProvider: "kling",
+      videoProviderChoice: "kling",
+      dallePromptLocked: "Some prompt",
+      klingDirection: goodKlingDirection,
+      pairingRefIndex: 0,
+      pairingVersion: "pcd-synthetic-provider-pairing@1.1.0",
+      syntheticRouterVersion: "pcd-synthetic-router@1.1.0",
+      decisionReason: {
+        matchedShotType: "simple_ugc",
+        matchedOutputIntent: "draft",
+        selectionRationale: "synthetic-pairing tier=3 shot=simple_ugc intent=draft → dalle+kling",
+      },
+    };
+    expect(SyntheticPcdRoutingDecisionSchema.parse(dec)).toEqual(dec);
+  });
+
+  it("accepts a seedance-success decision with videoProviderChoice === 'seedance'", () => {
+    const dec: SyntheticPcdRoutingDecision = {
+      allowed: true,
+      kind: "synthetic_pairing",
+      accessDecision: goodAccessDecisionAllowed,
+      imageProvider: "dalle",
+      videoProvider: "seedance",
+      videoProviderChoice: "seedance",
+      dallePromptLocked: "Some prompt",
+      seedanceDirection: goodSeedanceDirection,
+      pairingRefIndex: 1,
+      pairingVersion: "pcd-synthetic-provider-pairing@1.1.0",
+      syntheticRouterVersion: "pcd-synthetic-router@1.1.0",
+      decisionReason: {
+        matchedShotType: "product_demo",
+        matchedOutputIntent: "final_export",
+        selectionRationale:
+          "synthetic-pairing tier=3 shot=product_demo intent=final_export → dalle+seedance",
+      },
+    };
+    expect(SyntheticPcdRoutingDecisionSchema.parse(dec)).toEqual(dec);
+  });
+
+  it("REJECTS kling-success with videoProviderChoice = 'seedance' (schema-level no-silent-fallback lock)", () => {
+    const dec = {
+      allowed: true,
+      kind: "synthetic_pairing",
+      accessDecision: goodAccessDecisionAllowed,
+      imageProvider: "dalle",
+      videoProvider: "kling",
+      videoProviderChoice: "seedance",
+      dallePromptLocked: "p",
+      klingDirection: goodKlingDirection,
+      pairingRefIndex: 0,
+      pairingVersion: "pcd-synthetic-provider-pairing@1.1.0",
+      syntheticRouterVersion: "pcd-synthetic-router@1.1.0",
+      decisionReason: {
+        matchedShotType: "simple_ugc",
+        matchedOutputIntent: "draft",
+        selectionRationale: "x",
+      },
+    };
+    expect(() => SyntheticPcdRoutingDecisionSchema.parse(dec)).toThrow();
+  });
+
+  it("REJECTS seedance-success with videoProviderChoice = 'kling' (schema-level no-silent-fallback lock)", () => {
+    const dec = {
+      allowed: true,
+      kind: "synthetic_pairing",
+      accessDecision: goodAccessDecisionAllowed,
+      imageProvider: "dalle",
+      videoProvider: "seedance",
+      videoProviderChoice: "kling",
+      dallePromptLocked: "p",
+      seedanceDirection: goodSeedanceDirection,
+      pairingRefIndex: 1,
+      pairingVersion: "pcd-synthetic-provider-pairing@1.1.0",
+      syntheticRouterVersion: "pcd-synthetic-router@1.1.0",
+      decisionReason: {
+        matchedShotType: "product_demo",
+        matchedOutputIntent: "final_export",
+        selectionRationale: "x",
+      },
+    };
+    expect(() => SyntheticPcdRoutingDecisionSchema.parse(dec)).toThrow();
+  });
+
+  it("accepts NO_DIRECTION_AUTHORED_FOR_VIDEO_PROVIDER denial (videoProviderChoice = seedance)", () => {
+    const dec: SyntheticPcdRoutingDecision = {
+      allowed: false,
+      kind: "synthetic_pairing",
+      denialKind: "NO_DIRECTION_AUTHORED_FOR_VIDEO_PROVIDER",
+      videoProviderChoice: "seedance",
+      accessDecision: goodAccessDecisionAllowed,
+      syntheticRouterVersion: "pcd-synthetic-router@1.1.0",
+    };
+    expect(SyntheticPcdRoutingDecisionSchema.parse(dec)).toEqual(dec);
+  });
+
+  it("accepts NO_DIRECTION_AUTHORED_FOR_VIDEO_PROVIDER denial (videoProviderChoice = kling)", () => {
+    const dec: SyntheticPcdRoutingDecision = {
+      allowed: false,
+      kind: "synthetic_pairing",
+      denialKind: "NO_DIRECTION_AUTHORED_FOR_VIDEO_PROVIDER",
+      videoProviderChoice: "kling",
+      accessDecision: goodAccessDecisionAllowed,
+      syntheticRouterVersion: "pcd-synthetic-router@1.1.0",
+    };
+    expect(SyntheticPcdRoutingDecisionSchema.parse(dec)).toEqual(dec);
+  });
+
+  it("strips or rejects ACCESS_POLICY denial branch if videoProviderChoice field is present (Branch 1 doesn't carry it)", () => {
+    const dec = {
+      allowed: false,
+      kind: "synthetic_pairing",
+      denialKind: "ACCESS_POLICY",
+      videoProviderChoice: "kling",
+      accessDecision: goodAccessDecisionDenied,
+      syntheticRouterVersion: "pcd-synthetic-router@1.1.0",
+    };
+    const parsed = SyntheticPcdRoutingDecisionSchema.safeParse(dec);
+    if (parsed.success) {
+      expect((parsed.data as Record<string, unknown>).videoProviderChoice).toBeUndefined();
+    } else {
+      expect(parsed.success).toBe(false);
+    }
+  });
+
+  it("strips or rejects delegation branch with videoProviderChoice present (Q10 design lock)", () => {
+    const dec = {
+      kind: "delegated_to_generic_router",
+      reason: "shot_type_not_in_synthetic_pairing",
+      shotType: "script_only",
+      sp4Decision: {
+        allowed: false as const,
+        denialKind: "ACCESS_POLICY" as const,
+        accessDecision: goodAccessDecisionDenied,
+      },
+      videoProviderChoice: "seedance",
+      syntheticRouterVersion: "pcd-synthetic-router@1.1.0",
+    };
+    const parsed = SyntheticPcdRoutingDecisionSchema.safeParse(dec);
+    if (parsed.success) {
+      expect((parsed.data as Record<string, unknown>).videoProviderChoice).toBeUndefined();
+    } else {
+      expect(parsed.success).toBe(false);
+    }
+  });
+
+  it("REJECTS NO_DIRECTION denial with videoProviderChoice outside the kling|seedance union", () => {
+    const dec = {
+      allowed: false,
+      kind: "synthetic_pairing",
+      denialKind: "NO_DIRECTION_AUTHORED_FOR_VIDEO_PROVIDER",
+      videoProviderChoice: "openai",
+      accessDecision: goodAccessDecisionAllowed,
+      syntheticRouterVersion: "pcd-synthetic-router@1.1.0",
+    };
+    expect(() => SyntheticPcdRoutingDecisionSchema.parse(dec)).toThrow();
+  });
+
+  it("strips or rejects kling-success with seedanceDirection field present (Branch 3 doesn't carry it)", () => {
+    const dec = {
+      allowed: true,
+      kind: "synthetic_pairing",
+      accessDecision: goodAccessDecisionAllowed,
+      imageProvider: "dalle",
+      videoProvider: "kling",
+      videoProviderChoice: "kling",
+      dallePromptLocked: "p",
+      klingDirection: goodKlingDirection,
+      seedanceDirection: goodSeedanceDirection,
+      pairingRefIndex: 0,
+      pairingVersion: "pcd-synthetic-provider-pairing@1.1.0",
+      syntheticRouterVersion: "pcd-synthetic-router@1.1.0",
+      decisionReason: {
+        matchedShotType: "simple_ugc",
+        matchedOutputIntent: "draft",
+        selectionRationale: "x",
+      },
+    };
+    const parsed = SyntheticPcdRoutingDecisionSchema.safeParse(dec);
+    if (parsed.success) {
+      expect((parsed.data as Record<string, unknown>).seedanceDirection).toBeUndefined();
+    } else {
+      expect(parsed.success).toBe(false);
+    }
   });
 });

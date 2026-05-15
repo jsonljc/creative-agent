@@ -2,6 +2,7 @@
 // Validates input via the SP11 zod schema before any DB write.
 // Upsert semantics on (creatorIdentityId): the parent CreatorIdentity
 // row must exist and have kind = "synthetic".
+import { Prisma } from "@prisma/client";
 import type { PrismaDbClient } from "../prisma-db.js";
 import {
   CreatorIdentitySyntheticPayloadSchema,
@@ -24,6 +25,13 @@ export class PrismaCreatorIdentitySyntheticStore {
       physicalDescriptors: payload.physicalDescriptors,
       dallePromptLocked: payload.dallePromptLocked,
       klingDirection: payload.klingDirection,
+      // SP17 — normalize undefined → DB NULL at write time per design J1.
+      // The schema accepts nullish() at ingestion; the DB column only ever
+      // stores SQL NULL or a structured object. Prisma's nullable Json input
+      // requires Prisma.JsonNull (not raw null) to write SQL NULL.
+      seedanceDirection: payload.seedanceDirection
+        ? (payload.seedanceDirection as object)
+        : Prisma.JsonNull,
       voiceCaptionStyle: payload.voiceCaptionStyle,
       mutuallyExclusiveWithIds: [...payload.mutuallyExclusiveWithIds],
       status: payload.status,

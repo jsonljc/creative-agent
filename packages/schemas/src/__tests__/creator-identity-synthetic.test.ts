@@ -9,7 +9,9 @@ import {
   PricePositioningSchema,
   SyntheticStatusSchema,
   CreatorIdentitySyntheticPayloadSchema,
+  SeedanceDirectionSchema,
   type CreatorIdentitySyntheticPayload,
+  type SeedanceDirection,
 } from "../creator-identity-synthetic.js";
 import * as barrel from "../index.js";
 
@@ -191,5 +193,106 @@ describe("schemas package barrel", () => {
     expect(barrel.CreativeBriefSchema).toBeDefined();
     expect(barrel.JurisdictionCodeSchema).toBeDefined();
     expect(barrel.PlatformSchema).toBeDefined();
+  });
+});
+
+describe("SeedanceDirectionSchema (SP17)", () => {
+  const valid: SeedanceDirection = {
+    setting: "Bright kitchen counter",
+    motion: "Slow product reveal hand",
+    energy: "Warm and grounded",
+    lighting: "Soft morning window",
+    avoid: ["Quick cuts", "High saturation"],
+  };
+
+  it("accepts a fully populated seedance direction", () => {
+    expect(SeedanceDirectionSchema.parse(valid)).toEqual(valid);
+  });
+
+  it("rejects empty setting", () => {
+    expect(() => SeedanceDirectionSchema.parse({ ...valid, setting: "" })).toThrow();
+  });
+
+  it("rejects an empty string inside avoid[]", () => {
+    expect(() => SeedanceDirectionSchema.parse({ ...valid, avoid: [""] })).toThrow();
+  });
+});
+
+describe("CreatorIdentitySyntheticPayloadSchema.seedanceDirection (SP17 widen)", () => {
+  const baseSynthetic = {
+    creatorIdentityId: "ci_test_synth_sp17",
+    treatmentClass: "med_spa" as const,
+    vibe: "quiet_confidence" as const,
+    market: "SG" as const,
+    ethnicityFamily: "sg_chinese" as const,
+    ageBand: "mid_30s_plus" as const,
+    pricePositioning: "premium" as const,
+    physicalDescriptors: {
+      faceShape: "Oval",
+      skinTone: "Fair",
+      eyeShape: "Hooded",
+      hair: "Shoulder length brunette",
+      ageRead: "36",
+      buildNote: "Slim, medium height",
+    },
+    dallePromptLocked: "Lo-fi photo of …",
+    klingDirection: {
+      setting: "Dim treatment room",
+      motion: "Soft head turn",
+      energy: "Composed",
+      lighting: "Warm key light",
+      avoid: ["Beauty filter"],
+    },
+    voiceCaptionStyle: {
+      voice: "Calm",
+      captionStyle: "Lowercase, soft punctuation",
+      sampleHook: "okay so here's the thing",
+      sampleCta: "book a consultation",
+    },
+    mutuallyExclusiveWithIds: [],
+    status: "active" as const,
+  };
+  const validSeedance: SeedanceDirection = {
+    setting: "Bright counter",
+    motion: "Product reveal hand",
+    energy: "Warm",
+    lighting: "Soft window",
+    avoid: ["Cuts"],
+  };
+
+  it("accepts payload with seedanceDirection = null", () => {
+    const out = CreatorIdentitySyntheticPayloadSchema.parse({
+      ...baseSynthetic,
+      seedanceDirection: null,
+    });
+    expect(out.seedanceDirection).toBeNull();
+  });
+
+  it("accepts payload with seedanceDirection field omitted (undefined)", () => {
+    const out = CreatorIdentitySyntheticPayloadSchema.parse(baseSynthetic);
+    expect(out.seedanceDirection).toBeUndefined();
+  });
+
+  it("accepts payload with seedanceDirection populated", () => {
+    const out = CreatorIdentitySyntheticPayloadSchema.parse({
+      ...baseSynthetic,
+      seedanceDirection: validSeedance,
+    });
+    expect(out.seedanceDirection).toEqual(validSeedance);
+  });
+
+  it("rejects payload with seedanceDirection missing a required field", () => {
+    expect(() =>
+      CreatorIdentitySyntheticPayloadSchema.parse({
+        ...baseSynthetic,
+        seedanceDirection: { ...validSeedance, motion: undefined },
+      }),
+    ).toThrow();
+  });
+});
+
+describe("schemas package barrel — SeedanceDirectionSchema re-export (SP17)", () => {
+  it("re-exports SeedanceDirectionSchema", () => {
+    expect(barrel.SeedanceDirectionSchema).toBeDefined();
   });
 });

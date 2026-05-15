@@ -4,11 +4,19 @@
 // Kling pairing).
 //
 // Composition (one inline `Step N` comment per body step):
-//   1. Look up pairing matrix row by (shotType, outputIntent).
+//   0. Normalize undefined seedanceDirection → null (J1).
+//   1. Look up pairing matrix row by 3-tuple (shotType, outputIntent,
+//      videoProviderChoice). SP17 widened the key from a 2-tuple to a
+//      3-tuple when the matrix grew to two rows partitioned by videoProvider.
 //   2. If no row matches → delegate to SP4's routePcdShot and wrap.
 //   3. Tier policy gate (SP2's decidePcdGenerationAccess) — denial path. [Task 7]
-//   4. Build synthetic pairing decision (locked artifacts read verbatim
-//      from input.syntheticIdentity). [Task 8]
+//   4. Direction-authored check (NEW, SP17) — NO_DIRECTION_AUTHORED denial
+//      if the chosen-provider direction is null.
+//   5. Build synthetic pairing decision, per-provider branch (locked
+//      artifacts read verbatim from input.syntheticIdentity). Kling success
+//      returns Branch 3 of the union (klingDirection only); Seedance success
+//      returns Branch 4 (seedanceDirection only). videoProvider ===
+//      videoProviderChoice by zod literal-equality per branch.
 //
 // Algorithm is intentionally tier3-rule-free for the synthetic path: the
 // locked pairing supersedes generic capability filtering by design
@@ -42,8 +50,9 @@ export function buildSyntheticSelectionRationale(
   effectiveTier: IdentityTier,
   shotType: PcdShotType,
   outputIntent: OutputIntent,
+  videoProvider: "kling" | "seedance",
 ): string {
-  const out = `synthetic-pairing tier=${effectiveTier} shot=${shotType} intent=${outputIntent} → dalle+kling`;
+  const out = `synthetic-pairing tier=${effectiveTier} shot=${shotType} intent=${outputIntent} → dalle+${videoProvider}`;
   return out.length > 200 ? out.slice(0, 200) : out;
 }
 
@@ -52,6 +61,11 @@ export type RouteSyntheticPcdShotInput = {
   syntheticIdentity: CreatorIdentitySyntheticPayload;
   shotType: PcdShotType;
   outputIntent: OutputIntent;
+  // SP17 — end-user selection of the video provider, supplied by the SP21
+  // composer (or equivalent caller). Matrix gates legality; the chosen
+  // provider must have an authored direction on the synthetic identity or
+  // the router denies with NO_DIRECTION_AUTHORED_FOR_VIDEO_PROVIDER.
+  videoProviderChoice: "kling" | "seedance";
   approvedCampaignContext: ApprovedCampaignContext;
 };
 
@@ -59,11 +73,19 @@ export async function routeSyntheticPcdShot(
   input: RouteSyntheticPcdShotInput,
   stores: ProviderRouterStores,
 ): Promise<SyntheticPcdRoutingDecision> {
-  // Step 1 — Pairing matrix lookup. Find a row whose shotTypes contains
-  // input.shotType AND outputIntents contains input.outputIntent.
-  // First-match wins (v1 has only one row).
+  // Step 0 — Normalize undefined seedanceDirection to null per design J1.
+  // Schema accepts nullish(); domain logic treats null as the single
+  // missing-state.
+  const seedanceDirection = input.syntheticIdentity.seedanceDirection ?? null;
+
+  // Step 1 — Pairing matrix lookup keyed by 3-tuple
+  // (shotType, outputIntent, videoProviderChoice). SP17: matrix grew to two
+  // rows partitioned by videoProvider; first-match across all rows.
   const pairingRefIndex = PCD_SYNTHETIC_PROVIDER_PAIRING.findIndex(
-    (p) => p.shotTypes.includes(input.shotType) && p.outputIntents.includes(input.outputIntent),
+    (p) =>
+      p.shotTypes.includes(input.shotType) &&
+      p.outputIntents.includes(input.outputIntent) &&
+      p.videoProvider === input.videoProviderChoice,
   );
   const pairing =
     pairingRefIndex >= 0 ? PCD_SYNTHETIC_PROVIDER_PAIRING[pairingRefIndex] : undefined;
@@ -107,30 +129,83 @@ export async function routeSyntheticPcdShot(
     };
   }
 
-  // Step 4 — Build synthetic pairing decision. Locked artifacts read
-  // verbatim from input.syntheticIdentity. No transformation, no hashing
+  // Step 4 — Direction-authored check (NEW, SP17). The chosen provider must
+  // have an authored direction on the synthetic identity. Distinct denial
+  // kind — NEVER conflated with ACCESS_POLICY, NEVER silently degraded.
+  // klingDirection is non-nullable on the SP11 payload schema; only the
+  // seedance path can hit this denial in v1.1.0.
+  const direction =
+    input.videoProviderChoice === "kling"
+      ? input.syntheticIdentity.klingDirection
+      : seedanceDirection;
+  if (direction === null) {
+    return {
+      allowed: false,
+      kind: "synthetic_pairing",
+      denialKind: "NO_DIRECTION_AUTHORED_FOR_VIDEO_PROVIDER",
+      videoProviderChoice: input.videoProviderChoice,
+      accessDecision,
+      syntheticRouterVersion: PCD_SYNTHETIC_ROUTER_VERSION,
+    };
+  }
+
+  // Step 5 — Build synthetic pairing decision, per-provider branch.
+  // videoProviderChoice and videoProvider are zod-literal-equal by branch
+  // (Q9 schema-level lock). pairing.videoProvider matches videoProviderChoice
+  // by construction (Step 1 matched on that 3-tuple key). Locked artifacts
+  // read verbatim from input.syntheticIdentity. No transformation, no hashing
   // (SP17 owns dallePromptLocked → hash at persistence time).
   const matchedShotType = input.shotType;
   const matchedOutputIntent = input.outputIntent;
+  const decisionReason = {
+    matchedShotType,
+    matchedOutputIntent,
+    selectionRationale: buildSyntheticSelectionRationale(
+      input.resolvedContext.effectiveTier,
+      matchedShotType,
+      matchedOutputIntent,
+      input.videoProviderChoice,
+    ),
+  };
+
+  if (input.videoProviderChoice === "kling") {
+    return {
+      allowed: true,
+      kind: "synthetic_pairing",
+      accessDecision,
+      imageProvider: "dalle",
+      videoProvider: "kling",
+      videoProviderChoice: "kling",
+      dallePromptLocked: input.syntheticIdentity.dallePromptLocked,
+      klingDirection: input.syntheticIdentity.klingDirection,
+      pairingRefIndex,
+      pairingVersion: PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION,
+      syntheticRouterVersion: PCD_SYNTHETIC_ROUTER_VERSION,
+      decisionReason,
+    };
+  }
+  // input.videoProviderChoice === "seedance" (narrowed by union exhaustion).
+  // seedanceDirection (the Step 0 normalized local) is non-null here —
+  // narrowed by Step 4's null check / early return. Re-derive from the
+  // normalized local rather than from `direction` so TypeScript narrows
+  // cleanly without a cast (design J1: Step 0 normalization is the source
+  // of truth for the seedance direction).
+  if (seedanceDirection === null) {
+    // Unreachable: Step 4 returned for the null case on this branch.
+    throw new Error("seedanceDirection unexpectedly null after Step 4 guard");
+  }
   return {
     allowed: true,
     kind: "synthetic_pairing",
     accessDecision,
-    imageProvider: pairing.imageProvider,
-    videoProvider: pairing.videoProvider,
+    imageProvider: "dalle",
+    videoProvider: "seedance",
+    videoProviderChoice: "seedance",
     dallePromptLocked: input.syntheticIdentity.dallePromptLocked,
-    klingDirection: input.syntheticIdentity.klingDirection,
+    seedanceDirection,
     pairingRefIndex,
     pairingVersion: PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION,
     syntheticRouterVersion: PCD_SYNTHETIC_ROUTER_VERSION,
-    decisionReason: {
-      matchedShotType,
-      matchedOutputIntent,
-      selectionRationale: buildSyntheticSelectionRationale(
-        input.resolvedContext.effectiveTier,
-        matchedShotType,
-        matchedOutputIntent,
-      ),
-    },
+    decisionReason,
   };
 }

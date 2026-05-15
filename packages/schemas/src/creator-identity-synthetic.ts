@@ -73,6 +73,26 @@ export const KlingDirectionSchema = z
   .readonly();
 export type KlingDirection = z.infer<typeof KlingDirectionSchema>;
 
+// PCD slice SP17 — Seedance direction artifact. Field set mirrors
+// KlingDirectionSchema exactly. Distinct named type so call sites cannot
+// accidentally cross-bind to a Kling direction. Nullable on the payload —
+// existing SP11 roster (30 creators) is kling-only at SP17 land; a future
+// content-authoring slice backfills.
+//
+// MERGE-BACK: net-new SP17 schema. No reconciliation needed (net-new on
+// both sides). If Switchboard adds Seedance-specific fields later, this
+// schema widens here first and merges back additively.
+export const SeedanceDirectionSchema = z
+  .object({
+    setting: z.string().min(1),
+    motion: z.string().min(1),
+    energy: z.string().min(1),
+    lighting: z.string().min(1),
+    avoid: z.array(z.string().min(1)).readonly(),
+  })
+  .readonly();
+export type SeedanceDirection = z.infer<typeof SeedanceDirectionSchema>;
+
 export const VoiceCaptionStyleSchema = z
   .object({
     voice: z.string().min(1),
@@ -95,6 +115,13 @@ export const CreatorIdentitySyntheticPayloadSchema = z
     physicalDescriptors: PhysicalDescriptorsSchema,
     dallePromptLocked: z.string().min(1).max(4000),
     klingDirection: KlingDirectionSchema,
+    // SP17 — nullish() at ingestion for back-compat with omitted-key roster
+    // fixtures; downstream consumers (DB store, router) normalize undefined
+    // → null so only one missing-state exists in domain logic.
+    //
+    // MERGE-BACK: nullable for v1; existing 30 SP11 roster creators are
+    // kling-only until a future content-authoring slice backfills.
+    seedanceDirection: SeedanceDirectionSchema.nullish(),
     voiceCaptionStyle: VoiceCaptionStyleSchema,
     mutuallyExclusiveWithIds: z.array(z.string().min(1)).readonly(),
     status: SyntheticStatusSchema,

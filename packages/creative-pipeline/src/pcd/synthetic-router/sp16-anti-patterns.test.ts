@@ -1,8 +1,8 @@
 // SP16 anti-pattern grep tests. These guard against:
-//   1. Single-source router-version pin ("pcd-synthetic-router@1.0.0"
+//   1. Single-source router-version pin ("pcd-synthetic-router@1.1.0"
 //      appears in exactly one non-test source file:
 //      synthetic-router-version.ts).
-//   2. Single-source pairing-version pin ("pcd-synthetic-provider-pairing@1.0.0"
+//   2. Single-source pairing-version pin ("pcd-synthetic-provider-pairing@1.1.0"
 //      appears in exactly one non-test source file:
 //      synthetic-provider-pairing.ts).
 //   3. Router purity (no Date.now, no new Date, no Math.random, no
@@ -45,8 +45,8 @@ function grepFiles(pattern: string, scope: string): string[] {
 }
 
 describe("SP16 anti-patterns", () => {
-  it('PCD_SYNTHETIC_ROUTER_VERSION literal "pcd-synthetic-router@1.0.0" lives in exactly one non-test source file', () => {
-    const hits = grepFiles('"pcd-synthetic-router@1\\.0\\.0"', "packages/");
+  it('PCD_SYNTHETIC_ROUTER_VERSION literal "pcd-synthetic-router@1.1.0" lives in exactly one non-test source file', () => {
+    const hits = grepFiles('"pcd-synthetic-router@1\\.1\\.0"', "packages/");
     const sourceHits = hits.filter((line) => !line.includes(".test.ts"));
     const uniquePaths = new Set(sourceHits.map((line) => line.split(":")[0]));
     expect(
@@ -60,8 +60,8 @@ describe("SP16 anti-patterns", () => {
     ).toBe(true);
   });
 
-  it('PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION literal "pcd-synthetic-provider-pairing@1.0.0" lives in exactly one non-test source file', () => {
-    const hits = grepFiles('"pcd-synthetic-provider-pairing@1\\.0\\.0"', "packages/");
+  it('PCD_SYNTHETIC_PROVIDER_PAIRING_VERSION literal "pcd-synthetic-provider-pairing@1.1.0" lives in exactly one non-test source file', () => {
+    const hits = grepFiles('"pcd-synthetic-provider-pairing@1\\.1\\.0"', "packages/");
     const sourceHits = hits.filter((line) => !line.includes(".test.ts"));
     const uniquePaths = new Set(sourceHits.map((line) => line.split(":")[0]));
     expect(
@@ -166,10 +166,10 @@ describe("SP16 anti-patterns", () => {
     }
   });
 
-  it("pairing matrix integrity (defense in depth — duplicates synthetic-provider-pairing.test.ts assertions)", () => {
-    expect(PCD_SYNTHETIC_PROVIDER_PAIRING.length).toBe(1);
-    expect(PCD_SYNTHETIC_PROVIDER_PAIRING[0].imageProvider).toBe("dalle");
-    expect(PCD_SYNTHETIC_PROVIDER_PAIRING[0].videoProvider).toBe("kling");
+  it("pairing matrix integrity v2 — kling + seedance rows, both covering 7 shot types × 4 intents", () => {
+    expect(PCD_SYNTHETIC_PROVIDER_PAIRING.length).toBe(2);
+    const providers = new Set(PCD_SYNTHETIC_PROVIDER_PAIRING.map((r) => r.videoProvider));
+    expect(providers).toEqual(new Set(["kling", "seedance"]));
     const expectedShots = [
       "simple_ugc",
       "talking_head",
@@ -179,12 +179,13 @@ describe("SP16 anti-patterns", () => {
       "label_closeup",
       "object_insert",
     ];
-    expect([...PCD_SYNTHETIC_PROVIDER_PAIRING[0].shotTypes].sort()).toEqual(
-      [...expectedShots].sort(),
-    );
-    expect([...PCD_SYNTHETIC_PROVIDER_PAIRING[0].outputIntents].sort()).toEqual(
-      ["draft", "final_export", "meta_draft", "preview"].sort(),
-    );
+    for (const row of PCD_SYNTHETIC_PROVIDER_PAIRING) {
+      expect(row.imageProvider).toBe("dalle");
+      expect([...row.shotTypes].sort()).toEqual([...expectedShots].sort());
+      expect([...row.outputIntents].sort()).toEqual(
+        ["draft", "final_export", "meta_draft", "preview"].sort(),
+      );
+    }
   });
 
   it("SP1–SP15 source bodies are unchanged since the SP15 baseline (allowlist edits only)", () => {
@@ -208,6 +209,18 @@ describe("SP16 anti-patterns", () => {
       // SP16 design + plan docs
       "docs/plans/2026-05-15-pcd-synthetic-provider-routing-sp16-design.md",
       "docs/plans/2026-05-15-pcd-synthetic-provider-routing-sp16-plan.md",
+      // SP17 net-new + edits (allowlist maintenance, Task 13)
+      "packages/creative-pipeline/src/pcd/synthetic-router/sp17-anti-patterns.test.ts",
+      "packages/schemas/src/creator-identity-synthetic.ts",
+      "packages/schemas/src/__tests__/creator-identity-synthetic.test.ts",
+      "packages/schemas/src/pcd-synthetic-router.ts",
+      "packages/schemas/src/__tests__/pcd-synthetic-router.test.ts",
+      "packages/db/prisma/schema.prisma",
+      "packages/db/src/stores/prisma-creator-identity-synthetic-store.ts",
+      "packages/db/src/stores/prisma-creator-identity-synthetic-reader.ts",
+      "packages/db/src/stores/__tests__/prisma-creator-identity-synthetic-store.test.ts",
+      "docs/plans/2026-05-15-pcd-synthetic-provider-routing-seedance-sp17-design.md",
+      "docs/plans/2026-05-15-pcd-synthetic-provider-routing-seedance-sp17-plan.md",
     ]);
 
     let baselineSha = "";
@@ -247,6 +260,9 @@ describe("SP16 anti-patterns", () => {
       if (file === "packages/creative-pipeline/src/pcd/disclosure/sp14-anti-patterns.test.ts")
         continue;
       if (file === "packages/creative-pipeline/src/pcd/script/sp15-anti-patterns.test.ts") continue;
+      // SP17 net-new migration is out of scope (necessary maintenance —
+      // same precedent as prior subdir allowlists).
+      if (file.startsWith("packages/db/prisma/migrations/")) continue;
       expect(
         allowedEdits.has(file),
         `unexpected file changed since ${SP15_BASELINE}: ${file}`,
