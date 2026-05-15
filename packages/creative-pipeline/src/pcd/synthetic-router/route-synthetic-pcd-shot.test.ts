@@ -648,6 +648,127 @@ describe("routeSyntheticPcdShot — Step 5 success branches (SP17 — per-provid
   });
 });
 
+describe("routeSyntheticPcdShot — determinism (SP17)", () => {
+  function makeStores(): ProviderRouterStores {
+    const log = { calls: 0 };
+    return { campaignTakeStore: makeCampaignTakeStore(false, log) };
+  }
+
+  it("identical inputs → deep-equal decisions (kling)", async () => {
+    const inputs = { ...makeInput(), videoProviderChoice: "kling" as const };
+    const a = await routeSyntheticPcdShot(inputs, makeStores());
+    const b = await routeSyntheticPcdShot(inputs, makeStores());
+    expect(a).toEqual(b);
+  });
+
+  it("identical inputs → deep-equal decisions (seedance, populated)", async () => {
+    const seedanceDir = {
+      setting: "S",
+      motion: "M",
+      energy: "E",
+      lighting: "L",
+      avoid: ["x"],
+    };
+    const baseSynth = makeInput().syntheticIdentity;
+    const inputs = {
+      ...makeInput(),
+      videoProviderChoice: "seedance" as const,
+      syntheticIdentity: { ...baseSynth, seedanceDirection: seedanceDir },
+    };
+    const a = await routeSyntheticPcdShot(inputs, makeStores());
+    const b = await routeSyntheticPcdShot(inputs, makeStores());
+    expect(a).toEqual(b);
+  });
+
+  it("approvedCampaignContext does NOT perturb synthetic-path output (U3)", async () => {
+    const baseSynth = { ...makeInput(), videoProviderChoice: "kling" as const };
+    const ctxA: ApprovedCampaignContext = {
+      kind: "campaign",
+      organizationId: "org-1",
+      campaignId: "camp_A",
+    };
+    const ctxB: ApprovedCampaignContext = {
+      kind: "campaign",
+      organizationId: "org-1",
+      campaignId: "camp_B",
+    };
+    const decA = await routeSyntheticPcdShot(
+      { ...baseSynth, approvedCampaignContext: ctxA },
+      makeStores(),
+    );
+    const decB = await routeSyntheticPcdShot(
+      { ...baseSynth, approvedCampaignContext: ctxB },
+      makeStores(),
+    );
+    expect(decA).toEqual(decB);
+  });
+
+  it("approvedCampaignContext DOES participate on delegation path (structurally)", async () => {
+    // script_only forces delegation; SP4 may or may not consult campaign
+    // context. Both runs should be delegated; we only assert structural
+    // validity, not differential perturbation (that's SP4's concern).
+    const baseDel = {
+      ...makeInput(),
+      shotType: "script_only" as const,
+      outputIntent: "draft" as const,
+      videoProviderChoice: "kling" as const,
+    };
+    const ctxNone: ApprovedCampaignContext = { kind: "none" };
+    const ctxCamp: ApprovedCampaignContext = {
+      kind: "campaign",
+      organizationId: "org-1",
+      campaignId: "camp_x",
+    };
+    const decNone = await routeSyntheticPcdShot(
+      { ...baseDel, approvedCampaignContext: ctxNone },
+      makeStores(),
+    );
+    const decCamp = await routeSyntheticPcdShot(
+      { ...baseDel, approvedCampaignContext: ctxCamp },
+      makeStores(),
+    );
+    expect(decNone.kind).toBe("delegated_to_generic_router");
+    expect(decCamp.kind).toBe("delegated_to_generic_router");
+  });
+
+  it("dallePromptLocked byte-equality holds on both providers", async () => {
+    const customPrompt = "Custom DALL-E prompt for byte-equality test";
+    const seedanceDir = {
+      setting: "S",
+      motion: "M",
+      energy: "E",
+      lighting: "L",
+      avoid: ["x"],
+    };
+    const baseCustom = {
+      ...makeInput(),
+      syntheticIdentity: {
+        ...makeInput().syntheticIdentity,
+        dallePromptLocked: customPrompt,
+        seedanceDirection: seedanceDir,
+      },
+    };
+    const decKling = await routeSyntheticPcdShot(
+      { ...baseCustom, videoProviderChoice: "kling" as const },
+      makeStores(),
+    );
+    const decSeedance = await routeSyntheticPcdShot(
+      { ...baseCustom, videoProviderChoice: "seedance" as const },
+      makeStores(),
+    );
+    if (decKling.allowed === true && decKling.kind === "synthetic_pairing") {
+      expect(decKling.dallePromptLocked).toBe(customPrompt);
+    } else {
+      throw new Error("expected kling-success");
+    }
+    if (decSeedance.allowed === true && decSeedance.kind === "synthetic_pairing") {
+      expect(decSeedance.dallePromptLocked).toBe(customPrompt);
+    } else {
+      throw new Error("expected seedance-success");
+    }
+  });
+});
+
 describe("routeSyntheticPcdShot — determinism", () => {
   it("identical input twice → deep-equal decisions (synthetic path)", async () => {
     const log = { calls: 0 };
