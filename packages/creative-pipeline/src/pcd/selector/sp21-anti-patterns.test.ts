@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { execSync } from "node:child_process";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 
 const REPO_ROOT = execSync("git rev-parse --show-toplevel", { encoding: "utf8" }).trim();
@@ -136,15 +136,17 @@ describe("SP21 anti-patterns", () => {
   });
 
   it("#6 PCD pinned-constant census stays at 24 (no new PCD_*_VERSION export introduced since 06ba0ac)", () => {
-    // The 24 pinned constants live in packages/schemas/src/*-version.ts as
-    // single-line `export const PCD_..._VERSION = "..."`. SP21 introduces
-    // NO new pinned constant, so the count of such files in the schemas
-    // package must be unchanged from the freeze baseline.
+    // SP21 introduces NO new pinned constant. This check enforces that no
+    // new `pcd-*-version.ts` file appears in the schemas package since the
+    // freeze baseline. The full 24-constant census also includes versions
+    // declared in @creativeagent/creative-pipeline; this assertion narrowly
+    // guards the schemas-package surface so SP21 cannot land a stealth
+    // constant in the layer that the composer is allowed to import from.
     const schemasDir = "packages/schemas/src";
-    const baselineFiles = execSync(
-      `git ls-tree -r --name-only ${FREEZE_SHA} -- ${schemasDir}`,
-      { cwd: REPO_ROOT, encoding: "utf8" },
-    )
+    const baselineFiles = execSync(`git ls-tree -r --name-only ${FREEZE_SHA} -- ${schemasDir}`, {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+    })
       .split("\n")
       .map((s) => s.trim())
       .filter((p) => /pcd-[a-z0-9-]+-version\.ts$/.test(p) && !p.endsWith(".test.ts"));
