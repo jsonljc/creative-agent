@@ -31,8 +31,8 @@ describe("Sp11SeedSyntheticCreatorRosterReader", () => {
 
   it("returns an empty array when no roster entry matches the scope", async () => {
     const reader = new Sp11SeedSyntheticCreatorRosterReader();
-    // dental is not present in the SP11 seed for any market — exact pair
-    // (TH, dental) is guaranteed to be empty regardless of seed evolution.
+    // TH market is absent from the SP11 seed entirely — any (TH, X) pair is
+    // guaranteed empty regardless of seed evolution.
     const rows = await reader.listActiveCompatibleRoster({
       market: "TH",
       treatmentClass: "dental",
