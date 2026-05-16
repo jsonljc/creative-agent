@@ -205,13 +205,13 @@ describe("composeGenerationRouting — generic-route happy path (Case A)", () =>
     expect(stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast).toHaveBeenCalledTimes(1);
     const writerCall = stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast.mock.calls[0]!;
     const writerPayload = writerCall[0] as Record<string, unknown>;
-    expect(writerPayload.selectedProvider).toEqual(expect.any(String));
+    expect(writerPayload.selectedProvider).toBe("runway");
     expect(writerPayload.assetRecordId).toBe("asset_1");
     expect(writerPayload.shotSpecVersion).toBe("shot-spec@1.0.0");
 
     expect(stores.costEstimator.estimate).toHaveBeenCalledTimes(1);
     const estimateInput = stores.costEstimator.estimate.mock.calls[0]![0] as Record<string, unknown>;
-    expect(estimateInput.provider).toEqual(writerPayload.selectedProvider);
+    expect(estimateInput.provider).toBe("runway");
     expect(estimateInput.model).toBe("model-1.0");
     expect(estimateInput.shotType).toBe("simple_ugc");
     expect(estimateInput.outputIntent).toBe("draft");
