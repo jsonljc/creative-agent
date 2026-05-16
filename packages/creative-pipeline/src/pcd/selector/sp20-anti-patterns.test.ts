@@ -46,6 +46,14 @@ const SP20_ALLOWLISTED_EDITS: ReadonlyArray<string> = [
   "packages/creative-pipeline/src/pcd/synthetic-creator/synthetic-creator-selection-ports.ts",
   "packages/db/src/stores/__tests__/prisma-creator-identity-license-reader.test.ts",
   "packages/db/src/stores/prisma-creator-identity-license-reader.ts",
+  // SP22 net-new files (generation composer, pairing snapshot, barrel, plan docs).
+  "packages/creative-pipeline/src/pcd/generation/compose-generation-routing.ts",
+  "packages/creative-pipeline/src/pcd/generation/compose-generation-routing.test.ts",
+  "packages/creative-pipeline/src/pcd/generation/index.ts",
+  "packages/creative-pipeline/src/pcd/generation/synthesize-synthetic-pairing-snapshot.ts",
+  "docs/plans/2026-05-16-pcd-sp22-generation-composer-design.md",
+  "docs/plans/2026-05-16-pcd-sp22-generation-composer-plan.md",
+  "docs/plans/2026-05-16-pcd-sp22-task1-verification.md",
 ];
 
 function listAllSourceFiles(dir: string): string[] {

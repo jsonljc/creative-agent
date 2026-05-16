@@ -29,6 +29,14 @@ const SP21_ALLOWLISTED_EDITS: ReadonlyArray<string> = [
   "docs/plans/2026-05-16-pcd-sp21-synthetic-selector-composer-design.md",
   "docs/plans/2026-05-16-pcd-sp21-synthetic-selector-composer-plan.md",
   "docs/plans/2026-05-16-pcd-sp21-task1-schema-verification.md",
+  // SP22 net-new files (generation composer, pairing snapshot, barrel, plan docs).
+  "packages/creative-pipeline/src/pcd/generation/compose-generation-routing.ts",
+  "packages/creative-pipeline/src/pcd/generation/compose-generation-routing.test.ts",
+  "packages/creative-pipeline/src/pcd/generation/index.ts",
+  "packages/creative-pipeline/src/pcd/generation/synthesize-synthetic-pairing-snapshot.ts",
+  "docs/plans/2026-05-16-pcd-sp22-generation-composer-design.md",
+  "docs/plans/2026-05-16-pcd-sp22-generation-composer-plan.md",
+  "docs/plans/2026-05-16-pcd-sp22-task1-verification.md",
 ];
 
 function listAllSourceFiles(dir: string): string[] {
