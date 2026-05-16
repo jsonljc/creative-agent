@@ -51,6 +51,12 @@ import type { WritePcdIdentitySnapshotWithCostForecastStores } from "../cost/wri
 import type { WritePcdIdentitySnapshotInput } from "../pcd-identity-snapshot-writer.js";
 import type { PcdProviderCapability } from "../provider-capability-matrix.js";
 import { routeSyntheticPcdShot } from "../synthetic-router/route-synthetic-pcd-shot.js";
+import {
+  requiresEditOverRegenerate,
+  requiresFirstLastFrameAnchor,
+  requiresPerformanceTransfer,
+  type Tier3Rule,
+} from "../tier3-routing-rules.js";
 import { writePcdIdentitySnapshotWithSyntheticRouting } from "../synthetic-routing-provenance/write-pcd-identity-snapshot-with-synthetic-routing.js";
 import type { WritePcdIdentitySnapshotWithSyntheticRoutingStores } from "../synthetic-routing-provenance/write-pcd-identity-snapshot-with-synthetic-routing.js";
 
@@ -216,40 +222,11 @@ export async function composeGenerationRouting(
     routingDecision.kind === "synthetic_pairing" &&
     routingDecision.allowed === true
   ) {
-    // Step 5 — Synthetic-pairing write path.
-    // Task 8 will add tier-3 Step 5a recompute. For tier ≤ 2 the SP18 writer's
-    // invariant short-circuits, so a static tier3RulesApplied: [] passes.
-    const selectedProvider = `${routingDecision.imageProvider}+${routingDecision.videoProvider}`;
-    const selectedCapability: PcdProviderCapability = {
-      provider: selectedProvider,
-      tiers: [input.routing.resolvedContext.effectiveTier],
-      shotTypes: [input.routing.shotType],
-      outputIntents: [input.routing.outputIntent],
-      supportsFirstLastFrame: true,
-      supportsEditExtend: true,
-      supportsPerformanceTransfer: true,
-    };
-    const routingDecisionReason: PcdRoutingDecisionReason = {
-      capabilityRefIndex: routingDecision.pairingRefIndex,
-      matchedShotType: input.routing.shotType,
-      matchedEffectiveTier: input.routing.resolvedContext.effectiveTier,
-      matchedOutputIntent: input.routing.outputIntent,
-      tier3RulesApplied: [],
-      candidatesEvaluated: 1,
-      candidatesAfterTier3Filter: 1,
-      selectionRationale: routingDecision.decisionReason.selectionRationale,
-    };
-    const snapshotInput: WritePcdIdentitySnapshotInput = {
-      ...input.snapshotPersistence,
-      effectiveTier: input.routing.resolvedContext.effectiveTier,
-      shotType: input.routing.shotType,
-      outputIntent: input.routing.outputIntent,
-      selectedCapability,
-      selectedProvider,
-      routerVersion: routingDecision.syntheticRouterVersion,
-      routingDecisionReason,
-      editOverRegenerateRequired: false,
-    };
+    const snapshotInput = await buildSyntheticPairingSnapshotInput(
+      routingDecision,
+      input,
+      stores,
+    );
     const snapshot = await writePcdIdentitySnapshotWithSyntheticRouting(
       {
         snapshot: snapshotInput,
@@ -273,5 +250,94 @@ export async function composeGenerationRouting(
 
   // Cases B + denials — implemented in Tasks 8, 9, 10.
   throw new Error("decision-shape mapping not yet implemented for this branch");
+}
+
+// Step 5a + 5b for the synthetic-pairing happy path. Extracted from the Case C
+// inline block to keep composeGenerationRouting under the file-size cap. Logic
+// is unchanged from the inline version: tier-3 recompute mirrors SP18 writer
+// invariant (§11.3 resolution), then synthesizes SP4-shaped fields (§11.3/§11.4).
+async function buildSyntheticPairingSnapshotInput(
+  routingDecision: SyntheticPcdRoutingDecision & { allowed: true; kind: "synthetic_pairing" },
+  input: ComposeGenerationRoutingInput,
+  stores: ComposeGenerationRoutingStores,
+): Promise<WritePcdIdentitySnapshotInput> {
+  // Step 5a — Recompute the SP4 tier-3 "required" set using the same
+  // predicates the SP18 writer's invariant uses, so the forensic-consistency
+  // check passes by construction (§11.3 resolution).
+  let editOverRegenerateRequired = false;
+  if (
+    input.routing.resolvedContext.effectiveTier === 3 &&
+    input.routing.approvedCampaignContext.kind === "campaign"
+  ) {
+    editOverRegenerateRequired = await requiresEditOverRegenerate(
+      {
+        effectiveTier: 3,
+        organizationId: input.routing.approvedCampaignContext.organizationId,
+        campaignId: input.routing.approvedCampaignContext.campaignId,
+      },
+      { campaignTakeStore: stores.campaignTakeStore },
+    );
+  }
+  const tier3RulesApplied: Tier3Rule[] = [];
+  if (
+    requiresFirstLastFrameAnchor({
+      effectiveTier: input.routing.resolvedContext.effectiveTier,
+      shotType: input.routing.shotType,
+      outputIntent: input.routing.outputIntent,
+    })
+  ) {
+    tier3RulesApplied.push("first_last_frame_anchor");
+  }
+  if (
+    requiresPerformanceTransfer({
+      effectiveTier: input.routing.resolvedContext.effectiveTier,
+      shotType: input.routing.shotType,
+    })
+  ) {
+    tier3RulesApplied.push("performance_transfer");
+  }
+  if (editOverRegenerateRequired) {
+    tier3RulesApplied.push("edit_over_regenerate");
+  }
+
+  // Step 5b — Build synthesized SP4-shaped values (per §11.3).
+  const selectedProvider = `${routingDecision.imageProvider}+${routingDecision.videoProvider}`;
+  const selectedCapability: PcdProviderCapability = {
+    // SYNTHESIZED — not persisted by SP18 writer (verified §11.3). All
+    // support flags TRUE because synthetic pairings supersede capability
+    // filtering by SP16 design (line 22-24 of route-synthetic-pcd-shot.ts).
+    provider: selectedProvider,
+    tiers: [input.routing.resolvedContext.effectiveTier],
+    shotTypes: [input.routing.shotType],
+    outputIntents: [input.routing.outputIntent],
+    supportsFirstLastFrame: true,
+    supportsEditExtend: true,
+    supportsPerformanceTransfer: true,
+  };
+  const routingDecisionReason: PcdRoutingDecisionReason = {
+    // SYNTHESIZED shim (§11.4). capabilityRefIndex carries pairingRefIndex —
+    // a re-labeling acknowledged as a shim; authoritative SP16 record lives
+    // in the syntheticRoutingDecisionReason column written by SP18's own
+    // stamper. tier3RulesApplied IS honest (recomputed in Step 5a).
+    capabilityRefIndex: routingDecision.pairingRefIndex,
+    matchedShotType: input.routing.shotType,
+    matchedEffectiveTier: input.routing.resolvedContext.effectiveTier,
+    matchedOutputIntent: input.routing.outputIntent,
+    tier3RulesApplied,
+    candidatesEvaluated: 1,
+    candidatesAfterTier3Filter: 1,
+    selectionRationale: routingDecision.decisionReason.selectionRationale,
+  };
+  return {
+    ...input.snapshotPersistence,
+    effectiveTier: input.routing.resolvedContext.effectiveTier,
+    shotType: input.routing.shotType,
+    outputIntent: input.routing.outputIntent,
+    selectedCapability,
+    selectedProvider,
+    routerVersion: routingDecision.syntheticRouterVersion,
+    routingDecisionReason,
+    editOverRegenerateRequired,
+  };
 }
 

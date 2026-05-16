@@ -231,8 +231,8 @@ describe("composeGenerationRouting — synthetic-route kling happy path (Case C)
     });
     stores.consentRecordReader.findById.mockResolvedValue({
       id: "consent_1",
-      creatorIdentityId: "creator_resolved_1",
-      status: "active",
+      revoked: false,
+      revokedAt: null,
     });
 
     const input = {
@@ -286,8 +286,8 @@ describe("composeGenerationRouting — synthetic-route seedance happy path (Case
     });
     stores.consentRecordReader.findById.mockResolvedValue({
       id: "consent_1",
-      creatorIdentityId: "creator_resolved_1",
-      status: "active",
+      revoked: false,
+      revokedAt: null,
     });
 
     const input = {
@@ -327,5 +327,220 @@ describe("composeGenerationRouting — synthetic-route seedance happy path (Case
     expect(writerPayload.selectedProvider).toBe("dalle+seedance");
     expect(writerPayload.videoProvider).toBe("seedance");
     expect(writerPayload.videoProviderChoice).toBe("seedance");
+  });
+});
+
+describe("composeGenerationRouting — Tier-3 synthetic invariant interaction (§11.3)", () => {
+  it("tier 3 + talking_head + final_export + synthetic kling: writer called once with recomputed tier3RulesApplied=[performance_transfer]", async () => {
+    const stores = buildStores();
+    stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting.mockResolvedValue(
+      buildSnapshotReturn(),
+    );
+    stores.creatorIdentityReader.findById.mockResolvedValue({
+      id: "creator_resolved_1",
+      consentRecordId: "consent_1",
+    });
+    stores.consentRecordReader.findById.mockResolvedValue({
+      id: "consent_1",
+      revoked: false,
+      revokedAt: null,
+    });
+
+    const input = {
+      routing: {
+        resolvedContext: buildResolvedContext({
+          creatorTierAtResolution: 3,
+          productTierAtResolution: 3,
+          effectiveTier: 3,
+        }),
+        shotType: "talking_head" as const,
+        outputIntent: "final_export" as const,
+        approvedCampaignContext: { kind: "none" as const },
+        syntheticSelection: {
+          creatorIdentityId: "creator_resolved_1",
+          syntheticIdentity: buildSyntheticIdentity(),
+          videoProviderChoice: "kling" as const,
+        },
+      },
+      snapshotPersistence: {
+        ...buildSnapshotPersistence(),
+        productTierAtGeneration: 3 as const,
+        avatarTierAtGeneration: 3 as const,
+      },
+      provenance: buildProvenance(),
+      now: FIXED_NOW,
+    };
+
+    const result = await composeGenerationRouting(input, stores);
+
+    expect(result.outcome).toBe("routed_and_written");
+    if (result.outcome !== "routed_and_written") return;
+
+    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).toHaveBeenCalledTimes(1);
+    const writerPayload = stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting.mock.calls[0]![0] as Record<string, unknown>;
+
+    const reason = writerPayload.routingDecisionReason as Record<string, unknown>;
+    const tier3Applied = reason.tier3RulesApplied as ReadonlyArray<string>;
+    // For tier 3 + talking_head + final_export: requiresFirstLastFrameAnchor (publishable video)
+    // AND requiresPerformanceTransfer (talking_head specifically). Both required.
+    expect(new Set(tier3Applied)).toEqual(
+      new Set(["first_last_frame_anchor", "performance_transfer"]),
+    );
+
+    expect(stores.campaignTakeStore.hasApprovedTier3TakeForCampaign).not.toHaveBeenCalled();
+  });
+
+  it("tier 3 + product_demo + final_export + campaign + approved-take=true + synthetic seedance: tier3RulesApplied includes edit_over_regenerate", async () => {
+    const stores = buildStores();
+    stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting.mockResolvedValue(
+      buildSnapshotReturn(),
+    );
+    stores.campaignTakeStore.hasApprovedTier3TakeForCampaign.mockResolvedValue(true);
+    stores.creatorIdentityReader.findById.mockResolvedValue({
+      id: "creator_resolved_1",
+      consentRecordId: "consent_1",
+    });
+    stores.consentRecordReader.findById.mockResolvedValue({
+      id: "consent_1",
+      revoked: false,
+      revokedAt: null,
+    });
+
+    const input = {
+      routing: {
+        resolvedContext: buildResolvedContext({
+          creatorTierAtResolution: 3,
+          productTierAtResolution: 3,
+          effectiveTier: 3,
+        }),
+        shotType: "product_demo" as const,
+        outputIntent: "final_export" as const,
+        approvedCampaignContext: {
+          kind: "campaign" as const,
+          organizationId: "org_1",
+          campaignId: "camp_1",
+        },
+        syntheticSelection: {
+          creatorIdentityId: "creator_resolved_1",
+          syntheticIdentity: buildSyntheticIdentity({
+            seedanceDirection: {
+              setting: "studio-dark",
+              motion: "subtle-dolly",
+              energy: "calm",
+              lighting: "moody",
+              avoid: ["fast-cuts"],
+            },
+          }),
+          videoProviderChoice: "seedance" as const,
+        },
+      },
+      snapshotPersistence: {
+        ...buildSnapshotPersistence(),
+        productTierAtGeneration: 3 as const,
+        avatarTierAtGeneration: 3 as const,
+      },
+      provenance: buildProvenance(),
+      now: FIXED_NOW,
+    };
+
+    const result = await composeGenerationRouting(input, stores);
+
+    expect(result.outcome).toBe("routed_and_written");
+    if (result.outcome !== "routed_and_written") return;
+
+    expect(stores.campaignTakeStore.hasApprovedTier3TakeForCampaign).toHaveBeenCalledTimes(1);
+    expect(stores.campaignTakeStore.hasApprovedTier3TakeForCampaign.mock.calls[0]![0]).toEqual({
+      organizationId: "org_1",
+      campaignId: "camp_1",
+    });
+
+    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).toHaveBeenCalledTimes(1);
+    const writerPayload = stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting.mock.calls[0]![0] as Record<string, unknown>;
+    const reason = writerPayload.routingDecisionReason as Record<string, unknown>;
+    const tier3Applied = reason.tier3RulesApplied as ReadonlyArray<string>;
+    // product_demo is NOT talking_head so performance_transfer is NOT required.
+    // first_last_frame_anchor (publishable video) + edit_over_regenerate (approved take).
+    expect(new Set(tier3Applied)).toEqual(
+      new Set(["first_last_frame_anchor", "edit_over_regenerate"]),
+    );
+  });
+
+  it("tier ≤ 2 synthetic skips Step 5a recompute (campaignTakeStore not called, tier3RulesApplied=[])", async () => {
+    const stores = buildStores();
+    stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting.mockResolvedValue(
+      buildSnapshotReturn(),
+    );
+    stores.creatorIdentityReader.findById.mockResolvedValue({
+      id: "creator_resolved_1",
+      consentRecordId: "consent_1",
+    });
+    stores.consentRecordReader.findById.mockResolvedValue({
+      id: "consent_1",
+      revoked: false,
+      revokedAt: null,
+    });
+
+    const input = {
+      routing: {
+        resolvedContext: buildResolvedContext(), // tier 2
+        shotType: "simple_ugc" as const,
+        outputIntent: "draft" as const,
+        approvedCampaignContext: { kind: "none" as const },
+        syntheticSelection: {
+          creatorIdentityId: "creator_resolved_1",
+          syntheticIdentity: buildSyntheticIdentity(),
+          videoProviderChoice: "kling" as const,
+        },
+      },
+      snapshotPersistence: buildSnapshotPersistence(),
+      provenance: buildProvenance(),
+      now: FIXED_NOW,
+    };
+
+    await composeGenerationRouting(input, stores);
+
+    expect(stores.campaignTakeStore.hasApprovedTier3TakeForCampaign).not.toHaveBeenCalled();
+    const writerPayload = stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting.mock.calls[0]![0] as Record<string, unknown>;
+    const reason = writerPayload.routingDecisionReason as Record<string, unknown>;
+    expect(reason.tier3RulesApplied).toEqual([]);
+  });
+
+  it("campaignTakeStore throws on tier 3 + campaign synthetic → composer rethrows, writer not called", async () => {
+    const stores = buildStores();
+    stores.campaignTakeStore.hasApprovedTier3TakeForCampaign.mockRejectedValue(
+      new Error("db unavailable"),
+    );
+
+    const input = {
+      routing: {
+        resolvedContext: buildResolvedContext({
+          creatorTierAtResolution: 3,
+          productTierAtResolution: 3,
+          effectiveTier: 3,
+        }),
+        shotType: "talking_head" as const,
+        outputIntent: "final_export" as const,
+        approvedCampaignContext: {
+          kind: "campaign" as const,
+          organizationId: "org_1",
+          campaignId: "camp_1",
+        },
+        syntheticSelection: {
+          creatorIdentityId: "creator_resolved_1",
+          syntheticIdentity: buildSyntheticIdentity(),
+          videoProviderChoice: "kling" as const,
+        },
+      },
+      snapshotPersistence: {
+        ...buildSnapshotPersistence(),
+        productTierAtGeneration: 3 as const,
+        avatarTierAtGeneration: 3 as const,
+      },
+      provenance: buildProvenance(),
+      now: FIXED_NOW,
+    };
+
+    await expect(composeGenerationRouting(input, stores)).rejects.toThrow("db unavailable");
+    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).not.toHaveBeenCalled();
   });
 });
