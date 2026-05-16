@@ -771,3 +771,187 @@ describe("composeGenerationRouting — synthetic delegation Case B (the SP10A-no
     expect(writerPayload.selectedProvider).not.toContain("+");
   });
 });
+
+describe("composeGenerationRouting — cost-forecast input plumbing post-routing", () => {
+  it("generic path: cost-forecast input mirrors provider, model, shotType, outputIntent, costHints", async () => {
+    const stores = buildStores();
+    stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast.mockResolvedValue(
+      buildSnapshotReturn(),
+    );
+    stores.costEstimator.estimate.mockResolvedValue(buildCostEstimateReturn());
+    stores.creatorIdentityReader.findById.mockResolvedValue({
+      id: "creator_resolved_1",
+      consentRecordId: "consent_1",
+    });
+    stores.consentRecordReader.findById.mockResolvedValue({
+      id: "consent_1",
+      revoked: false,
+      revokedAt: null,
+    });
+
+    const input = {
+      routing: {
+        resolvedContext: buildResolvedContext(),
+        shotType: "simple_ugc" as const,
+        outputIntent: "preview" as const,
+        approvedCampaignContext: { kind: "none" as const },
+      },
+      snapshotPersistence: {
+        ...buildSnapshotPersistence(),
+        providerModelSnapshot: "specific-model-1.2.3",
+      },
+      provenance: buildProvenance(),
+      costHints: { durationSec: 12, tokenCount: 8000 },
+      now: FIXED_NOW,
+    };
+    await composeGenerationRouting(input, stores);
+
+    expect(stores.costEstimator.estimate).toHaveBeenCalledTimes(1);
+    const estimateInput = stores.costEstimator.estimate.mock.calls[0]![0] as Record<string, unknown>;
+    expect(estimateInput.model).toBe("specific-model-1.2.3");
+    expect(estimateInput.shotType).toBe("simple_ugc");
+    expect(estimateInput.outputIntent).toBe("preview");
+    expect(estimateInput.durationSec).toBe(12);
+    expect(estimateInput.tokenCount).toBe(8000);
+    expect(estimateInput.provider).toEqual(expect.any(String));
+  });
+
+  it("delegation path: cost-forecast uses sp4Decision.selectedProvider (NOT the synthetic composite)", async () => {
+    const stores = buildStores();
+    stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast.mockResolvedValue(
+      buildSnapshotReturn(),
+    );
+    stores.costEstimator.estimate.mockResolvedValue(buildCostEstimateReturn());
+    stores.creatorIdentityReader.findById.mockResolvedValue({
+      id: "creator_resolved_1",
+      consentRecordId: "consent_1",
+    });
+    stores.consentRecordReader.findById.mockResolvedValue({
+      id: "consent_1",
+      revoked: false,
+      revokedAt: null,
+    });
+    const input = {
+      routing: {
+        resolvedContext: buildResolvedContext(),
+        shotType: "script_only" as const,
+        outputIntent: "draft" as const,
+        approvedCampaignContext: { kind: "none" as const },
+        syntheticSelection: {
+          creatorIdentityId: "creator_resolved_1",
+          syntheticIdentity: buildSyntheticIdentity(),
+          videoProviderChoice: "kling" as const,
+        },
+      },
+      snapshotPersistence: buildSnapshotPersistence(),
+      provenance: buildProvenance(),
+      now: FIXED_NOW,
+    };
+    await composeGenerationRouting(input, stores);
+
+    const estimateInput = stores.costEstimator.estimate.mock.calls[0]![0] as Record<string, unknown>;
+    // Must NOT contain a '+' — that would indicate a synthetic composite leaked
+    // into the cost forecast.
+    expect(estimateInput.provider).not.toContain("+");
+  });
+});
+
+describe("composeGenerationRouting — error propagation", () => {
+  it("writePcdIdentitySnapshotWithCostForecast throws → composer rethrows", async () => {
+    const stores = buildStores();
+    stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast.mockRejectedValue(
+      new Error("snapshot store failure"),
+    );
+    stores.costEstimator.estimate.mockResolvedValue(buildCostEstimateReturn());
+    stores.creatorIdentityReader.findById.mockResolvedValue({
+      id: "creator_resolved_1",
+      consentRecordId: "consent_1",
+    });
+    stores.consentRecordReader.findById.mockResolvedValue({
+      id: "consent_1",
+      revoked: false,
+      revokedAt: null,
+    });
+    const input = {
+      routing: {
+        resolvedContext: buildResolvedContext(),
+        shotType: "simple_ugc" as const,
+        outputIntent: "draft" as const,
+        approvedCampaignContext: { kind: "none" as const },
+      },
+      snapshotPersistence: buildSnapshotPersistence(),
+      provenance: buildProvenance(),
+      now: FIXED_NOW,
+    };
+    await expect(composeGenerationRouting(input, stores)).rejects.toThrow("snapshot store failure");
+  });
+
+  it("writePcdIdentitySnapshotWithSyntheticRouting throws → composer rethrows", async () => {
+    const stores = buildStores();
+    stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting.mockRejectedValue(
+      new Error("sp18 store failure"),
+    );
+    stores.creatorIdentityReader.findById.mockResolvedValue({
+      id: "creator_resolved_1",
+      consentRecordId: "consent_1",
+    });
+    stores.consentRecordReader.findById.mockResolvedValue({
+      id: "consent_1",
+      revoked: false,
+      revokedAt: null,
+    });
+    const input = {
+      routing: {
+        resolvedContext: buildResolvedContext(),
+        shotType: "simple_ugc" as const,
+        outputIntent: "draft" as const,
+        approvedCampaignContext: { kind: "none" as const },
+        syntheticSelection: {
+          creatorIdentityId: "creator_resolved_1",
+          syntheticIdentity: buildSyntheticIdentity(),
+          videoProviderChoice: "kling" as const,
+        },
+      },
+      snapshotPersistence: buildSnapshotPersistence(),
+      provenance: buildProvenance(),
+      now: FIXED_NOW,
+    };
+    await expect(composeGenerationRouting(input, stores)).rejects.toThrow("sp18 store failure");
+  });
+
+  it("router throws (campaignTakeStore failure on generic tier-3 + campaign path) → composer rethrows, no writer called", async () => {
+    // SP4 router Step 3 calls requiresEditOverRegenerate(...) which queries
+    // campaignTakeStore for tier 3 + campaign context. A throwing store
+    // surfaces as router throw → composer rethrow.
+    const stores = buildStores();
+    stores.campaignTakeStore.hasApprovedTier3TakeForCampaign.mockRejectedValue(
+      new Error("campaign-take db failure"),
+    );
+    const input = {
+      routing: {
+        resolvedContext: buildResolvedContext({
+          creatorTierAtResolution: 3,
+          productTierAtResolution: 3,
+          effectiveTier: 3,
+        }),
+        shotType: "simple_ugc" as const,
+        outputIntent: "preview" as const,
+        approvedCampaignContext: {
+          kind: "campaign" as const,
+          organizationId: "org_1",
+          campaignId: "camp_1",
+        },
+      },
+      snapshotPersistence: {
+        ...buildSnapshotPersistence(),
+        productTierAtGeneration: 3 as const,
+        avatarTierAtGeneration: 3 as const,
+      },
+      provenance: buildProvenance(),
+      now: FIXED_NOW,
+    };
+    await expect(composeGenerationRouting(input, stores)).rejects.toThrow("campaign-take db failure");
+    expect(stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast).not.toHaveBeenCalled();
+    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).not.toHaveBeenCalled();
+  });
+});
