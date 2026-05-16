@@ -856,6 +856,59 @@ describe("composeGenerationRouting — cost-forecast input plumbing post-routing
   });
 });
 
+describe("composeGenerationRouting — editOverRegenerateRequired derivation (generic + delegation paths)", () => {
+  it("generic path: tier 3 + approved campaign take → editOverRegenerateRequired=true flows into writer payload", async () => {
+    const stores = buildStores();
+    stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast.mockResolvedValue(
+      buildSnapshotReturn(),
+    );
+    stores.costEstimator.estimate.mockResolvedValue(buildCostEstimateReturn());
+    stores.campaignTakeStore.hasApprovedTier3TakeForCampaign.mockResolvedValue(true);
+    stores.creatorIdentityReader.findById.mockResolvedValue({
+      id: "creator_resolved_1",
+      consentRecordId: "consent_1",
+    });
+    stores.consentRecordReader.findById.mockResolvedValue({
+      id: "consent_1",
+      revoked: false,
+      revokedAt: null,
+    });
+    // Pick a (tier 3, shot, intent) triple that has an edit-extend-capable
+    // provider in the matrix so SP4 routes successfully when the tier 3 rule
+    // fires. Verify against PCD_PROVIDER_CAPABILITY_MATRIX —
+    // adjust shotType / outputIntent if necessary.
+    const input = {
+      routing: {
+        resolvedContext: buildResolvedContext({
+          creatorTierAtResolution: 3,
+          productTierAtResolution: 3,
+          effectiveTier: 3,
+        }),
+        shotType: "product_in_hand" as const,
+        outputIntent: "preview" as const,
+        approvedCampaignContext: {
+          kind: "campaign" as const,
+          organizationId: "org_1",
+          campaignId: "camp_1",
+        },
+      },
+      snapshotPersistence: {
+        ...buildSnapshotPersistence(),
+        productTierAtGeneration: 3 as const,
+        avatarTierAtGeneration: 3 as const,
+      },
+      provenance: buildProvenance(),
+      now: FIXED_NOW,
+    };
+    await composeGenerationRouting(input, stores);
+
+    const writerPayload = stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast.mock.calls[0]![0] as Record<string, unknown>;
+    const reason = writerPayload.routingDecisionReason as Record<string, unknown>;
+    const tier3Applied = reason.tier3RulesApplied as ReadonlyArray<string>;
+    expect(tier3Applied).toContain("edit_over_regenerate");
+  });
+});
+
 describe("composeGenerationRouting — error propagation", () => {
   it("writePcdIdentitySnapshotWithCostForecast throws → composer rethrows", async () => {
     const stores = buildStores();
