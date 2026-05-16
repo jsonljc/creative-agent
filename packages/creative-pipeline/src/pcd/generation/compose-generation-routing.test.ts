@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type {
   CreatorIdentitySyntheticPayload,
+  PcdIdentitySnapshot,
   PcdPreproductionChainResult,
 } from "@creativeagent/schemas";
+import type { CostEstimatorOutput } from "../cost/cost-estimator.js";
 import { InvariantViolationError } from "../invariant-violation-error.js";
 import type { ResolvedPcdContext } from "../registry-resolver.js";
 import { composeGenerationRouting } from "./compose-generation-routing.js";
@@ -115,7 +117,7 @@ function buildStores() {
     pcdSp18IdentitySnapshotStore: { createForShotWithSyntheticRouting: vi.fn() },
     costEstimator: { estimate: vi.fn() },
     creatorIdentityReader: { findById: vi.fn() },
-    consentRecordReader: { findActiveByCreator: vi.fn() },
+    consentRecordReader: { findById: vi.fn() },
     clock: () => FIXED_NOW,
   };
 }
@@ -145,5 +147,74 @@ describe("composeGenerationRouting — Step 1 consistency assert", () => {
     expect(stores.campaignTakeStore.hasApprovedTier3TakeForCampaign).not.toHaveBeenCalled();
     expect(stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast).not.toHaveBeenCalled();
     expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).not.toHaveBeenCalled();
+  });
+});
+
+function buildSnapshotReturn(): PcdIdentitySnapshot {
+  return { id: "snap_returned_1" } as unknown as PcdIdentitySnapshot;
+}
+
+function buildCostEstimateReturn(): CostEstimatorOutput {
+  return {
+    estimatedUsd: 0.42,
+    currency: "USD",
+    lineItems: [{ label: "model", estimatedUsd: 0.42 }],
+    estimatorVersion: "stub-cost-estimator@1.0.0",
+  };
+}
+
+describe("composeGenerationRouting — generic-route happy path (Case A)", () => {
+  it("routes via SP4 and writes via writePcdIdentitySnapshotWithCostForecast with reconstructed args", async () => {
+    const stores = buildStores();
+    stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast.mockResolvedValue(
+      buildSnapshotReturn(),
+    );
+    stores.costEstimator.estimate.mockResolvedValue(buildCostEstimateReturn());
+    stores.creatorIdentityReader.findById.mockResolvedValue({
+      id: "creator_resolved_1",
+      consentRecordId: "consent_1",
+    });
+    stores.consentRecordReader.findById.mockResolvedValue({
+      id: "consent_1",
+      revoked: false,
+      revokedAt: null,
+    });
+
+    const input = {
+      routing: {
+        resolvedContext: buildResolvedContext(),
+        shotType: "simple_ugc" as const,
+        outputIntent: "draft" as const,
+        approvedCampaignContext: { kind: "none" as const },
+      },
+      snapshotPersistence: buildSnapshotPersistence(),
+      provenance: buildProvenance(),
+      costHints: { durationSec: 8 },
+      now: FIXED_NOW,
+    };
+
+    const result = await composeGenerationRouting(input, stores);
+
+    expect(result.outcome).toBe("routed_and_written");
+    if (result.outcome !== "routed_and_written") return;
+    expect(result.writerKind).toBe("writePcdIdentitySnapshotWithCostForecast");
+    expect(result.snapshot).toEqual(buildSnapshotReturn());
+
+    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).not.toHaveBeenCalled();
+
+    expect(stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast).toHaveBeenCalledTimes(1);
+    const writerCall = stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast.mock.calls[0]!;
+    const writerPayload = writerCall[0] as Record<string, unknown>;
+    expect(writerPayload.selectedProvider).toEqual(expect.any(String));
+    expect(writerPayload.assetRecordId).toBe("asset_1");
+    expect(writerPayload.shotSpecVersion).toBe("shot-spec@1.0.0");
+
+    expect(stores.costEstimator.estimate).toHaveBeenCalledTimes(1);
+    const estimateInput = stores.costEstimator.estimate.mock.calls[0]![0] as Record<string, unknown>;
+    expect(estimateInput.provider).toEqual(writerPayload.selectedProvider);
+    expect(estimateInput.model).toBe("model-1.0");
+    expect(estimateInput.shotType).toBe("simple_ugc");
+    expect(estimateInput.outputIntent).toBe("draft");
+    expect(estimateInput.durationSec).toBe(8);
   });
 });

@@ -41,10 +41,13 @@ import type {
   SyntheticPcdRoutingDecision,
 } from "@creativeagent/schemas";
 import { InvariantViolationError } from "../invariant-violation-error.js";
+import { routePcdShot } from "../provider-router.js";
 import type { ApprovedCampaignContext, ProviderRouterStores, PcdRoutingDecision } from "../provider-router.js";
 import type { ResolvedPcdContext } from "../registry-resolver.js";
 import type { StampPcdProvenanceInput } from "../provenance/stamp-pcd-provenance.js";
+import { writePcdIdentitySnapshotWithCostForecast } from "../cost/write-pcd-identity-snapshot-with-cost-forecast.js";
 import type { WritePcdIdentitySnapshotWithCostForecastStores } from "../cost/write-pcd-identity-snapshot-with-cost-forecast.js";
+import type { WritePcdIdentitySnapshotInput } from "../pcd-identity-snapshot-writer.js";
 import type { WritePcdIdentitySnapshotWithSyntheticRoutingStores } from "../synthetic-routing-provenance/write-pcd-identity-snapshot-with-synthetic-routing.js";
 
 export type SyntheticSelectionContext = {
@@ -131,10 +134,75 @@ export async function composeGenerationRouting(
     }
   }
 
-  // Step 2-5 — implemented in Tasks 5-9.
-  throw new Error("composeGenerationRouting: body not yet implemented past Step 1");
+  // Step 2 — Route. Branch only on syntheticSelection presence.
+  let routingDecision: PcdRoutingDecision | SyntheticPcdRoutingDecision;
+  if (input.routing.syntheticSelection !== undefined) {
+    // Synthetic branch — implemented in Task 6.
+    throw new Error("synthetic branch not yet implemented");
+  } else {
+    routingDecision = await routePcdShot(
+      {
+        resolvedContext: input.routing.resolvedContext,
+        shotType: input.routing.shotType,
+        outputIntent: input.routing.outputIntent,
+        approvedCampaignContext: input.routing.approvedCampaignContext,
+      },
+      { campaignTakeStore: stores.campaignTakeStore },
+    );
+  }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  void stores;
+  // Step 3 — Map decision shape to write path.
+  // Case A: SP4 allowed.
+  if (
+    !("kind" in routingDecision) &&
+    routingDecision.allowed === true
+  ) {
+    // Step 4 — Generic write path.
+    const sp4Decision = routingDecision;
+    const snapshotInput: WritePcdIdentitySnapshotInput = {
+      ...input.snapshotPersistence,
+      // shotSpecVersion is nullable on the input contract (SP3 stamp may not have run);
+      // WritePcdIdentitySnapshotInput requires string — Zod will throw if null reaches the
+      // SP4 parse, which is the correct behaviour (generation without a spec version is
+      // a programmer error caught by defense-in-depth).
+      shotSpecVersion: input.snapshotPersistence.shotSpecVersion as string,
+      effectiveTier: input.routing.resolvedContext.effectiveTier,
+      shotType: input.routing.shotType,
+      outputIntent: input.routing.outputIntent,
+      selectedCapability: sp4Decision.selectedCapability,
+      selectedProvider: sp4Decision.selectedProvider,
+      routerVersion: sp4Decision.routerVersion,
+      routingDecisionReason: sp4Decision.decisionReason,
+      editOverRegenerateRequired:
+        sp4Decision.decisionReason.tier3RulesApplied.includes("edit_over_regenerate"),
+    };
+    const costForecast = {
+      provider: sp4Decision.selectedProvider,
+      model: input.snapshotPersistence.providerModelSnapshot,
+      shotType: input.routing.shotType,
+      outputIntent: input.routing.outputIntent,
+      durationSec: input.costHints?.durationSec,
+      tokenCount: input.costHints?.tokenCount,
+    };
+    const snapshot = await writePcdIdentitySnapshotWithCostForecast(
+      { snapshot: snapshotInput, provenance: input.provenance, costForecast },
+      {
+        pcdSp10IdentitySnapshotStore: stores.pcdSp10IdentitySnapshotStore,
+        costEstimator: stores.costEstimator,
+        creatorIdentityReader: stores.creatorIdentityReader,
+        consentRecordReader: stores.consentRecordReader,
+        clock: stores.clock,
+      },
+    );
+    return {
+      outcome: "routed_and_written",
+      writerKind: "writePcdIdentitySnapshotWithCostForecast",
+      decision: routingDecision,
+      snapshot,
+    };
+  }
+
+  // Cases B + C + denials — implemented in Tasks 6, 8, 9, 10.
+  throw new Error("decision-shape mapping not yet implemented for this branch");
 }
 
