@@ -81,7 +81,7 @@ export type ComposeGenerationRoutingInput = {
     providerModelSnapshot: string;
     seedOrNoSeed: string;
     rewrittenPromptText: string | null;
-    shotSpecVersion: string | null;
+    shotSpecVersion: string;
   };
   provenance: StampPcdProvenanceInput;
   costHints?: { durationSec?: number; tokenCount?: number };
@@ -161,11 +161,6 @@ export async function composeGenerationRouting(
     const sp4Decision = routingDecision;
     const snapshotInput: WritePcdIdentitySnapshotInput = {
       ...input.snapshotPersistence,
-      // shotSpecVersion is nullable on the input contract (SP3 stamp may not have run);
-      // WritePcdIdentitySnapshotInput requires string — Zod will throw if null reaches the
-      // SP4 parse, which is the correct behaviour (generation without a spec version is
-      // a programmer error caught by defense-in-depth).
-      shotSpecVersion: input.snapshotPersistence.shotSpecVersion as string,
       effectiveTier: input.routing.resolvedContext.effectiveTier,
       shotType: input.routing.shotType,
       outputIntent: input.routing.outputIntent,
