@@ -60,9 +60,7 @@ describe("CreatorPerformanceMetricsSchema — primitive shape", () => {
   });
 
   it("rejects non-integer sampleSize", () => {
-    expect(() =>
-      CreatorPerformanceMetricsSchema.parse({ ...baseline, sampleSize: 1.5 }),
-    ).toThrow();
+    expect(() => CreatorPerformanceMetricsSchema.parse({ ...baseline, sampleSize: 1.5 })).toThrow();
   });
 });
 

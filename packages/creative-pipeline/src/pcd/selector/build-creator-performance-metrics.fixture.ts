@@ -3,7 +3,10 @@
 // constant from @creativeagent/schemas per Guardrail C-1 (schemas-owned).
 // .fixture.ts files are allowlisted by anti-pattern test #3 as permitted
 // importers of PCD_PERFORMANCE_OVERLAY_VERSION.
-import { PCD_PERFORMANCE_OVERLAY_VERSION, type CreatorPerformanceMetrics } from "@creativeagent/schemas";
+import {
+  PCD_PERFORMANCE_OVERLAY_VERSION,
+  type CreatorPerformanceMetrics,
+} from "@creativeagent/schemas";
 
 const BASELINE: CreatorPerformanceMetrics = {
   creatorIdentityId: "creator-baseline",

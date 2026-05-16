@@ -33,10 +33,10 @@ export const CreatorPerformanceMetricsSchema = z
     metricsVersion: z.string().min(1),
   })
   .strict()
-  .refine(
-    (m) => m.successCount + m.failureCount + m.manualSkipCount === m.sampleSize,
-    { path: ["sampleSize"], message: "counts must sum to sampleSize" },
-  )
+  .refine((m) => m.successCount + m.failureCount + m.manualSkipCount === m.sampleSize, {
+    path: ["sampleSize"],
+    message: "counts must sum to sampleSize",
+  })
   .refine(
     (m) =>
       m.sampleSize === 0
@@ -47,10 +47,10 @@ export const CreatorPerformanceMetricsSchema = z
       message: "medianLatencyMs/successRate must match sampleSize",
     },
   )
-  .refine(
-    (m) => m.windowEnd.getTime() > m.windowStart.getTime(),
-    { path: ["windowEnd"], message: "windowEnd must be after windowStart" },
-  )
+  .refine((m) => m.windowEnd.getTime() > m.windowStart.getTime(), {
+    path: ["windowEnd"],
+    message: "windowEnd must be after windowStart",
+  })
   .readonly();
 
 export type CreatorPerformanceMetrics = z.infer<typeof CreatorPerformanceMetricsSchema>;
