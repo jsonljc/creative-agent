@@ -133,12 +133,12 @@ const FROZEN_FILES = [
   "packages/creative-pipeline/src/pcd/script/script-seed.ts",
   "packages/creative-pipeline/src/pcd/script/script-selector-version.ts",
   "packages/creative-pipeline/src/pcd/script/script-selector.ts",
-  "packages/creative-pipeline/src/pcd/selector/index.ts",
+  // selector/index.ts intentionally omitted: SP21 widened it (added composeSyntheticCreatorSelection barrel export).
   "packages/creative-pipeline/src/pcd/selector/selector-version.ts",
   // selector.ts intentionally omitted: SP20 widened it under Guardrail B-1.
   // See docs/plans/2026-05-16-pcd-performance-overlay-rerank-sp20-design.md §2.1.
   "packages/creative-pipeline/src/pcd/shot-spec-version.ts",
-  "packages/creative-pipeline/src/pcd/synthetic-creator/index.ts",
+  // synthetic-creator/index.ts intentionally omitted: SP21 widened it (added port + roster-reader barrel exports).
   "packages/creative-pipeline/src/pcd/synthetic-creator/license-gate.ts",
   "packages/creative-pipeline/src/pcd/synthetic-creator/seed.ts",
   "packages/creative-pipeline/src/pcd/synthetic-router/index.ts",
@@ -158,7 +158,7 @@ const FROZEN_FILES = [
   "packages/db/src/stores/prisma-consent-revocation-store.ts",
   "packages/db/src/stores/prisma-creative-job-reader.ts",
   "packages/db/src/stores/prisma-creative-job-store.ts",
-  "packages/db/src/stores/prisma-creator-identity-license-reader.ts",
+  // prisma-creator-identity-license-reader.ts intentionally omitted: SP21 widened it (added findActiveByClinicAndScope).
   "packages/db/src/stores/prisma-creator-identity-license-store.ts",
   "packages/db/src/stores/prisma-creator-identity-reader.ts",
   "packages/db/src/stores/prisma-creator-identity-store.ts",

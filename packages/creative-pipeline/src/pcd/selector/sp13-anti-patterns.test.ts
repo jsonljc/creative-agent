@@ -282,6 +282,32 @@ describe("SP13 anti-patterns", () => {
         "packages/db/src/stores/__tests__/prisma-pcd-creator-performance-metrics-reader.test.ts"
       )
         continue;
+      // SP21 net-new files are out of scope (necessary maintenance — SP13 test
+      // was written before SP21 territory existed; same precedent as prior SP allowlist additions).
+      if (
+        file === "packages/creative-pipeline/src/pcd/synthetic-creator/index.ts"
+      )
+        continue;
+      if (
+        file ===
+        "packages/creative-pipeline/src/pcd/synthetic-creator/sp11-seed-synthetic-creator-roster-reader.test.ts"
+      )
+        continue;
+      if (
+        file ===
+        "packages/creative-pipeline/src/pcd/synthetic-creator/sp11-seed-synthetic-creator-roster-reader.ts"
+      )
+        continue;
+      if (
+        file ===
+        "packages/creative-pipeline/src/pcd/synthetic-creator/synthetic-creator-selection-ports.ts"
+      )
+        continue;
+      if (file === "packages/db/src/stores/prisma-creator-identity-license-reader.ts") continue;
+      if (
+        file === "packages/db/src/stores/__tests__/prisma-creator-identity-license-reader.test.ts"
+      )
+        continue;
 
       expect(allowedEdits.has(file), `SP13 modified disallowed file: ${file}`).toBe(true);
     }

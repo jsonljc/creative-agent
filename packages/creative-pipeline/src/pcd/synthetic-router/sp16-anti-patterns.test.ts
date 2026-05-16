@@ -291,6 +291,8 @@ describe("SP16 anti-patterns", () => {
       if (file === "packages/creative-pipeline/src/pcd/selector/selector.test.ts") continue;
       if (file === "packages/creative-pipeline/src/pcd/selector/sp20-anti-patterns.test.ts")
         continue;
+      if (file === "packages/creative-pipeline/src/pcd/selector/sp21-anti-patterns.test.ts")
+        continue;
       if (file === "packages/schemas/src/pcd-synthetic-selector.ts") continue;
       if (file === "packages/schemas/src/__tests__/pcd-synthetic-selector.test.ts") continue;
       if (
@@ -318,6 +320,39 @@ describe("SP16 anti-patterns", () => {
       if (
         file ===
         "packages/db/src/stores/__tests__/prisma-pcd-creator-performance-metrics-reader.test.ts"
+      )
+        continue;
+      // SP21 carve-out — SP21 net-new composer, ports, seed adapter, and db widen.
+      // See docs/plans/2026-05-16-pcd-sp21-synthetic-selector-composer-design.md.
+      if (
+        file ===
+        "packages/creative-pipeline/src/pcd/selector/compose-synthetic-creator-selection.test.ts"
+      )
+        continue;
+      if (
+        file === "packages/creative-pipeline/src/pcd/selector/compose-synthetic-creator-selection.ts"
+      )
+        continue;
+      if (file === "packages/creative-pipeline/src/pcd/selector/index.ts") continue;
+      if (file === "packages/creative-pipeline/src/pcd/synthetic-creator/index.ts") continue;
+      if (
+        file ===
+        "packages/creative-pipeline/src/pcd/synthetic-creator/sp11-seed-synthetic-creator-roster-reader.test.ts"
+      )
+        continue;
+      if (
+        file ===
+        "packages/creative-pipeline/src/pcd/synthetic-creator/sp11-seed-synthetic-creator-roster-reader.ts"
+      )
+        continue;
+      if (
+        file ===
+        "packages/creative-pipeline/src/pcd/synthetic-creator/synthetic-creator-selection-ports.ts"
+      )
+        continue;
+      if (file === "packages/db/src/stores/prisma-creator-identity-license-reader.ts") continue;
+      if (
+        file === "packages/db/src/stores/__tests__/prisma-creator-identity-license-reader.test.ts"
       )
         continue;
       expect(
