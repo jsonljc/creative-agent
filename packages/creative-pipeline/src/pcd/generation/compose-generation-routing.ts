@@ -40,6 +40,7 @@ import type {
   PcdShotType,
   SyntheticPcdRoutingDecision,
 } from "@creativeagent/schemas";
+import { InvariantViolationError } from "../invariant-violation-error.js";
 import type { ApprovedCampaignContext, ProviderRouterStores, PcdRoutingDecision } from "../provider-router.js";
 import type { ResolvedPcdContext } from "../registry-resolver.js";
 import type { StampPcdProvenanceInput } from "../provenance/stamp-pcd-provenance.js";
@@ -110,11 +111,30 @@ export type ComposeGenerationRoutingResult =
       decision: PcdRoutingDecision | SyntheticPcdRoutingDecision;
     };
 
-// Types-only signature — implementation lands in Tasks 4-9.
-// Re-exports below ensure type-only usage compiles cleanly before any body
-// exists.
-export type ComposeGenerationRouting = (
+export async function composeGenerationRouting(
   input: ComposeGenerationRoutingInput,
   stores: ComposeGenerationRoutingStores,
-) => Promise<ComposeGenerationRoutingResult>;
+): Promise<ComposeGenerationRoutingResult> {
+  // Step 1 — Optional consistency assert.
+  if (input.routing.syntheticSelection !== undefined) {
+    if (
+      input.routing.syntheticSelection.creatorIdentityId !==
+      input.routing.resolvedContext.creatorIdentityId
+    ) {
+      throw new InvariantViolationError(
+        "synthetic selection creatorIdentityId mismatch with resolvedContext",
+        {
+          syntheticSelectionId: input.routing.syntheticSelection.creatorIdentityId,
+          resolvedContextId: input.routing.resolvedContext.creatorIdentityId,
+        },
+      );
+    }
+  }
+
+  // Step 2-5 — implemented in Tasks 5-9.
+  throw new Error("composeGenerationRouting: body not yet implemented past Step 1");
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  void stores;
+}
 

@@ -1,5 +1,5 @@
+export { composeGenerationRouting } from "./compose-generation-routing.js";
 export type {
-  ComposeGenerationRouting,
   ComposeGenerationRoutingInput,
   ComposeGenerationRoutingResult,
   ComposeGenerationRoutingStores,
