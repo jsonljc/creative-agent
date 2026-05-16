@@ -273,3 +273,59 @@ describe("composeGenerationRouting — synthetic-route kling happy path (Case C)
     expect(writerPayload.videoProviderChoice).toBe("kling");
   });
 });
+
+describe("composeGenerationRouting — synthetic-route seedance happy path (Case C)", () => {
+  it("routes via SP16 and writes via writePcdIdentitySnapshotWithSyntheticRouting with selectedProvider='dalle+seedance'", async () => {
+    const stores = buildStores();
+    stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting.mockResolvedValue(
+      buildSnapshotReturn(),
+    );
+    stores.creatorIdentityReader.findById.mockResolvedValue({
+      id: "creator_resolved_1",
+      consentRecordId: "consent_1",
+    });
+    stores.consentRecordReader.findById.mockResolvedValue({
+      id: "consent_1",
+      creatorIdentityId: "creator_resolved_1",
+      status: "active",
+    });
+
+    const input = {
+      routing: {
+        resolvedContext: buildResolvedContext(),
+        shotType: "product_demo" as const,
+        outputIntent: "draft" as const,
+        approvedCampaignContext: { kind: "none" as const },
+        syntheticSelection: {
+          creatorIdentityId: "creator_resolved_1",
+          syntheticIdentity: buildSyntheticIdentity({
+            seedanceDirection: {
+              setting: "outdoor-park",
+              motion: "static",
+              energy: "calm",
+              lighting: "natural",
+              avoid: ["fast-cuts"],
+            },
+          }),
+          videoProviderChoice: "seedance" as const,
+        },
+      },
+      snapshotPersistence: buildSnapshotPersistence(),
+      provenance: buildProvenance(),
+      now: FIXED_NOW,
+    };
+
+    const result = await composeGenerationRouting(input, stores);
+
+    expect(result.outcome).toBe("routed_and_written");
+    if (result.outcome !== "routed_and_written") return;
+    expect(result.writerKind).toBe("writePcdIdentitySnapshotWithSyntheticRouting");
+    expect(stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast).not.toHaveBeenCalled();
+    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).toHaveBeenCalledTimes(1);
+
+    const writerPayload = stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting.mock.calls[0]![0] as Record<string, unknown>;
+    expect(writerPayload.selectedProvider).toBe("dalle+seedance");
+    expect(writerPayload.videoProvider).toBe("seedance");
+    expect(writerPayload.videoProviderChoice).toBe("seedance");
+  });
+});
