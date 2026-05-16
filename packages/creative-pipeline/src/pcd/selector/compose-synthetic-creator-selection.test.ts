@@ -214,3 +214,44 @@ describe("composeSyntheticCreatorSelection — empty leases", () => {
     }
   });
 });
+
+describe("composeSyntheticCreatorSelection — empty metrics (cold start)", () => {
+  it("passes empty performanceHistory Map to selector; performanceOverlayApplied=true; metricsSnapshotVersion=null when map is empty", async () => {
+    const now = new Date("2026-05-16T12:00:00.000Z");
+    const brief = buildBrief({ briefId: "brief_sp21_cold_metrics" });
+
+    const compatibleRoster = SP11_SYNTHETIC_CREATOR_ROSTER.filter(
+      (e) =>
+        e.synthetic.status === "active" &&
+        e.synthetic.market === brief.market &&
+        e.synthetic.treatmentClass === brief.treatmentClass,
+    );
+    const leases = compatibleRoster.map((e) => buildLease(e.creatorIdentity.id));
+
+    const rosterReader: SyntheticCreatorRosterReader = {
+      listActiveCompatibleRoster: vi.fn().mockResolvedValue(compatibleRoster),
+    };
+    const leaseReader: SyntheticCreatorLeaseReader = {
+      findActiveLeasesForBriefScope: vi.fn().mockResolvedValue(leases),
+    };
+    const metricsReader: SyntheticCreatorMetricsReader = {
+      findMetricsForCreators: vi
+        .fn()
+        .mockResolvedValue(new Map<string, CreatorPerformanceMetrics>()),
+    };
+
+    const decision = await composeSyntheticCreatorSelection(
+      { brief, now },
+      { rosterReader, leaseReader, metricsReader },
+    );
+
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed === true) {
+      // performanceOverlayApplied tracks "did the composer supply a map?"
+      // — yes, even though the map is empty. (Selector's resolveMetricsVersion
+      // returns null on an empty map per its reader contract.)
+      expect(decision.performanceOverlayApplied).toBe(true);
+      expect(decision.metricsSnapshotVersion).toBeNull();
+    }
+  });
+});
