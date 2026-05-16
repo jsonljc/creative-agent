@@ -175,3 +175,42 @@ describe("composeSyntheticCreatorSelection — empty roster short-circuit", () =
     }
   });
 });
+
+describe("composeSyntheticCreatorSelection — empty leases", () => {
+  it("calls metrics reader; selector returns all_blocked_by_license", async () => {
+    const now = new Date("2026-05-16T12:00:00.000Z");
+    const brief = buildBrief({ briefId: "brief_sp21_empty_leases" });
+
+    const compatibleRoster = SP11_SYNTHETIC_CREATOR_ROSTER.filter(
+      (e) =>
+        e.synthetic.status === "active" &&
+        e.synthetic.market === brief.market &&
+        e.synthetic.treatmentClass === brief.treatmentClass,
+    );
+
+    const rosterReader: SyntheticCreatorRosterReader = {
+      listActiveCompatibleRoster: vi.fn().mockResolvedValue(compatibleRoster),
+    };
+    const leaseReader: SyntheticCreatorLeaseReader = {
+      findActiveLeasesForBriefScope: vi.fn().mockResolvedValue([]),
+    };
+    const metricsReader: SyntheticCreatorMetricsReader = {
+      findMetricsForCreators: vi
+        .fn()
+        .mockResolvedValue(new Map<string, CreatorPerformanceMetrics>()),
+    };
+
+    const decision = await composeSyntheticCreatorSelection(
+      { brief, now },
+      { rosterReader, leaseReader, metricsReader },
+    );
+
+    expect(leaseReader.findActiveLeasesForBriefScope).toHaveBeenCalledOnce();
+    expect(metricsReader.findMetricsForCreators).toHaveBeenCalledOnce();
+
+    expect(decision.allowed).toBe(false);
+    if (decision.allowed === false) {
+      expect(decision.reason).toBe("all_blocked_by_license");
+    }
+  });
+});
