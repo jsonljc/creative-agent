@@ -2425,10 +2425,12 @@ git commit -m "test(pcd): SP22 allowlist sweep — extend prior sp*-anti-pattern
 - [ ] **Step 5: Final verification gate inside the worktree**
 
 ```bash
-pnpm typecheck && pnpm test && pnpm lint && git diff --name-only main...HEAD | xargs pnpm exec prettier --check
+pnpm typecheck && pnpm test && git diff --name-only main...HEAD | xargs pnpm exec prettier --check
 ```
 
-Expected: all four green. If `prettier --check` flags any file, run `pnpm exec prettier --write <file>` and amend the most recent SP22 commit (or create a fix-up commit if amending would mix concerns).
+Expected: all three green. If `prettier --check` flags any file, run `pnpm exec prettier --write <file>` and amend the most recent SP22 commit (or create a fix-up commit if amending would mix concerns).
+
+**Note on `pnpm lint`:** The workspace's `lint` script references `eslint` but `eslint` is NOT declared as a dependency in any `package.json` and the binary is absent from `node_modules/.bin/`. `pnpm lint` fails identically on `main` — this is pre-existing infrastructure state, not an SP22 regression. The SP21 slice shipped without local lint for the same reason. SP22 does not fix this; it stays out of scope.
 
 If anti-pattern tests fail again on this final gate, the allowlist-cascade lesson from `project_pcd_slice_progress.md` applies — later commits in the slice can re-break the sweep done at Step 1 of this task; budget one fix-up commit to re-extend the prior allowlists.
 
