@@ -283,8 +283,11 @@ export async function composeGenerationRouting(
     };
   }
 
-  // Cases denials — implemented in Task 10.
-  throw new Error("decision-shape mapping not yet implemented for this branch");
+  // Any denial — verbatim pass-through. Covers SP4 ACCESS_POLICY,
+  // SP4 NO_PROVIDER_CAPABILITY, SP16 ACCESS_POLICY,
+  // SP16 NO_DIRECTION_AUTHORED, and delegation envelopes wrapping a
+  // denied sp4Decision.
+  return { outcome: "denied", decision: routingDecision };
 }
 
 

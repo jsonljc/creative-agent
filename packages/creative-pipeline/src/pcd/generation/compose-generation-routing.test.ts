@@ -545,6 +545,181 @@ describe("composeGenerationRouting — Tier-3 synthetic invariant interaction (�
   });
 });
 
+describe("composeGenerationRouting — denial branches return decision verbatim, no write", () => {
+  it("SP4 ACCESS_POLICY denial (tier policy reject combo)", async () => {
+    // avatarTier=1 + productTier=3 + simple_ugc + final_export:
+    // outputIntent=final_export bumps requiredAvatarTier to 2; a=1 < 2 →
+    // upgrade_avatar_identity + use_lower_output_intent → denied.
+    const stores = buildStores();
+    const input = {
+      routing: {
+        resolvedContext: buildResolvedContext({
+          creatorTierAtResolution: 1,
+          productTierAtResolution: 3,
+          effectiveTier: 3,
+        }),
+        shotType: "simple_ugc" as const,
+        outputIntent: "final_export" as const,
+        approvedCampaignContext: { kind: "none" as const },
+      },
+      snapshotPersistence: buildSnapshotPersistence(),
+      provenance: buildProvenance(),
+      now: FIXED_NOW,
+    };
+    const result = await composeGenerationRouting(input, stores);
+    expect(result.outcome).toBe("denied");
+    if (result.outcome !== "denied") return;
+    // SP4 decision has no `kind` discriminator.
+    expect("kind" in result.decision).toBe(false);
+    expect(result.decision.allowed).toBe(false);
+    expect(stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast).not.toHaveBeenCalled();
+    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).not.toHaveBeenCalled();
+  });
+
+  it("SP16 ACCESS_POLICY denial (synthetic + tier policy reject)", async () => {
+    // simple_ugc is IN the synthetic pairing matrix → SP16 runs its own tier
+    // policy gate (Step 3). avatarTier=1 + productTier=3 + final_export →
+    // denied before any writer call.
+    const stores = buildStores();
+    const input = {
+      routing: {
+        resolvedContext: buildResolvedContext({
+          creatorTierAtResolution: 1,
+          productTierAtResolution: 3,
+          effectiveTier: 3,
+        }),
+        shotType: "simple_ugc" as const,
+        outputIntent: "final_export" as const,
+        approvedCampaignContext: { kind: "none" as const },
+        syntheticSelection: {
+          creatorIdentityId: "creator_resolved_1",
+          syntheticIdentity: buildSyntheticIdentity(),
+          videoProviderChoice: "kling" as const,
+        },
+      },
+      snapshotPersistence: {
+        ...buildSnapshotPersistence(),
+        productTierAtGeneration: 3 as const,
+        avatarTierAtGeneration: 3 as const,
+      },
+      provenance: buildProvenance(),
+      now: FIXED_NOW,
+    };
+    const result = await composeGenerationRouting(input, stores);
+    expect(result.outcome).toBe("denied");
+    if (result.outcome !== "denied") return;
+    // SP16 synthetic decision has a `kind` discriminator.
+    expect("kind" in result.decision).toBe(true);
+    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).not.toHaveBeenCalled();
+  });
+
+  it("SP16 NO_DIRECTION_AUTHORED denial (seedance choice with seedanceDirection=null)", async () => {
+    // simple_ugc is IN the pairing matrix for seedance. buildSyntheticIdentity
+    // default has seedanceDirection=null → Step 4 of routeSyntheticPcdShot
+    // returns NO_DIRECTION_AUTHORED_FOR_VIDEO_PROVIDER.
+    const stores = buildStores();
+    const input = {
+      routing: {
+        resolvedContext: buildResolvedContext(),
+        shotType: "simple_ugc" as const,
+        outputIntent: "draft" as const,
+        approvedCampaignContext: { kind: "none" as const },
+        syntheticSelection: {
+          creatorIdentityId: "creator_resolved_1",
+          syntheticIdentity: buildSyntheticIdentity({ seedanceDirection: null }),
+          videoProviderChoice: "seedance" as const,
+        },
+      },
+      snapshotPersistence: buildSnapshotPersistence(),
+      provenance: buildProvenance(),
+      now: FIXED_NOW,
+    };
+    const result = await composeGenerationRouting(input, stores);
+    expect(result.outcome).toBe("denied");
+    if (result.outcome !== "denied") return;
+    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).not.toHaveBeenCalled();
+  });
+
+  it("Delegation envelope wrapping a denied sp4Decision (script_only + tier policy reject)", async () => {
+    // script_only is OUT of the synthetic pairing matrix → SP16 delegates to
+    // SP4. SP4: avatarTier=1 + productTier=3 + script_only + final_export →
+    // final_export bumps requiredAvatarTier to 2; a=1 < 2 → denied. The
+    // delegation envelope wraps the denied sp4Decision.
+    const stores = buildStores();
+    const input = {
+      routing: {
+        resolvedContext: buildResolvedContext({
+          creatorTierAtResolution: 1,
+          productTierAtResolution: 3,
+          effectiveTier: 3,
+        }),
+        shotType: "script_only" as const,
+        outputIntent: "final_export" as const,
+        approvedCampaignContext: { kind: "none" as const },
+        syntheticSelection: {
+          creatorIdentityId: "creator_resolved_1",
+          syntheticIdentity: buildSyntheticIdentity(),
+          videoProviderChoice: "kling" as const,
+        },
+      },
+      snapshotPersistence: {
+        ...buildSnapshotPersistence(),
+        productTierAtGeneration: 3 as const,
+        avatarTierAtGeneration: 3 as const,
+      },
+      provenance: buildProvenance(),
+      now: FIXED_NOW,
+    };
+    const result = await composeGenerationRouting(input, stores);
+    expect(result.outcome).toBe("denied");
+    if (result.outcome !== "denied") return;
+    // Delegation envelope has `kind` discriminator.
+    expect("kind" in result.decision).toBe(true);
+    expect(stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast).not.toHaveBeenCalled();
+    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).not.toHaveBeenCalled();
+  });
+
+  it("Delegation envelope wrapping a denied sp4Decision (storyboard + draft → tier 1 + final_export denial)", async () => {
+    // storyboard is OUT of the synthetic pairing matrix → SP16 delegates to SP4.
+    // SP4: avatarTier=1 + productTier=3 + storyboard + final_export →
+    // final_export bumps requiredAvatarTier to 2; a=1 < 2 → denied.
+    // Distinct from the script_only case: exercises the second delegation-path
+    // denial (storyboard instead of script_only), confirming the denial
+    // pass-through is shot-type-agnostic.
+    const stores = buildStores();
+    const input = {
+      routing: {
+        resolvedContext: buildResolvedContext({
+          creatorTierAtResolution: 1,
+          productTierAtResolution: 3,
+          effectiveTier: 3,
+        }),
+        shotType: "storyboard" as const,
+        outputIntent: "final_export" as const,
+        approvedCampaignContext: { kind: "none" as const },
+        syntheticSelection: {
+          creatorIdentityId: "creator_resolved_1",
+          syntheticIdentity: buildSyntheticIdentity(),
+          videoProviderChoice: "kling" as const,
+        },
+      },
+      snapshotPersistence: {
+        ...buildSnapshotPersistence(),
+        productTierAtGeneration: 3 as const,
+        avatarTierAtGeneration: 3 as const,
+      },
+      provenance: buildProvenance(),
+      now: FIXED_NOW,
+    };
+    const result = await composeGenerationRouting(input, stores);
+    expect(result.outcome).toBe("denied");
+    if (result.outcome !== "denied") return;
+    expect("kind" in result.decision).toBe(true);
+    expect(stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast).not.toHaveBeenCalled();
+    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).not.toHaveBeenCalled();
+  });
+});
+
 describe("composeGenerationRouting — synthetic delegation Case B (the SP10A-not-SP18 invariant)", () => {
   it("SP16 delegated_to_generic_router with allowed sp4Decision: writePcdIdentitySnapshotWithCostForecast called, SP18 writer NOT called", async () => {
     const stores = buildStores();
