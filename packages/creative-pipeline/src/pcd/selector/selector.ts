@@ -10,9 +10,11 @@
 // ASC as the final tie-break (SP13-vs-SP12: SP12 ties on license.id;
 // SP13 picks among creators, so it ties on creatorIdentityId).
 //
-// No performance overlay in SP13 — `metricsSnapshotVersion` is `z.null()`
-// at the schema level (SP19 will widen to `z.string().min(1).nullable()`)
-// and `performanceOverlayApplied: z.literal(false)`. Reserved slots only.
+// SP13 left `metricsSnapshotVersion` as `z.null()` and `performanceOverlayApplied`
+// as `z.literal(false)` — forward-declared reservation slots. SP20 widened the
+// schema to `z.string().min(1).nullable()` and `z.boolean()` respectively, and
+// this selector now populates them via `resolveMetricsVersion()` and the
+// `input.performanceHistory !== undefined` check below.
 // MERGE-BACK: Switchboard's composer should pull the roster + leases
 // via Prisma readers before calling this pure function.
 import type {
