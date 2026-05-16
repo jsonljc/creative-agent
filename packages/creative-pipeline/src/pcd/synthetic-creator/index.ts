@@ -12,3 +12,5 @@ export type {
   SyntheticCreatorLeaseReader,
   SyntheticCreatorMetricsReader,
 } from "./synthetic-creator-selection-ports.js";
+
+export { Sp11SeedSyntheticCreatorRosterReader } from "./sp11-seed-synthetic-creator-roster-reader.js";
