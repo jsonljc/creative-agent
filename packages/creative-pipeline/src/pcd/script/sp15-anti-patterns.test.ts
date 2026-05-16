@@ -301,7 +301,8 @@ describe("SP15 anti-patterns", () => {
       )
         continue;
       if (
-        file === "packages/creative-pipeline/src/pcd/selector/compose-synthetic-creator-selection.ts"
+        file ===
+        "packages/creative-pipeline/src/pcd/selector/compose-synthetic-creator-selection.ts"
       )
         continue;
       if (file === "packages/creative-pipeline/src/pcd/selector/index.ts") continue;

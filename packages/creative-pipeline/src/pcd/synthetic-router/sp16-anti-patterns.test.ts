@@ -255,6 +255,7 @@ describe("SP16 anti-patterns", () => {
         continue;
       if (file === "packages/creative-pipeline/src/pcd/cost-budget/sp10c-anti-patterns.test.ts")
         continue;
+      if (file === "packages/creative-pipeline/src/pcd/sp12-anti-patterns.test.ts") continue;
       if (file === "packages/creative-pipeline/src/pcd/selector/sp13-anti-patterns.test.ts")
         continue;
       if (file === "packages/creative-pipeline/src/pcd/disclosure/sp14-anti-patterns.test.ts")
@@ -330,7 +331,8 @@ describe("SP16 anti-patterns", () => {
       )
         continue;
       if (
-        file === "packages/creative-pipeline/src/pcd/selector/compose-synthetic-creator-selection.ts"
+        file ===
+        "packages/creative-pipeline/src/pcd/selector/compose-synthetic-creator-selection.ts"
       )
         continue;
       if (file === "packages/creative-pipeline/src/pcd/selector/index.ts") continue;
