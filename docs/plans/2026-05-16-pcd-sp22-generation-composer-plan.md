@@ -28,7 +28,7 @@
 11. Synthetic-pairing `tier3RulesApplied` MUST be the honestly-recomputed required set using the three predicates from `tier3-routing-rules.ts`.
 12. Step 1 consistency assert (synthetic `creatorIdentityId === resolvedContext.creatorIdentityId`) MUST throw `InvariantViolationError` before any router/writer fires.
 13. Task 1 schema-verification gate precedes any composer code — per SP20 + SP21 lesson.
-14. Task 13 anti-pattern assertions MUST be cross-checked against design §7 line-by-line before declaring green — per `feedback_design_plan_antipattern_reconciliation.md`.
+14. The anti-pattern assertions MUST be cross-checked against design §7 line-by-line before declaring green — per `feedback_design_plan_antipattern_reconciliation.md`. (Numbered as Task 13 in this plan; design §12 lists it as Task 14. Refer descriptively, not by number, to avoid cross-doc drift.)
 
 ---
 
@@ -2430,7 +2430,7 @@ pnpm typecheck && pnpm test && pnpm lint && git diff --name-only main...HEAD | x
 
 Expected: all four green. If `prettier --check` flags any file, run `pnpm exec prettier --write <file>` and amend the most recent SP22 commit (or create a fix-up commit if amending would mix concerns).
 
-If anti-pattern tests fail again on this final gate, the Task 13 lesson "Task 13 allowlist cascade — later commits can re-break the sweep" applies — budget one fix-up commit to re-extend the prior allowlists.
+If anti-pattern tests fail again on this final gate, the allowlist-cascade lesson from `project_pcd_slice_progress.md` applies — later commits in the slice can re-break the sweep done at Step 1 of this task; budget one fix-up commit to re-extend the prior allowlists.
 
 - [ ] **Step 6: PR readiness check**
 
