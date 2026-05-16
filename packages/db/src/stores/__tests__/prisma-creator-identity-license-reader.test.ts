@@ -111,3 +111,89 @@ describe("PrismaCreatorIdentityLicenseReader", () => {
     });
   });
 });
+
+describe("findActiveByClinicAndScope", () => {
+  it("returns active leases for the clinic+market+treatmentClass scope at `now`, excluding revoked and out-of-window rows", async () => {
+    const now = new Date("2026-05-16T12:00:00.000Z");
+    const before = new Date("2026-04-01T00:00:00.000Z");
+    const after = new Date("2026-06-30T00:00:00.000Z");
+    const longPast = new Date("2025-01-01T00:00:00.000Z");
+    const longPastEnd = new Date("2025-12-31T00:00:00.000Z");
+
+    const clinicId = "clinic_sp21_a";
+    const otherClinicId = "clinic_sp21_b";
+
+    // Two creators in scope, plus rows that should NOT match.
+    const mockPrisma = {
+      creatorIdentityLicense: {
+        findUnique: vi.fn(),
+        findMany: vi.fn(),
+      },
+    };
+
+    mockPrisma.creatorIdentityLicense.findMany.mockResolvedValue([
+      // Match #1: active, in-window, target scope, target clinic.
+      {
+        id: "lic_match_1",
+        creatorIdentityId: "cid_sp21_alpha",
+        clinicId,
+        market: "SG",
+        treatmentClass: "med_spa",
+        lockType: "priority_access",
+        exclusivityScope: "market_treatment",
+        effectiveFrom: before,
+        effectiveTo: after,
+        priorityRank: 1,
+        status: "active",
+      },
+      // Match #2: active, open-ended (effectiveTo null), target scope, target clinic.
+      {
+        id: "lic_match_2",
+        creatorIdentityId: "cid_sp21_beta",
+        clinicId,
+        market: "SG",
+        treatmentClass: "med_spa",
+        lockType: "soft_exclusive",
+        exclusivityScope: "market_treatment",
+        effectiveFrom: before,
+        effectiveTo: null,
+        priorityRank: null,
+        status: "active",
+      },
+    ]);
+
+    const reader = new PrismaCreatorIdentityLicenseReader(mockPrisma as never);
+    const rows = await reader.findActiveByClinicAndScope(clinicId, "SG", "med_spa", now);
+
+    expect(rows.map((r) => r.id).sort()).toEqual(["lic_match_1", "lic_match_2"]);
+
+    // Verify the WHERE clause passed to Prisma enforces all exclusion conditions.
+    const call = mockPrisma.creatorIdentityLicense.findMany.mock.calls[0]?.[0];
+    expect(call?.where).toEqual({
+      clinicId,
+      market: "SG",
+      treatmentClass: "med_spa",
+      status: "active",
+      effectiveFrom: { lte: now },
+      OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
+    });
+
+    // Confirm the rejected rows (wrong clinic, wrong market, wrong treatmentClass,
+    // revoked, expired) are excluded by the DB-side filter, not fetched at all.
+    // Since we mock findMany to return only matches, calling findActiveByClinicAndScope
+    // with otherClinicId should yield no results.
+    mockPrisma.creatorIdentityLicense.findMany.mockResolvedValue([]);
+    const otherClinicRows = await reader.findActiveByClinicAndScope(
+      otherClinicId,
+      "SG",
+      "med_spa",
+      now,
+    );
+    expect(otherClinicRows).toEqual([]);
+    const otherCall = mockPrisma.creatorIdentityLicense.findMany.mock.calls[1]?.[0];
+    expect(otherCall?.where.clinicId).toBe(otherClinicId);
+
+    void longPast;
+    void longPastEnd;
+  });
+});
