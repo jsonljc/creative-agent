@@ -218,3 +218,58 @@ describe("composeGenerationRouting — generic-route happy path (Case A)", () =>
     expect(estimateInput.durationSec).toBe(8);
   });
 });
+
+describe("composeGenerationRouting — synthetic-route kling happy path (Case C)", () => {
+  it("routes via SP16 and writes via writePcdIdentitySnapshotWithSyntheticRouting with selectedProvider='dalle+kling'", async () => {
+    const stores = buildStores();
+    stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting.mockResolvedValue(
+      buildSnapshotReturn(),
+    );
+    stores.creatorIdentityReader.findById.mockResolvedValue({
+      id: "creator_resolved_1",
+      consentRecordId: "consent_1",
+    });
+    stores.consentRecordReader.findById.mockResolvedValue({
+      id: "consent_1",
+      creatorIdentityId: "creator_resolved_1",
+      status: "active",
+    });
+
+    const input = {
+      routing: {
+        // tier 2 — Tier 3 invariant short-circuits.
+        resolvedContext: buildResolvedContext(),
+        shotType: "simple_ugc" as const,
+        outputIntent: "draft" as const,
+        approvedCampaignContext: { kind: "none" as const },
+        syntheticSelection: {
+          creatorIdentityId: "creator_resolved_1",
+          syntheticIdentity: buildSyntheticIdentity(),
+          videoProviderChoice: "kling" as const,
+        },
+      },
+      snapshotPersistence: buildSnapshotPersistence(),
+      provenance: buildProvenance(),
+      now: FIXED_NOW,
+    };
+
+    const result = await composeGenerationRouting(input, stores);
+
+    expect(result.outcome).toBe("routed_and_written");
+    if (result.outcome !== "routed_and_written") return;
+    expect(result.writerKind).toBe("writePcdIdentitySnapshotWithSyntheticRouting");
+
+    // Generic writer not called.
+    expect(stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast).not.toHaveBeenCalled();
+    expect(stores.costEstimator.estimate).not.toHaveBeenCalled();
+
+    // SP18 writer called exactly once with selectedProvider = "dalle+kling".
+    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).toHaveBeenCalledTimes(1);
+    const writerCall = stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting.mock.calls[0]!;
+    const writerPayload = writerCall[0] as Record<string, unknown>;
+    expect(writerPayload.selectedProvider).toBe("dalle+kling");
+    expect(writerPayload.imageProvider).toBe("dalle");
+    expect(writerPayload.videoProvider).toBe("kling");
+    expect(writerPayload.videoProviderChoice).toBe("kling");
+  });
+});

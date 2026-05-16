@@ -38,6 +38,7 @@ import type {
   OutputIntent,
   PcdIdentitySnapshot,
   PcdShotType,
+  PcdRoutingDecisionReason,
   SyntheticPcdRoutingDecision,
 } from "@creativeagent/schemas";
 import { InvariantViolationError } from "../invariant-violation-error.js";
@@ -48,6 +49,9 @@ import type { StampPcdProvenanceInput } from "../provenance/stamp-pcd-provenance
 import { writePcdIdentitySnapshotWithCostForecast } from "../cost/write-pcd-identity-snapshot-with-cost-forecast.js";
 import type { WritePcdIdentitySnapshotWithCostForecastStores } from "../cost/write-pcd-identity-snapshot-with-cost-forecast.js";
 import type { WritePcdIdentitySnapshotInput } from "../pcd-identity-snapshot-writer.js";
+import type { PcdProviderCapability } from "../provider-capability-matrix.js";
+import { routeSyntheticPcdShot } from "../synthetic-router/route-synthetic-pcd-shot.js";
+import { writePcdIdentitySnapshotWithSyntheticRouting } from "../synthetic-routing-provenance/write-pcd-identity-snapshot-with-synthetic-routing.js";
 import type { WritePcdIdentitySnapshotWithSyntheticRoutingStores } from "../synthetic-routing-provenance/write-pcd-identity-snapshot-with-synthetic-routing.js";
 
 export type SyntheticSelectionContext = {
@@ -137,8 +141,17 @@ export async function composeGenerationRouting(
   // Step 2 — Route. Branch only on syntheticSelection presence.
   let routingDecision: PcdRoutingDecision | SyntheticPcdRoutingDecision;
   if (input.routing.syntheticSelection !== undefined) {
-    // Synthetic branch — implemented in Task 6.
-    throw new Error("synthetic branch not yet implemented");
+    routingDecision = await routeSyntheticPcdShot(
+      {
+        resolvedContext: input.routing.resolvedContext,
+        syntheticIdentity: input.routing.syntheticSelection.syntheticIdentity,
+        shotType: input.routing.shotType,
+        outputIntent: input.routing.outputIntent,
+        videoProviderChoice: input.routing.syntheticSelection.videoProviderChoice,
+        approvedCampaignContext: input.routing.approvedCampaignContext,
+      },
+      { campaignTakeStore: stores.campaignTakeStore },
+    );
   } else {
     routingDecision = await routePcdShot(
       {
@@ -197,7 +210,68 @@ export async function composeGenerationRouting(
     };
   }
 
-  // Cases B + C + denials — implemented in Tasks 6, 8, 9, 10.
+  // Case C: SP16 synthetic-pairing allowed.
+  if (
+    "kind" in routingDecision &&
+    routingDecision.kind === "synthetic_pairing" &&
+    routingDecision.allowed === true
+  ) {
+    // Step 5 — Synthetic-pairing write path.
+    // Task 8 will add tier-3 Step 5a recompute. For tier ≤ 2 the SP18 writer's
+    // invariant short-circuits, so a static tier3RulesApplied: [] passes.
+    const selectedProvider = `${routingDecision.imageProvider}+${routingDecision.videoProvider}`;
+    const selectedCapability: PcdProviderCapability = {
+      provider: selectedProvider,
+      tiers: [input.routing.resolvedContext.effectiveTier],
+      shotTypes: [input.routing.shotType],
+      outputIntents: [input.routing.outputIntent],
+      supportsFirstLastFrame: true,
+      supportsEditExtend: true,
+      supportsPerformanceTransfer: true,
+    };
+    const routingDecisionReason: PcdRoutingDecisionReason = {
+      capabilityRefIndex: routingDecision.pairingRefIndex,
+      matchedShotType: input.routing.shotType,
+      matchedEffectiveTier: input.routing.resolvedContext.effectiveTier,
+      matchedOutputIntent: input.routing.outputIntent,
+      tier3RulesApplied: [],
+      candidatesEvaluated: 1,
+      candidatesAfterTier3Filter: 1,
+      selectionRationale: routingDecision.decisionReason.selectionRationale,
+    };
+    const snapshotInput: WritePcdIdentitySnapshotInput = {
+      ...input.snapshotPersistence,
+      effectiveTier: input.routing.resolvedContext.effectiveTier,
+      shotType: input.routing.shotType,
+      outputIntent: input.routing.outputIntent,
+      selectedCapability,
+      selectedProvider,
+      routerVersion: routingDecision.syntheticRouterVersion,
+      routingDecisionReason,
+      editOverRegenerateRequired: false,
+    };
+    const snapshot = await writePcdIdentitySnapshotWithSyntheticRouting(
+      {
+        snapshot: snapshotInput,
+        provenance: input.provenance,
+        syntheticRouting: { syntheticDecision: routingDecision },
+      },
+      {
+        pcdSp18IdentitySnapshotStore: stores.pcdSp18IdentitySnapshotStore,
+        creatorIdentityReader: stores.creatorIdentityReader,
+        consentRecordReader: stores.consentRecordReader,
+        clock: stores.clock,
+      },
+    );
+    return {
+      outcome: "routed_and_written",
+      writerKind: "writePcdIdentitySnapshotWithSyntheticRouting",
+      decision: routingDecision,
+      snapshot,
+    };
+  }
+
+  // Cases B + denials — implemented in Tasks 8, 9, 10.
   throw new Error("decision-shape mapping not yet implemented for this branch");
 }
 
