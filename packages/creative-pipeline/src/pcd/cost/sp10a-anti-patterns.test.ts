@@ -300,6 +300,25 @@ describe("SP10A anti-pattern grep", () => {
       if (file.startsWith("packages/db/src/stores/prisma-pcd-performance-snapshot-")) continue;
       if (file.startsWith("packages/db/src/stores/__tests__/prisma-pcd-performance-snapshot-"))
         continue;
+      // SP20 carve-out — SP20 net-new files (performance-overlay + metrics reader).
+      // See docs/plans/2026-05-16-pcd-performance-overlay-rerank-sp20-design.md §2.1 Guardrail B-1.
+      if (file === "packages/schemas/src/pcd-creator-performance-metrics.ts") continue;
+      if (file === "packages/schemas/src/pcd-creator-performance-metrics.test.ts") continue;
+      if (file === "packages/schemas/src/pcd-performance-overlay-version.ts") continue;
+      if (file === "packages/schemas/src/pcd-performance-overlay-version.test.ts") continue;
+      if (file === "packages/db/src/stores/prisma-pcd-creator-performance-metrics-reader.ts")
+        continue;
+      if (file === "packages/db/src/stores/in-memory-pcd-creator-performance-metrics-reader.ts")
+        continue;
+      if (
+        file === "packages/db/src/stores/in-memory-pcd-creator-performance-metrics-reader.test.ts"
+      )
+        continue;
+      if (
+        file ===
+        "packages/db/src/stores/__tests__/prisma-pcd-creator-performance-metrics-reader.test.ts"
+      )
+        continue;
 
       expect(allowedEdits.has(file), `SP10A modified disallowed file: ${file}`).toBe(true);
     }

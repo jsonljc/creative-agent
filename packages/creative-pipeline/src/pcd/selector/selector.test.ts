@@ -5,11 +5,13 @@ import { describe, expect, it } from "vitest";
 import type {
   CreativeBrief,
   CreatorIdentityLicensePayload,
+  CreatorPerformanceMetrics,
   SyntheticCreatorSelectionDecision,
 } from "@creativeagent/schemas";
 import { SP11_SYNTHETIC_CREATOR_ROSTER } from "../synthetic-creator/seed.js";
 import type { RosterEntry } from "../synthetic-creator/seed.js";
-import { selectSyntheticCreator } from "./selector.js";
+import { buildCreatorPerformanceMetrics } from "./build-creator-performance-metrics.fixture.js";
+import { selectSyntheticCreator, type SelectSyntheticCreatorInput } from "./selector.js";
 import { PCD_SELECTOR_VERSION } from "./selector-version.js";
 
 const NOW = new Date("2026-05-15T00:00:00.000Z");
@@ -630,6 +632,613 @@ describe("selectSyntheticCreator — determinism", () => {
     if (baseline.allowed === true && reversed.allowed === true) {
       expect(reversed.selectedLicenseId).toBe(baseline.selectedLicenseId);
       expect(reversed.selectedCreatorIdentityId).toBe(baseline.selectedCreatorIdentityId);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SP20 shared helpers — hoisted from T9 describe block so T10 can reuse them.
+// ---------------------------------------------------------------------------
+
+function twoEquivalentCandidatesInput(): SelectSyntheticCreatorInput {
+  const cherylSynthetic = cherylRoster[0]!.synthetic;
+  const rosterA: RosterEntry = {
+    creatorIdentity: { id: "creator-A", name: "A", kind: "synthetic" },
+    synthetic: { ...cherylSynthetic, creatorIdentityId: "creator-A" },
+  };
+  const rosterB: RosterEntry = {
+    creatorIdentity: { id: "creator-B", name: "B", kind: "synthetic" },
+    synthetic: { ...cherylSynthetic, creatorIdentityId: "creator-B" },
+  };
+  // Two leases with identical (lockType, priorityRank, effectiveFrom) for the
+  // same (clinicId, market, treatmentClass) — positions 1-3 of the comparator
+  // tie, so position 4 (performance) decides.
+  const leaseShape = {
+    clinicId: "clinic_a",
+    market: "SG" as const,
+    treatmentClass: "med_spa" as const,
+    lockType: "hard_exclusive" as const,
+    exclusivityScope: "market_treatment" as const,
+    effectiveFrom: new Date("2026-01-01T00:00:00.000Z"),
+    effectiveTo: null,
+    priorityRank: null,
+    status: "active" as const,
+  };
+  const leaseA: CreatorIdentityLicensePayload = {
+    id: "lease-A",
+    creatorIdentityId: "creator-A",
+    ...leaseShape,
+  };
+  const leaseB: CreatorIdentityLicensePayload = {
+    id: "lease-B",
+    creatorIdentityId: "creator-B",
+    ...leaseShape,
+  };
+  return {
+    brief: briefForCheryl,
+    now: NOW,
+    roster: [rosterA, rosterB],
+    leases: [leaseA, leaseB],
+  };
+}
+
+// Guardrail A helper: creator-A has hard_exclusive; creator-B has priority_access.
+// Both candidates hold leases for their own creatorIdentityId — each passes the
+// per-candidate gate independently. No two-hard-exclusive conflict here.
+function hardExclusiveVsPriorityAccessInput(): SelectSyntheticCreatorInput {
+  const cherylSynthetic = cherylRoster[0]!.synthetic;
+  const rosterA: RosterEntry = {
+    creatorIdentity: { id: "creator-A", name: "A", kind: "synthetic" },
+    synthetic: { ...cherylSynthetic, creatorIdentityId: "creator-A" },
+  };
+  const rosterB: RosterEntry = {
+    creatorIdentity: { id: "creator-B", name: "B", kind: "synthetic" },
+    synthetic: { ...cherylSynthetic, creatorIdentityId: "creator-B" },
+  };
+  const baseLease = {
+    clinicId: "clinic_a",
+    market: "SG" as const,
+    treatmentClass: "med_spa" as const,
+    exclusivityScope: "market_treatment" as const,
+    effectiveFrom: new Date("2026-01-01T00:00:00.000Z"),
+    effectiveTo: null,
+    status: "active" as const,
+  };
+  const leaseA: CreatorIdentityLicensePayload = {
+    id: "lease-A",
+    creatorIdentityId: "creator-A",
+    lockType: "hard_exclusive",
+    priorityRank: null,
+    ...baseLease,
+  };
+  const leaseB: CreatorIdentityLicensePayload = {
+    id: "lease-B",
+    creatorIdentityId: "creator-B",
+    lockType: "priority_access",
+    priorityRank: 1,
+    ...baseLease,
+  };
+  return { brief: briefForCheryl, now: NOW, roster: [rosterA, rosterB], leases: [leaseA, leaseB] };
+}
+
+// Guardrail A helper: both priority_access; A has rank 1 (stronger), B has rank 5 (weaker).
+function priorityRankInput(): SelectSyntheticCreatorInput {
+  const cherylSynthetic = cherylRoster[0]!.synthetic;
+  const rosterA: RosterEntry = {
+    creatorIdentity: { id: "creator-A", name: "A", kind: "synthetic" },
+    synthetic: { ...cherylSynthetic, creatorIdentityId: "creator-A" },
+  };
+  const rosterB: RosterEntry = {
+    creatorIdentity: { id: "creator-B", name: "B", kind: "synthetic" },
+    synthetic: { ...cherylSynthetic, creatorIdentityId: "creator-B" },
+  };
+  const baseLease = {
+    clinicId: "clinic_a",
+    market: "SG" as const,
+    treatmentClass: "med_spa" as const,
+    lockType: "priority_access" as const,
+    exclusivityScope: "market_treatment" as const,
+    effectiveFrom: new Date("2026-01-01T00:00:00.000Z"),
+    effectiveTo: null,
+    status: "active" as const,
+  };
+  const leaseA: CreatorIdentityLicensePayload = {
+    id: "lease-A",
+    creatorIdentityId: "creator-A",
+    priorityRank: 1,
+    ...baseLease,
+  };
+  const leaseB: CreatorIdentityLicensePayload = {
+    id: "lease-B",
+    creatorIdentityId: "creator-B",
+    priorityRank: 5,
+    ...baseLease,
+  };
+  return { brief: briefForCheryl, now: NOW, roster: [rosterA, rosterB], leases: [leaseA, leaseB] };
+}
+
+// Guardrail A helper: both hard_exclusive; creator-A-earlier started before creator-B-later.
+function effectiveFromInput(): SelectSyntheticCreatorInput {
+  const cherylSynthetic = cherylRoster[0]!.synthetic;
+  const rosterA: RosterEntry = {
+    creatorIdentity: { id: "creator-A-earlier", name: "A", kind: "synthetic" },
+    synthetic: { ...cherylSynthetic, creatorIdentityId: "creator-A-earlier" },
+  };
+  const rosterB: RosterEntry = {
+    creatorIdentity: { id: "creator-B-later", name: "B", kind: "synthetic" },
+    synthetic: { ...cherylSynthetic, creatorIdentityId: "creator-B-later" },
+  };
+  const baseLease = {
+    clinicId: "clinic_a",
+    market: "SG" as const,
+    treatmentClass: "med_spa" as const,
+    lockType: "hard_exclusive" as const,
+    exclusivityScope: "market_treatment" as const,
+    effectiveTo: null,
+    priorityRank: null,
+    status: "active" as const,
+  };
+  const leaseA: CreatorIdentityLicensePayload = {
+    id: "lease-A",
+    creatorIdentityId: "creator-A-earlier",
+    effectiveFrom: new Date("2026-01-01T00:00:00.000Z"),
+    ...baseLease,
+  };
+  const leaseB: CreatorIdentityLicensePayload = {
+    id: "lease-B",
+    creatorIdentityId: "creator-B-later",
+    effectiveFrom: new Date("2026-04-01T00:00:00.000Z"),
+    ...baseLease,
+  };
+  return { brief: briefForCheryl, now: NOW, roster: [rosterA, rosterB], leases: [leaseA, leaseB] };
+}
+
+describe("selectSyntheticCreator — SP20 comparator sub-tiebreaker", () => {
+  it("performance: better successRate wins among license-equivalent candidates", () => {
+    const perf = new Map<string, CreatorPerformanceMetrics>([
+      [
+        "creator-A",
+        buildCreatorPerformanceMetrics({
+          creatorIdentityId: "creator-A",
+          sampleSize: 10,
+          successCount: 9,
+          failureCount: 1,
+          manualSkipCount: 0,
+          successRate: 0.9,
+          medianLatencyMs: 2000,
+        }),
+      ],
+      [
+        "creator-B",
+        buildCreatorPerformanceMetrics({
+          creatorIdentityId: "creator-B",
+          sampleSize: 10,
+          successCount: 4,
+          failureCount: 6,
+          manualSkipCount: 0,
+          successRate: 0.4,
+          medianLatencyMs: 2000,
+        }),
+      ],
+    ]);
+    const decision = selectSyntheticCreator({
+      ...twoEquivalentCandidatesInput(),
+      performanceHistory: perf,
+    });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed) {
+      expect(decision.selectedCreatorIdentityId).toBe("creator-A");
+    }
+  });
+
+  it("performance: lower medianLatencyMs wins as sub-sub-tiebreak when successRate ties", () => {
+    const perf = new Map<string, CreatorPerformanceMetrics>([
+      [
+        "creator-A",
+        buildCreatorPerformanceMetrics({
+          creatorIdentityId: "creator-A",
+          sampleSize: 5,
+          successCount: 5,
+          failureCount: 0,
+          manualSkipCount: 0,
+          successRate: 1,
+          medianLatencyMs: 2000,
+        }),
+      ],
+      [
+        "creator-B",
+        buildCreatorPerformanceMetrics({
+          creatorIdentityId: "creator-B",
+          sampleSize: 5,
+          successCount: 5,
+          failureCount: 0,
+          manualSkipCount: 0,
+          successRate: 1,
+          medianLatencyMs: 1000,
+        }),
+      ],
+    ]);
+    const decision = selectSyntheticCreator({
+      ...twoEquivalentCandidatesInput(),
+      performanceHistory: perf,
+    });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed) {
+      expect(decision.selectedCreatorIdentityId).toBe("creator-B");
+    }
+  });
+
+  it("cold-start no-op: either side sampleSize === 0 falls through to creatorIdentityId ASC", () => {
+    const perf = new Map<string, CreatorPerformanceMetrics>([
+      [
+        "creator-A",
+        buildCreatorPerformanceMetrics({
+          creatorIdentityId: "creator-A",
+          sampleSize: 10,
+          successCount: 0,
+          failureCount: 10,
+          manualSkipCount: 0,
+          successRate: 0,
+          medianLatencyMs: 5000,
+        }),
+      ],
+      [
+        "creator-B",
+        buildCreatorPerformanceMetrics({
+          creatorIdentityId: "creator-B",
+          sampleSize: 0,
+          successCount: 0,
+          failureCount: 0,
+          manualSkipCount: 0,
+          successRate: 0,
+          medianLatencyMs: null,
+        }),
+      ],
+    ]);
+    const decision = selectSyntheticCreator({
+      ...twoEquivalentCandidatesInput(),
+      performanceHistory: perf,
+    });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed) {
+      // Tied at position 4 ⇒ position 5 picks creator-A (ASC).
+      expect(decision.selectedCreatorIdentityId).toBe("creator-A");
+    }
+  });
+
+  it("cold-start no-op: both sides cold-start preserves creatorIdentityId ASC", () => {
+    const perf = new Map<string, CreatorPerformanceMetrics>([
+      [
+        "creator-A",
+        buildCreatorPerformanceMetrics({
+          creatorIdentityId: "creator-A",
+          sampleSize: 0,
+          successCount: 0,
+          failureCount: 0,
+          manualSkipCount: 0,
+          successRate: 0,
+          medianLatencyMs: null,
+        }),
+      ],
+      [
+        "creator-B",
+        buildCreatorPerformanceMetrics({
+          creatorIdentityId: "creator-B",
+          sampleSize: 0,
+          successCount: 0,
+          failureCount: 0,
+          manualSkipCount: 0,
+          successRate: 0,
+          medianLatencyMs: null,
+        }),
+      ],
+    ]);
+    const decision = selectSyntheticCreator({
+      ...twoEquivalentCandidatesInput(),
+      performanceHistory: perf,
+    });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed) {
+      expect(decision.selectedCreatorIdentityId).toBe("creator-A");
+    }
+  });
+
+  it("missing entry for one candidate behaves like sampleSize === 0 (no-op)", () => {
+    const perf = new Map<string, CreatorPerformanceMetrics>([
+      [
+        "creator-A",
+        buildCreatorPerformanceMetrics({
+          creatorIdentityId: "creator-A",
+          sampleSize: 10,
+          successCount: 10,
+          failureCount: 0,
+          manualSkipCount: 0,
+          successRate: 1,
+          medianLatencyMs: 500,
+        }),
+      ],
+      // creator-B intentionally missing.
+    ]);
+    const decision = selectSyntheticCreator({
+      ...twoEquivalentCandidatesInput(),
+      performanceHistory: perf,
+    });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed) {
+      // No comparator winner at position 4; ASC tiebreak → creator-A.
+      expect(decision.selectedCreatorIdentityId).toBe("creator-A");
+    }
+  });
+});
+
+describe("selectSyntheticCreator — SP20 signature widen", () => {
+  function baseInput(): SelectSyntheticCreatorInput {
+    // Cheryl with an active priority_access lease — the simplest success path.
+    return {
+      brief: briefForCheryl,
+      now: NOW_FIXTURE,
+      roster: cherylRoster,
+      leases: [makeLease({ id: "lic_sp20_base", lockType: "priority_access", priorityRank: 0 })],
+    };
+  }
+
+  it("accepts performanceHistory as an optional input and produces a typed decision", () => {
+    const performanceHistory = new Map<string, CreatorPerformanceMetrics>([
+      ["creator-A", buildCreatorPerformanceMetrics({ creatorIdentityId: "creator-A" })],
+    ]);
+    const decision = selectSyntheticCreator({
+      ...baseInput(),
+      performanceHistory,
+    });
+    expect(decision.allowed).toBe(true);
+  });
+
+  it("undefined performanceHistory produces decision with performanceOverlayApplied: false and metricsSnapshotVersion: null", () => {
+    const decision = selectSyntheticCreator(baseInput());
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed) {
+      expect(decision.performanceOverlayApplied).toBe(false);
+      expect(decision.metricsSnapshotVersion).toBeNull();
+    }
+  });
+});
+
+describe("selectSyntheticCreator — SP20 Guardrail A: contractual ordering NEVER yields to performance", () => {
+  it("hard_exclusive with 0% success rate still outranks priority_access with 100% success rate", () => {
+    const input = hardExclusiveVsPriorityAccessInput();
+    const decision = selectSyntheticCreator({
+      ...input,
+      performanceHistory: new Map<string, CreatorPerformanceMetrics>([
+        [
+          "creator-A",
+          buildCreatorPerformanceMetrics({
+            creatorIdentityId: "creator-A",
+            sampleSize: 10,
+            successCount: 0,
+            failureCount: 10,
+            manualSkipCount: 0,
+            successRate: 0,
+            medianLatencyMs: 5000,
+          }),
+        ],
+        [
+          "creator-B",
+          buildCreatorPerformanceMetrics({
+            creatorIdentityId: "creator-B",
+            sampleSize: 10,
+            successCount: 10,
+            failureCount: 0,
+            manualSkipCount: 0,
+            successRate: 1,
+            medianLatencyMs: 500,
+          }),
+        ],
+      ]),
+    });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed) {
+      expect(decision.selectedCreatorIdentityId).toBe("creator-A");
+    }
+  });
+
+  it("priority_access priorityRank: 1 with 0% success outranks priorityRank: 5 with 100% success", () => {
+    const input = priorityRankInput();
+    const decision = selectSyntheticCreator({
+      ...input,
+      performanceHistory: new Map<string, CreatorPerformanceMetrics>([
+        [
+          "creator-A",
+          buildCreatorPerformanceMetrics({
+            creatorIdentityId: "creator-A",
+            sampleSize: 10,
+            successCount: 0,
+            failureCount: 10,
+            manualSkipCount: 0,
+            successRate: 0,
+            medianLatencyMs: 5000,
+          }),
+        ],
+        [
+          "creator-B",
+          buildCreatorPerformanceMetrics({
+            creatorIdentityId: "creator-B",
+            sampleSize: 10,
+            successCount: 10,
+            failureCount: 0,
+            manualSkipCount: 0,
+            successRate: 1,
+            medianLatencyMs: 500,
+          }),
+        ],
+      ]),
+    });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed) {
+      expect(decision.selectedCreatorIdentityId).toBe("creator-A");
+    }
+  });
+
+  it("earlier effectiveFrom outranks later effectiveFrom regardless of performance", () => {
+    const input = effectiveFromInput();
+    const decision = selectSyntheticCreator({
+      ...input,
+      performanceHistory: new Map<string, CreatorPerformanceMetrics>([
+        [
+          "creator-A-earlier",
+          buildCreatorPerformanceMetrics({
+            creatorIdentityId: "creator-A-earlier",
+            sampleSize: 10,
+            successCount: 0,
+            failureCount: 10,
+            manualSkipCount: 0,
+            successRate: 0,
+            medianLatencyMs: 5000,
+          }),
+        ],
+        [
+          "creator-B-later",
+          buildCreatorPerformanceMetrics({
+            creatorIdentityId: "creator-B-later",
+            sampleSize: 10,
+            successCount: 10,
+            failureCount: 0,
+            manualSkipCount: 0,
+            successRate: 1,
+            medianLatencyMs: 500,
+          }),
+        ],
+      ]),
+    });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed) {
+      expect(decision.selectedCreatorIdentityId).toBe("creator-A-earlier");
+    }
+  });
+});
+
+describe("selectSyntheticCreator — SP20 Guardrail F: now-insensitive with overlay", () => {
+  it("varying input.now produces identical decisions when performanceHistory is supplied", () => {
+    const perf = new Map<string, CreatorPerformanceMetrics>([
+      [
+        "creator-A",
+        buildCreatorPerformanceMetrics({
+          creatorIdentityId: "creator-A",
+          sampleSize: 10,
+          successCount: 7,
+          failureCount: 3,
+          manualSkipCount: 0,
+          successRate: 0.7,
+          medianLatencyMs: 1500,
+        }),
+      ],
+      [
+        "creator-B",
+        buildCreatorPerformanceMetrics({
+          creatorIdentityId: "creator-B",
+          sampleSize: 10,
+          successCount: 7,
+          failureCount: 3,
+          manualSkipCount: 0,
+          successRate: 0.7,
+          medianLatencyMs: 1500,
+        }),
+      ],
+    ]);
+    const input = twoEquivalentCandidatesInput();
+    const at1 = selectSyntheticCreator({
+      ...input,
+      now: new Date("2026-01-01"),
+      performanceHistory: perf,
+    });
+    const at2 = selectSyntheticCreator({
+      ...input,
+      now: new Date("2027-06-15"),
+      performanceHistory: perf,
+    });
+    expect(at1).toEqual(at2);
+  });
+});
+
+describe("selectSyntheticCreator — SP20 Guardrail G: three-mode empty-history equivalence", () => {
+  function nonOverlayFields(d: SyntheticCreatorSelectionDecision) {
+    if (!d.allowed) return d;
+    const { performanceOverlayApplied: _a, metricsSnapshotVersion: _b, ...rest } = d;
+    return rest;
+  }
+
+  it("mode (a) — undefined performanceHistory: SP13-equivalent on selection outcome + non-overlay fields; overlay metadata both 'off'", () => {
+    const input = twoEquivalentCandidatesInput();
+    const sp13 = selectSyntheticCreator(input);
+    const sp20Undefined = selectSyntheticCreator({ ...input }); // key omitted
+    expect(nonOverlayFields(sp20Undefined)).toEqual(nonOverlayFields(sp13));
+    if (sp20Undefined.allowed) {
+      expect(sp20Undefined.performanceOverlayApplied).toBe(false);
+      expect(sp20Undefined.metricsSnapshotVersion).toBeNull();
+    }
+  });
+
+  it("mode (b) — empty Map performanceHistory: same selection outcome + non-overlay fields as SP13; overlay metadata { applied: true, version: null }", () => {
+    const input = twoEquivalentCandidatesInput();
+    const sp13 = selectSyntheticCreator(input);
+    const sp20EmptyMap = selectSyntheticCreator({
+      ...input,
+      performanceHistory: new Map<string, CreatorPerformanceMetrics>(),
+    });
+    expect(nonOverlayFields(sp20EmptyMap)).toEqual(nonOverlayFields(sp13));
+    if (sp20EmptyMap.allowed) {
+      expect(sp20EmptyMap.performanceOverlayApplied).toBe(true);
+      expect(sp20EmptyMap.metricsSnapshotVersion).toBeNull();
+    }
+  });
+
+  it("cold-start-only performanceHistory yields SP13-equivalent selection in a tied bucket", () => {
+    const input = twoEquivalentCandidatesInput();
+    const sp13 = selectSyntheticCreator(input);
+    const coldOnly = new Map<string, CreatorPerformanceMetrics>([
+      [
+        "creator-A",
+        buildCreatorPerformanceMetrics({
+          creatorIdentityId: "creator-A",
+          sampleSize: 0,
+          successCount: 0,
+          failureCount: 0,
+          manualSkipCount: 0,
+          successRate: 0,
+          medianLatencyMs: null,
+        }),
+      ],
+      [
+        "creator-B",
+        buildCreatorPerformanceMetrics({
+          creatorIdentityId: "creator-B",
+          sampleSize: 0,
+          successCount: 0,
+          failureCount: 0,
+          manualSkipCount: 0,
+          successRate: 0,
+          medianLatencyMs: null,
+        }),
+      ],
+    ]);
+    const sp20Cold = selectSyntheticCreator({ ...input, performanceHistory: coldOnly });
+    if (sp13.allowed && sp20Cold.allowed) {
+      expect(sp20Cold.selectedCreatorIdentityId).toBe(sp13.selectedCreatorIdentityId);
+    }
+  });
+});
+
+describe("selectSyntheticCreator — SP20 Guardrail C-2: metricsVersion read-through", () => {
+  it("metricsSnapshotVersion echoes metrics.metricsVersion from the supplied map", () => {
+    const perf = new Map<string, CreatorPerformanceMetrics>([
+      ["creator-A", buildCreatorPerformanceMetrics({ creatorIdentityId: "creator-A" })],
+      ["creator-B", buildCreatorPerformanceMetrics({ creatorIdentityId: "creator-B" })],
+    ]);
+    const input = twoEquivalentCandidatesInput();
+    const decision = selectSyntheticCreator({ ...input, performanceHistory: perf });
+    expect(decision.allowed).toBe(true);
+    if (decision.allowed) {
+      // Fixture's metricsVersion defaults to PCD_PERFORMANCE_OVERLAY_VERSION.
+      expect(decision.metricsSnapshotVersion).toBe("pcd-performance-overlay@1.0.0");
     }
   });
 });

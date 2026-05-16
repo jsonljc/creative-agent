@@ -10,14 +10,17 @@
 // ASC as the final tie-break (SP13-vs-SP12: SP12 ties on license.id;
 // SP13 picks among creators, so it ties on creatorIdentityId).
 //
-// No performance overlay in SP13 — `metricsSnapshotVersion` is `z.null()`
-// at the schema level (SP19 will widen to `z.string().min(1).nullable()`)
-// and `performanceOverlayApplied: z.literal(false)`. Reserved slots only.
+// SP13 left `metricsSnapshotVersion` as `z.null()` and `performanceOverlayApplied`
+// as `z.literal(false)` — forward-declared reservation slots. SP20 widened the
+// schema to `z.string().min(1).nullable()` and `z.boolean()` respectively, and
+// this selector now populates them via `resolveMetricsVersion()` and the
+// `input.performanceHistory !== undefined` check below.
 // MERGE-BACK: Switchboard's composer should pull the roster + leases
 // via Prisma readers before calling this pure function.
 import type {
   CreativeBrief,
   CreatorIdentityLicensePayload,
+  CreatorPerformanceMetrics,
   SyntheticCreatorSelectionDecision,
 } from "@creativeagent/schemas";
 import { licenseGate, type LicenseGateDecision } from "../synthetic-creator/license-gate.js";
@@ -29,6 +32,12 @@ export type SelectSyntheticCreatorInput = {
   now: Date;
   roster: readonly RosterEntry[];
   leases: readonly CreatorIdentityLicensePayload[];
+  // SP20 — optional performance overlay; absent ⇒ SP13-equivalent decision.
+  // The reader (Prisma or in-memory) supplies this Map; selector reads
+  // metrics.metricsVersion through onto the decision (Guardrail C-2).
+  // MERGE-BACK: Switchboard's composer always supplies this once runner
+  // integration ships; optionality is a SP20-land-time accommodation.
+  performanceHistory?: ReadonlyMap<string, CreatorPerformanceMetrics>;
 };
 
 export function selectSyntheticCreator(
@@ -77,7 +86,9 @@ export function selectSyntheticCreator(
 
   // Step 3 — rank survivors. SP12 pickStrongest semantics applied across
   // candidates' gate-returned licenses; final tie on creatorIdentityId ASC.
-  const ranked = [...allowedCandidates].sort(compareCandidates);
+  const ranked = [...allowedCandidates].sort((a, b) =>
+    compareCandidates(a, b, input.performanceHistory),
+  );
   const primary = ranked[0]!;
   const fallbacks = ranked.slice(1);
 
@@ -95,8 +106,8 @@ export function selectSyntheticCreator(
     isSoftExclusivityOverride: primary.gate.isSoftExclusivityOverride,
     selectorVersion: PCD_SELECTOR_VERSION,
     selectorRank: 0,
-    metricsSnapshotVersion: null,
-    performanceOverlayApplied: false,
+    metricsSnapshotVersion: resolveMetricsVersion(input.performanceHistory),
+    performanceOverlayApplied: input.performanceHistory !== undefined,
     decisionReason: buildDecisionReason(input.brief, ranked.length, blockedCandidates.length),
   };
 }
@@ -144,7 +155,16 @@ const LOCK_TYPE_RANK: Record<"hard_exclusive" | "priority_access" | "soft_exclus
 // SP13-vs-SP12: identical to SP12 pickStrongest EXCEPT the final tie-break
 // uses creatorIdentityId (selector picks creators) rather than license.id
 // (SP12 picks leases). Documented divergence; intentional.
-function compareCandidates(a: AllowedCandidate, b: AllowedCandidate): number {
+//
+// SP20 widen: position 4 performance sub-tiebreaker inserted between
+// SP12 effectiveFrom and the creatorIdentityId ASC tiebreak. Cold-start
+// no-op rule per Guardrail G — comparator returns 0 whenever either side
+// is missing metrics or has sampleSize === 0.
+function compareCandidates(
+  a: AllowedCandidate,
+  b: AllowedCandidate,
+  performanceHistory: ReadonlyMap<string, CreatorPerformanceMetrics> | undefined,
+): number {
   const la = a.gate.license;
   const lb = b.gate.license;
   const ra = LOCK_TYPE_RANK[la.lockType];
@@ -158,9 +178,35 @@ function compareCandidates(a: AllowedCandidate, b: AllowedCandidate): number {
   if (la.effectiveFrom.getTime() !== lb.effectiveFrom.getTime()) {
     return la.effectiveFrom.getTime() - lb.effectiveFrom.getTime();
   }
+  // SP20 position 4 — performance sub-tiebreaker (Guardrail G cold-start rule).
+  if (performanceHistory !== undefined) {
+    const am = performanceHistory.get(a.entry.creatorIdentity.id);
+    const bm = performanceHistory.get(b.entry.creatorIdentity.id);
+    if (am !== undefined && bm !== undefined && am.sampleSize > 0 && bm.sampleSize > 0) {
+      if (am.successRate !== bm.successRate) return bm.successRate - am.successRate;
+      // Both sampleSize > 0 ⇒ medianLatencyMs !== null by reader contract.
+      if (am.medianLatencyMs !== bm.medianLatencyMs) {
+        return (am.medianLatencyMs as number) - (bm.medianLatencyMs as number);
+      }
+    }
+  }
+  // Position 5 — final determinism tiebreak (unchanged from SP13).
   const cidA = a.entry.creatorIdentity.id;
   const cidB = b.entry.creatorIdentity.id;
   return cidA < cidB ? -1 : cidA > cidB ? 1 : 0;
+}
+
+// SP20 — read metrics.metricsVersion through from the supplied map (Guardrail C-2).
+// Selector never imports PCD_PERFORMANCE_OVERLAY_VERSION directly.
+// Returns null when the map is undefined OR empty; otherwise returns the
+// metricsVersion of the first entry (reader contract: all entries share
+// the same metricsVersion).
+function resolveMetricsVersion(
+  history: ReadonlyMap<string, CreatorPerformanceMetrics> | undefined,
+): string | null {
+  if (history === undefined) return null;
+  const first = history.values().next();
+  return first.done ? null : first.value.metricsVersion;
 }
 
 // Schema caps decisionReason at 2000 chars. Bound the hardConstraints echo

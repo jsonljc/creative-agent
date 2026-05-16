@@ -135,7 +135,8 @@ const FROZEN_FILES = [
   "packages/creative-pipeline/src/pcd/script/script-selector.ts",
   "packages/creative-pipeline/src/pcd/selector/index.ts",
   "packages/creative-pipeline/src/pcd/selector/selector-version.ts",
-  "packages/creative-pipeline/src/pcd/selector/selector.ts",
+  // selector.ts intentionally omitted: SP20 widened it under Guardrail B-1.
+  // See docs/plans/2026-05-16-pcd-performance-overlay-rerank-sp20-design.md §2.1.
   "packages/creative-pipeline/src/pcd/shot-spec-version.ts",
   "packages/creative-pipeline/src/pcd/synthetic-creator/index.ts",
   "packages/creative-pipeline/src/pcd/synthetic-creator/license-gate.ts",
@@ -184,7 +185,8 @@ const FROZEN_FILES = [
   "packages/schemas/src/pcd-script-template.ts",
   "packages/schemas/src/pcd-synthetic-router.ts",
   "packages/schemas/src/pcd-synthetic-routing-provenance.ts",
-  "packages/schemas/src/pcd-synthetic-selector.ts",
+  // pcd-synthetic-selector.ts intentionally omitted: SP20 widened it under Guardrail B-1.
+  // See docs/plans/2026-05-16-pcd-performance-overlay-rerank-sp20-design.md §2.1.
   "packages/schemas/src/pcd-tier-policy.ts",
 ];
 
@@ -291,10 +293,13 @@ describe("SP19 anti-patterns", () => {
     expect(text).not.toMatch(/terminalKind/);
   });
 
-  it("#7 — SP13 metricsSnapshotVersion stays z.null() (SP20's job to widen)", () => {
+  it("#7 — SP20 widened metricsSnapshotVersion from z.null() to z.string().min(1).nullable() (post-SP20 sanity check)", () => {
+    // SP20 performed the expected widen under Guardrail B-1 (selector carve-out).
+    // See docs/plans/2026-05-16-pcd-performance-overlay-rerank-sp20-design.md §2.1 Guardrail B-1
+    // and §4.3. This assertion now verifies the widened form is in place.
     const text = readFileSync(join(SCHEMAS_SRC, "pcd-synthetic-selector.ts"), "utf8");
-    expect(text).toMatch(/metricsSnapshotVersion:\s*z\.null\(\)/);
-    expect(text).not.toMatch(/metricsSnapshotVersion:\s*z\.string\(\)/);
+    expect(text).toMatch(/metricsSnapshotVersion:\s*z\.string\(\)\.min\(1\)\.nullable\(\)/);
+    expect(text).not.toMatch(/metricsSnapshotVersion:\s*z\.null\(\)/);
   });
 
   it("#8 — SP1-SP18 source-body freeze (diff against 544816a is empty)", () => {

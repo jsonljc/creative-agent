@@ -70,19 +70,42 @@ describe("SyntheticCreatorSelectionDecisionSchema", () => {
     expect(() => SyntheticCreatorSelectionDecisionSchema.parse(bad)).toThrow();
   });
 
-  it("performanceOverlayApplied: false literal rejects true", () => {
-    const bad = { ...validSuccess, performanceOverlayApplied: true };
-    expect(() => SyntheticCreatorSelectionDecisionSchema.parse(bad)).toThrow();
+  it("performanceOverlayApplied: SP20 widened to z.boolean() — accepts true and false", () => {
+    expect(
+      SyntheticCreatorSelectionDecisionSchema.parse({
+        ...validSuccess,
+        performanceOverlayApplied: false,
+      }).performanceOverlayApplied,
+    ).toBe(false);
+    expect(
+      SyntheticCreatorSelectionDecisionSchema.parse({
+        ...validSuccess,
+        performanceOverlayApplied: true,
+      }).performanceOverlayApplied,
+    ).toBe(true);
   });
 
-  it("metricsSnapshotVersion is strict z.null() in SP13 — rejects any string", () => {
-    const withNull = { ...validSuccess, metricsSnapshotVersion: null };
+  it("metricsSnapshotVersion: SP20 widened to z.string().min(1).nullable() — accepts null and non-empty string, rejects empty string", () => {
     expect(
-      SyntheticCreatorSelectionDecisionSchema.parse(withNull).metricsSnapshotVersion,
+      SyntheticCreatorSelectionDecisionSchema.parse({
+        ...validSuccess,
+        metricsSnapshotVersion: null,
+      }).metricsSnapshotVersion,
     ).toBeNull();
 
-    const withStr = { ...validSuccess, metricsSnapshotVersion: "snap@2026-05-14" };
-    expect(() => SyntheticCreatorSelectionDecisionSchema.parse(withStr)).toThrow();
+    expect(
+      SyntheticCreatorSelectionDecisionSchema.parse({
+        ...validSuccess,
+        metricsSnapshotVersion: "snap@2026-05-14",
+      }).metricsSnapshotVersion,
+    ).toBe("snap@2026-05-14");
+
+    expect(() =>
+      SyntheticCreatorSelectionDecisionSchema.parse({
+        ...validSuccess,
+        metricsSnapshotVersion: "",
+      }),
+    ).toThrow();
   });
 
   it("decisionReason max length is 2000", () => {
@@ -95,5 +118,70 @@ describe("SyntheticCreatorSelectionDecisionSchema", () => {
     expect(SyntheticCreatorSelectionDecisionSchema.parse(empty).fallbackCreatorIdentityIds).toEqual(
       [],
     );
+  });
+});
+
+describe("SyntheticCreatorSelectionDecisionSchema (SP20-widened slots)", () => {
+  const successBase = {
+    allowed: true as const,
+    briefId: "brief-1",
+    selectedCreatorIdentityId: "creator-A",
+    fallbackCreatorIdentityIds: [] as readonly string[],
+    selectedLicenseId: "license-1",
+    selectedLockType: "hard_exclusive" as const,
+    isSoftExclusivityOverride: false,
+    selectorVersion: "pcd-selector@1.0.0",
+    selectorRank: 0 as const,
+    decisionReason: "primary_compatible (1 survivor, 0 license-blocked)",
+  };
+
+  it("accepts metricsSnapshotVersion as a non-empty string", () => {
+    const parsed = SyntheticCreatorSelectionDecisionSchema.parse({
+      ...successBase,
+      metricsSnapshotVersion: "pcd-performance-overlay@1.0.0",
+      performanceOverlayApplied: true,
+    });
+    expect(parsed).toBeDefined();
+  });
+
+  it("accepts metricsSnapshotVersion as null", () => {
+    const parsed = SyntheticCreatorSelectionDecisionSchema.parse({
+      ...successBase,
+      metricsSnapshotVersion: null,
+      performanceOverlayApplied: false,
+    });
+    expect(parsed).toBeDefined();
+  });
+
+  it("rejects metricsSnapshotVersion as an empty string", () => {
+    expect(() =>
+      SyntheticCreatorSelectionDecisionSchema.parse({
+        ...successBase,
+        metricsSnapshotVersion: "",
+        performanceOverlayApplied: true,
+      }),
+    ).toThrow();
+  });
+
+  it("accepts performanceOverlayApplied as true OR false", () => {
+    for (const flag of [true, false]) {
+      const parsed = SyntheticCreatorSelectionDecisionSchema.parse({
+        ...successBase,
+        metricsSnapshotVersion: flag ? "pcd-performance-overlay@1.0.0" : null,
+        performanceOverlayApplied: flag,
+      });
+      expect(parsed).toBeDefined();
+    }
+  });
+
+  it("keeps selectorRank locked at the literal 0 (Guardrail J)", () => {
+    expect(() =>
+      SyntheticCreatorSelectionDecisionSchema.parse({
+        ...successBase,
+        selectorRank: 1,
+        metricsSnapshotVersion: null,
+        performanceOverlayApplied: false,
+      }),
+    ).toThrow();
   });
 });

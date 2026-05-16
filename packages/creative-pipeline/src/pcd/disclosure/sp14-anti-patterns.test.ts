@@ -265,6 +265,41 @@ describe("SP14 anti-patterns", () => {
       if (file.startsWith("packages/db/src/stores/prisma-pcd-performance-snapshot-")) continue;
       if (file.startsWith("packages/db/src/stores/__tests__/prisma-pcd-performance-snapshot-"))
         continue;
+      // SP20 carve-out — SP20 widened SP13 selector files + net-new performance-metrics files.
+      // See docs/plans/2026-05-16-pcd-performance-overlay-rerank-sp20-design.md §2.1 Guardrail B-1.
+      if (file === "packages/creative-pipeline/src/pcd/selector/selector.ts") continue;
+      if (file === "packages/creative-pipeline/src/pcd/selector/selector.test.ts") continue;
+      if (file === "packages/creative-pipeline/src/pcd/selector/sp20-anti-patterns.test.ts")
+        continue;
+      if (file === "packages/schemas/src/pcd-synthetic-selector.ts") continue;
+      if (file === "packages/schemas/src/__tests__/pcd-synthetic-selector.test.ts") continue;
+      if (
+        file ===
+        "packages/creative-pipeline/src/pcd/selector/build-creator-performance-metrics.fixture.ts"
+      )
+        continue;
+      if (
+        file ===
+        "packages/creative-pipeline/src/pcd/selector/build-creator-performance-metrics.fixture.test.ts"
+      )
+        continue;
+      if (file === "packages/schemas/src/pcd-creator-performance-metrics.ts") continue;
+      if (file === "packages/schemas/src/pcd-creator-performance-metrics.test.ts") continue;
+      if (file === "packages/schemas/src/pcd-performance-overlay-version.ts") continue;
+      if (file === "packages/schemas/src/pcd-performance-overlay-version.test.ts") continue;
+      if (file === "packages/db/src/stores/prisma-pcd-creator-performance-metrics-reader.ts")
+        continue;
+      if (file === "packages/db/src/stores/in-memory-pcd-creator-performance-metrics-reader.ts")
+        continue;
+      if (
+        file === "packages/db/src/stores/in-memory-pcd-creator-performance-metrics-reader.test.ts"
+      )
+        continue;
+      if (
+        file ===
+        "packages/db/src/stores/__tests__/prisma-pcd-creator-performance-metrics-reader.test.ts"
+      )
+        continue;
 
       expect(allowedEdits.has(file), `SP14 modified disallowed file: ${file}`).toBe(true);
     }

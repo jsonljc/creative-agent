@@ -274,7 +274,9 @@ describe("SP18 anti-patterns", () => {
       "packages/creative-pipeline/src/pcd/synthetic-creator/license-gate.ts",
       "packages/creative-pipeline/src/pcd/synthetic-creator/seed.ts",
       // SP13 — synthetic creator selector
-      "packages/creative-pipeline/src/pcd/selector/selector.ts",
+      // NOTE: selector.ts is intentionally omitted from this frozen list.
+      // SP20 widened selector.ts under Guardrail B-1 (performance-overlay carve-out).
+      // See docs/plans/2026-05-16-pcd-performance-overlay-rerank-sp20-design.md §2.1.
       "packages/creative-pipeline/src/pcd/selector/selector-version.ts",
       // SP14 — disclosure registry
       "packages/creative-pipeline/src/pcd/disclosure/disclosure-placeholder.ts",
