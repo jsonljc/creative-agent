@@ -300,6 +300,10 @@ describe("SP17 anti-patterns", () => {
         file === "packages/db/src/stores/__tests__/prisma-creator-identity-license-reader.test.ts"
       )
         continue;
+      // SP22 net-new files are out of scope (necessary maintenance — this
+      // SP test was written before SP22 territory existed; same precedent
+      // as prior SP allowlist additions).
+      if (file.startsWith("packages/creative-pipeline/src/pcd/generation/")) continue;
       expect(
         allowedEdits.has(file),
         `unexpected file changed since ${SP16_BASELINE}: ${file}`,

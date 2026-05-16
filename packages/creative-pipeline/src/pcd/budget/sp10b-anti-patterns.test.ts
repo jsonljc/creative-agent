@@ -303,6 +303,10 @@ describe("SP10B anti-pattern grep", () => {
         "packages/db/src/stores/__tests__/prisma-pcd-creator-performance-metrics-reader.test.ts"
       )
         continue;
+      // SP22 net-new files are out of scope (necessary maintenance — this
+      // SP test was written before SP22 territory existed; same precedent
+      // as prior SP allowlist additions).
+      if (file.startsWith("packages/creative-pipeline/src/pcd/generation/")) continue;
 
       expect(allowedEdits.has(file), `SP10B modified disallowed file: ${file}`).toBe(true);
     }
