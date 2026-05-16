@@ -1,6 +1,6 @@
 # SP21 Task 1 — CreatorIdentityLicense Schema Verification
 
-**Date:** 2026-05-16  
+**Date:** 2026-05-16
 **Task:** Verify Prisma columns for the new `findActiveByClinicAndScope` method before implementation (Task 2).
 
 ---
@@ -43,19 +43,19 @@ model CreatorIdentityLicense {
 
 ## 2. Confirmation Table: Required Columns for `findActiveByClinicAndScope`
 
-| Column | Prisma Type | Nullability | Purpose in Query |
-|--------|-------------|-------------|------------------|
-| `id` | `String @id` | Required | Record primary key (included for completeness) |
-| `creatorIdentityId` | `String` | Required | Via relation; differentiation from `findActiveByCreatorAndScope` |
-| `clinicId` | `String` | Required | **GROUP COLUMN** — filters leases by clinic |
-| `market` | `String` | Required | **FILTER COLUMN** — clinic scope |
-| `treatmentClass` | `String` | Required | **FILTER COLUMN** — clinic scope |
-| `lockType` | `String` | Required | Present for completeness; not used in active-window query |
-| `exclusivityScope` | `String` | Required (default "market_treatment") | Present for completeness; not used in active-window query |
-| `effectiveFrom` | `DateTime` | Required | **ACTIVE-WINDOW FILTER** — `lte: now` |
-| `effectiveTo` | `DateTime?` | Nullable | **ACTIVE-WINDOW FILTER** — null OR `gt: now` |
-| `priorityRank` | `Int?` | Nullable | Present for completeness; not used in active-window query |
-| `status` | `String` | Required (default "active") | **ACTIVE-WINDOW FILTER** — equality "active" |
+| Column              | Prisma Type  | Nullability                           | Purpose in Query                                                 |
+| ------------------- | ------------ | ------------------------------------- | ---------------------------------------------------------------- |
+| `id`                | `String @id` | Required                              | Record primary key (included for completeness)                   |
+| `creatorIdentityId` | `String`     | Required                              | Via relation; differentiation from `findActiveByCreatorAndScope` |
+| `clinicId`          | `String`     | Required                              | **GROUP COLUMN** — filters leases by clinic                      |
+| `market`            | `String`     | Required                              | **FILTER COLUMN** — clinic scope                                 |
+| `treatmentClass`    | `String`     | Required                              | **FILTER COLUMN** — clinic scope                                 |
+| `lockType`          | `String`     | Required                              | Present for completeness; not used in active-window query        |
+| `exclusivityScope`  | `String`     | Required (default "market_treatment") | Present for completeness; not used in active-window query        |
+| `effectiveFrom`     | `DateTime`   | Required                              | **ACTIVE-WINDOW FILTER** — `lte: now`                            |
+| `effectiveTo`       | `DateTime?`  | Nullable                              | **ACTIVE-WINDOW FILTER** — null OR `gt: now`                     |
+| `priorityRank`      | `Int?`       | Nullable                              | Present for completeness; not used in active-window query        |
+| `status`            | `String`     | Required (default "active")           | **ACTIVE-WINDOW FILTER** — equality "active"                     |
 
 **Finding:** All 11 columns exist with the expected types and nullability. No discrepancies.
 
@@ -93,6 +93,7 @@ where: {
 ```
 
 **Divergence from existing method:** Only the grouping column changes:
+
 - `findActiveByCreatorAndScope`: groups on `creatorIdentityId`
 - `findActiveByClinicAndScope`: groups on `clinicId` (new)
 
@@ -102,6 +103,6 @@ All other filter logic remains identical, ensuring consistency across the regist
 
 ## Summary
 
-✅ All schema columns verified.  
-✅ Active-window predicate confirmed as canonical.  
-✅ Query contract locked for Task 2 implementation.
+- All schema columns verified.
+- Active-window predicate confirmed as canonical.
+- Query contract locked for Task 2 implementation.
