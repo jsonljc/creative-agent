@@ -241,7 +241,63 @@ export async function composeGenerationRouting(
     };
   }
 
-  // Cases B + denials — implemented in Tasks 8, 9, 10.
+  // Case B: SP16 delegated_to_generic_router with allowed sp4Decision.
+  // INVARIANT: delegation is NEVER a synthetic-provenance write — the
+  // wrapped sp4Decision IS a generic-route decision, and the matching
+  // writer is writePcdIdentitySnapshotWithCostForecast.
+  if (
+    "kind" in routingDecision &&
+    routingDecision.kind === "delegated_to_generic_router" &&
+    routingDecision.sp4Decision.allowed === true
+  ) {
+    const sp4Decision = routingDecision.sp4Decision;
+    const snapshotInput: WritePcdIdentitySnapshotInput = {
+      ...input.snapshotPersistence,
+      effectiveTier: input.routing.resolvedContext.effectiveTier,
+      shotType: input.routing.shotType,
+      outputIntent: input.routing.outputIntent,
+      selectedCapability: sp4Decision.selectedCapability,
+      selectedProvider: sp4Decision.selectedProvider,
+      routerVersion: sp4Decision.routerVersion,
+      routingDecisionReason: sp4Decision.decisionReason,
+      editOverRegenerateRequired:
+        sp4Decision.decisionReason.tier3RulesApplied.includes("edit_over_regenerate"),
+    };
+    const costForecast = {
+      provider: sp4Decision.selectedProvider,
+      model: input.snapshotPersistence.providerModelSnapshot,
+      shotType: input.routing.shotType,
+      outputIntent: input.routing.outputIntent,
+      durationSec: input.costHints?.durationSec,
+      tokenCount: input.costHints?.tokenCount,
+    };
+    const snapshot = await writePcdIdentitySnapshotWithCostForecast(
+      { snapshot: snapshotInput, provenance: input.provenance, costForecast },
+      {
+        pcdSp10IdentitySnapshotStore: stores.pcdSp10IdentitySnapshotStore,
+        costEstimator: stores.costEstimator,
+        creatorIdentityReader: stores.creatorIdentityReader,
+        consentRecordReader: stores.consentRecordReader,
+        clock: stores.clock,
+      },
+    );
+    // TypeScript cannot propagate the sp4Decision.allowed narrowing back onto
+    // the outer routingDecision variable (the inner union narrowing does not
+    // escape the property-access chain). The if-guard above guarantees this
+    // cast is sound.
+    const narrowedDecision = routingDecision as SyntheticPcdRoutingDecision & {
+      kind: "delegated_to_generic_router";
+      sp4Decision: PcdRoutingDecision & { allowed: true };
+    };
+    return {
+      outcome: "routed_and_written",
+      writerKind: "writePcdIdentitySnapshotWithCostForecast",
+      decision: narrowedDecision,
+      snapshot,
+    };
+  }
+
+  // Cases denials — implemented in Task 10.
   throw new Error("decision-shape mapping not yet implemented for this branch");
 }
 

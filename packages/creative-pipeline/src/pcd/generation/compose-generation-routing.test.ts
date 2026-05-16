@@ -544,3 +544,55 @@ describe("composeGenerationRouting — Tier-3 synthetic invariant interaction (�
     expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).not.toHaveBeenCalled();
   });
 });
+
+describe("composeGenerationRouting — synthetic delegation Case B (the SP10A-not-SP18 invariant)", () => {
+  it("SP16 delegated_to_generic_router with allowed sp4Decision: writePcdIdentitySnapshotWithCostForecast called, SP18 writer NOT called", async () => {
+    const stores = buildStores();
+    stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast.mockResolvedValue(
+      buildSnapshotReturn(),
+    );
+    stores.costEstimator.estimate.mockResolvedValue(buildCostEstimateReturn());
+    stores.creatorIdentityReader.findById.mockResolvedValue({
+      id: "creator_resolved_1",
+      consentRecordId: "consent_1",
+    });
+    stores.consentRecordReader.findById.mockResolvedValue({
+      id: "consent_1",
+      revoked: false,
+      revokedAt: null,
+    });
+
+    const input = {
+      routing: {
+        resolvedContext: buildResolvedContext(),
+        // script_only is OUT of the synthetic-pairing matrix → SP16 delegates to SP4.
+        shotType: "script_only" as const,
+        outputIntent: "draft" as const,
+        approvedCampaignContext: { kind: "none" as const },
+        syntheticSelection: {
+          creatorIdentityId: "creator_resolved_1",
+          syntheticIdentity: buildSyntheticIdentity(),
+          videoProviderChoice: "kling" as const,
+        },
+      },
+      snapshotPersistence: buildSnapshotPersistence(),
+      provenance: buildProvenance(),
+      now: FIXED_NOW,
+    };
+
+    const result = await composeGenerationRouting(input, stores);
+
+    expect(result.outcome).toBe("routed_and_written");
+    if (result.outcome !== "routed_and_written") return;
+    expect(result.writerKind).toBe("writePcdIdentitySnapshotWithCostForecast");
+
+    // KEY INVARIANT: SP18 writer NOT called on delegation.
+    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).not.toHaveBeenCalled();
+    // SP10A writer called.
+    expect(stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast).toHaveBeenCalledTimes(1);
+
+    // Confirm the writer was given the sp4Decision's selectedProvider (NOT a composite "dalle+kling").
+    const writerPayload = stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast.mock.calls[0]![0] as Record<string, unknown>;
+    expect(writerPayload.selectedProvider).not.toContain("+");
+  });
+});
