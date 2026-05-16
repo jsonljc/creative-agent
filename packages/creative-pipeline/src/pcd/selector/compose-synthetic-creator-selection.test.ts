@@ -344,3 +344,40 @@ describe("composeSyntheticCreatorSelection — reader-throw propagation", () => 
     ).rejects.toBe(bang);
   });
 });
+
+describe("composeSyntheticCreatorSelection — metrics window + ids contract", () => {
+  it("calls metrics reader with window.since = input.now - 30 days and ids matching the roster", async () => {
+    const now = new Date("2026-05-16T12:00:00.000Z");
+    const brief = buildBrief();
+    const compatibleRoster = SP11_SYNTHETIC_CREATOR_ROSTER.filter(
+      (e) =>
+        e.synthetic.status === "active" &&
+        e.synthetic.market === brief.market &&
+        e.synthetic.treatmentClass === brief.treatmentClass,
+    );
+    const leases = compatibleRoster.map((e) => buildLease(e.creatorIdentity.id));
+
+    const rosterReader: SyntheticCreatorRosterReader = {
+      listActiveCompatibleRoster: vi.fn().mockResolvedValue(compatibleRoster),
+    };
+    const leaseReader: SyntheticCreatorLeaseReader = {
+      findActiveLeasesForBriefScope: vi.fn().mockResolvedValue(leases),
+    };
+    const metricsReader: SyntheticCreatorMetricsReader = {
+      findMetricsForCreators: vi
+        .fn()
+        .mockResolvedValue(new Map<string, CreatorPerformanceMetrics>()),
+    };
+
+    await composeSyntheticCreatorSelection(
+      { brief, now },
+      { rosterReader, leaseReader, metricsReader },
+    );
+
+    const expectedSince = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    expect(metricsReader.findMetricsForCreators).toHaveBeenCalledWith({
+      creatorIdentityIds: compatibleRoster.map((e) => e.creatorIdentity.id),
+      window: { since: expectedSince },
+    });
+  });
+});
