@@ -12,9 +12,7 @@ import type { ComposeGenerationRoutingInput } from "./compose-generation-routing
 
 const FIXED_NOW = new Date("2026-05-16T12:00:00.000Z");
 
-function buildResolvedContext(
-  overrides: Partial<ResolvedPcdContext> = {},
-): ResolvedPcdContext {
+function buildResolvedContext(overrides: Partial<ResolvedPcdContext> = {}): ResolvedPcdContext {
   return {
     creatorIdentityId: "creator_resolved_1",
     productIdentityId: "product_resolved_1",
@@ -145,8 +143,12 @@ describe("composeGenerationRouting — Step 1 consistency assert", () => {
     await expect(composeGenerationRouting(input, stores)).rejects.toThrow(InvariantViolationError);
 
     expect(stores.campaignTakeStore.hasApprovedTier3TakeForCampaign).not.toHaveBeenCalled();
-    expect(stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast).not.toHaveBeenCalled();
-    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).not.toHaveBeenCalled();
+    expect(
+      stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast,
+    ).not.toHaveBeenCalled();
+    expect(
+      stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting,
+    ).not.toHaveBeenCalled();
   });
 });
 
@@ -200,17 +202,25 @@ describe("composeGenerationRouting — generic-route happy path (Case A)", () =>
     expect(result.writerKind).toBe("writePcdIdentitySnapshotWithCostForecast");
     expect(result.snapshot).toEqual(buildSnapshotReturn());
 
-    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).not.toHaveBeenCalled();
+    expect(
+      stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting,
+    ).not.toHaveBeenCalled();
 
-    expect(stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast).toHaveBeenCalledTimes(1);
-    const writerCall = stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast.mock.calls[0]!;
+    expect(stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast).toHaveBeenCalledTimes(
+      1,
+    );
+    const writerCall =
+      stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast.mock.calls[0]!;
     const writerPayload = writerCall[0] as Record<string, unknown>;
     expect(writerPayload.selectedProvider).toBe("runway");
     expect(writerPayload.assetRecordId).toBe("asset_1");
     expect(writerPayload.shotSpecVersion).toBe("shot-spec@1.0.0");
 
     expect(stores.costEstimator.estimate).toHaveBeenCalledTimes(1);
-    const estimateInput = stores.costEstimator.estimate.mock.calls[0]![0] as Record<string, unknown>;
+    const estimateInput = stores.costEstimator.estimate.mock.calls[0]![0] as Record<
+      string,
+      unknown
+    >;
     expect(estimateInput.provider).toBe("runway");
     expect(estimateInput.model).toBe("model-1.0");
     expect(estimateInput.shotType).toBe("simple_ugc");
@@ -260,12 +270,17 @@ describe("composeGenerationRouting — synthetic-route kling happy path (Case C)
     expect(result.writerKind).toBe("writePcdIdentitySnapshotWithSyntheticRouting");
 
     // Generic writer not called.
-    expect(stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast).not.toHaveBeenCalled();
+    expect(
+      stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast,
+    ).not.toHaveBeenCalled();
     expect(stores.costEstimator.estimate).not.toHaveBeenCalled();
 
     // SP18 writer called exactly once with selectedProvider = "dalle+kling".
-    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).toHaveBeenCalledTimes(1);
-    const writerCall = stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting.mock.calls[0]!;
+    expect(
+      stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting,
+    ).toHaveBeenCalledTimes(1);
+    const writerCall =
+      stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting.mock.calls[0]!;
     const writerPayload = writerCall[0] as Record<string, unknown>;
     expect(writerPayload.selectedProvider).toBe("dalle+kling");
     expect(writerPayload.imageProvider).toBe("dalle");
@@ -320,10 +335,15 @@ describe("composeGenerationRouting — synthetic-route seedance happy path (Case
     expect(result.outcome).toBe("routed_and_written");
     if (result.outcome !== "routed_and_written") return;
     expect(result.writerKind).toBe("writePcdIdentitySnapshotWithSyntheticRouting");
-    expect(stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast).not.toHaveBeenCalled();
-    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).toHaveBeenCalledTimes(1);
+    expect(
+      stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast,
+    ).not.toHaveBeenCalled();
+    expect(
+      stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting,
+    ).toHaveBeenCalledTimes(1);
 
-    const writerPayload = stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting.mock.calls[0]![0] as Record<string, unknown>;
+    const writerPayload = stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting.mock
+      .calls[0]![0] as Record<string, unknown>;
     expect(writerPayload.selectedProvider).toBe("dalle+seedance");
     expect(writerPayload.videoProvider).toBe("seedance");
     expect(writerPayload.videoProviderChoice).toBe("seedance");
@@ -376,8 +396,11 @@ describe("composeGenerationRouting — Tier-3 synthetic invariant interaction (�
     expect(result.outcome).toBe("routed_and_written");
     if (result.outcome !== "routed_and_written") return;
 
-    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).toHaveBeenCalledTimes(1);
-    const writerPayload = stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting.mock.calls[0]![0] as Record<string, unknown>;
+    expect(
+      stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting,
+    ).toHaveBeenCalledTimes(1);
+    const writerPayload = stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting.mock
+      .calls[0]![0] as Record<string, unknown>;
 
     const reason = writerPayload.routingDecisionReason as Record<string, unknown>;
     const tier3Applied = reason.tier3RulesApplied as ReadonlyArray<string>;
@@ -454,8 +477,11 @@ describe("composeGenerationRouting — Tier-3 synthetic invariant interaction (�
       campaignId: "camp_1",
     });
 
-    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).toHaveBeenCalledTimes(1);
-    const writerPayload = stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting.mock.calls[0]![0] as Record<string, unknown>;
+    expect(
+      stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting,
+    ).toHaveBeenCalledTimes(1);
+    const writerPayload = stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting.mock
+      .calls[0]![0] as Record<string, unknown>;
     const reason = writerPayload.routingDecisionReason as Record<string, unknown>;
     const tier3Applied = reason.tier3RulesApplied as ReadonlyArray<string>;
     // product_demo is NOT talking_head so performance_transfer is NOT required.
@@ -500,7 +526,8 @@ describe("composeGenerationRouting — Tier-3 synthetic invariant interaction (�
     await composeGenerationRouting(input, stores);
 
     expect(stores.campaignTakeStore.hasApprovedTier3TakeForCampaign).not.toHaveBeenCalled();
-    const writerPayload = stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting.mock.calls[0]![0] as Record<string, unknown>;
+    const writerPayload = stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting.mock
+      .calls[0]![0] as Record<string, unknown>;
     const reason = writerPayload.routingDecisionReason as Record<string, unknown>;
     expect(reason.tier3RulesApplied).toEqual([]);
   });
@@ -541,7 +568,9 @@ describe("composeGenerationRouting — Tier-3 synthetic invariant interaction (�
     };
 
     await expect(composeGenerationRouting(input, stores)).rejects.toThrow("db unavailable");
-    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).not.toHaveBeenCalled();
+    expect(
+      stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting,
+    ).not.toHaveBeenCalled();
   });
 });
 
@@ -572,8 +601,12 @@ describe("composeGenerationRouting — denial branches return decision verbatim,
     // SP4 decision has no `kind` discriminator.
     expect("kind" in result.decision).toBe(false);
     expect(result.decision.allowed).toBe(false);
-    expect(stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast).not.toHaveBeenCalled();
-    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).not.toHaveBeenCalled();
+    expect(
+      stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast,
+    ).not.toHaveBeenCalled();
+    expect(
+      stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting,
+    ).not.toHaveBeenCalled();
   });
 
   it("SP16 ACCESS_POLICY denial (synthetic + tier policy reject)", async () => {
@@ -610,7 +643,9 @@ describe("composeGenerationRouting — denial branches return decision verbatim,
     if (result.outcome !== "denied") return;
     // SP16 synthetic decision has a `kind` discriminator.
     expect("kind" in result.decision).toBe(true);
-    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).not.toHaveBeenCalled();
+    expect(
+      stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting,
+    ).not.toHaveBeenCalled();
   });
 
   it("SP16 NO_DIRECTION_AUTHORED denial (seedance choice with seedanceDirection=null)", async () => {
@@ -637,7 +672,9 @@ describe("composeGenerationRouting — denial branches return decision verbatim,
     const result = await composeGenerationRouting(input, stores);
     expect(result.outcome).toBe("denied");
     if (result.outcome !== "denied") return;
-    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).not.toHaveBeenCalled();
+    expect(
+      stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting,
+    ).not.toHaveBeenCalled();
   });
 
   it("Delegation envelope wrapping a denied sp4Decision (script_only + tier policy reject)", async () => {
@@ -675,8 +712,12 @@ describe("composeGenerationRouting — denial branches return decision verbatim,
     if (result.outcome !== "denied") return;
     // Delegation envelope has `kind` discriminator.
     expect("kind" in result.decision).toBe(true);
-    expect(stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast).not.toHaveBeenCalled();
-    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).not.toHaveBeenCalled();
+    expect(
+      stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast,
+    ).not.toHaveBeenCalled();
+    expect(
+      stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting,
+    ).not.toHaveBeenCalled();
   });
 
   it("Delegation envelope wrapping a denied sp4Decision (storyboard + draft → tier 1 + final_export denial)", async () => {
@@ -715,8 +756,12 @@ describe("composeGenerationRouting — denial branches return decision verbatim,
     expect(result.outcome).toBe("denied");
     if (result.outcome !== "denied") return;
     expect("kind" in result.decision).toBe(true);
-    expect(stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast).not.toHaveBeenCalled();
-    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).not.toHaveBeenCalled();
+    expect(
+      stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast,
+    ).not.toHaveBeenCalled();
+    expect(
+      stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting,
+    ).not.toHaveBeenCalled();
   });
 });
 
@@ -762,12 +807,17 @@ describe("composeGenerationRouting — synthetic delegation Case B (the SP10A-no
     expect(result.writerKind).toBe("writePcdIdentitySnapshotWithCostForecast");
 
     // KEY INVARIANT: SP18 writer NOT called on delegation.
-    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).not.toHaveBeenCalled();
+    expect(
+      stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting,
+    ).not.toHaveBeenCalled();
     // SP10A writer called.
-    expect(stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast).toHaveBeenCalledTimes(1);
+    expect(stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast).toHaveBeenCalledTimes(
+      1,
+    );
 
     // Confirm the writer was given the sp4Decision's selectedProvider (NOT a composite "dalle+kling").
-    const writerPayload = stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast.mock.calls[0]![0] as Record<string, unknown>;
+    const writerPayload = stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast.mock
+      .calls[0]![0] as Record<string, unknown>;
     expect(writerPayload.selectedProvider).not.toContain("+");
   });
 });
@@ -807,7 +857,10 @@ describe("composeGenerationRouting — cost-forecast input plumbing post-routing
     await composeGenerationRouting(input, stores);
 
     expect(stores.costEstimator.estimate).toHaveBeenCalledTimes(1);
-    const estimateInput = stores.costEstimator.estimate.mock.calls[0]![0] as Record<string, unknown>;
+    const estimateInput = stores.costEstimator.estimate.mock.calls[0]![0] as Record<
+      string,
+      unknown
+    >;
     expect(estimateInput.model).toBe("specific-model-1.2.3");
     expect(estimateInput.shotType).toBe("simple_ugc");
     expect(estimateInput.outputIntent).toBe("preview");
@@ -849,7 +902,10 @@ describe("composeGenerationRouting — cost-forecast input plumbing post-routing
     };
     await composeGenerationRouting(input, stores);
 
-    const estimateInput = stores.costEstimator.estimate.mock.calls[0]![0] as Record<string, unknown>;
+    const estimateInput = stores.costEstimator.estimate.mock.calls[0]![0] as Record<
+      string,
+      unknown
+    >;
     // Must NOT contain a '+' — that would indicate a synthetic composite leaked
     // into the cost forecast.
     expect(estimateInput.provider).not.toContain("+");
@@ -902,7 +958,8 @@ describe("composeGenerationRouting — editOverRegenerateRequired derivation (ge
     };
     await composeGenerationRouting(input, stores);
 
-    const writerPayload = stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast.mock.calls[0]![0] as Record<string, unknown>;
+    const writerPayload = stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast.mock
+      .calls[0]![0] as Record<string, unknown>;
     const reason = writerPayload.routingDecisionReason as Record<string, unknown>;
     const tier3Applied = reason.tier3RulesApplied as ReadonlyArray<string>;
     expect(tier3Applied).toContain("edit_over_regenerate");
@@ -1003,8 +1060,14 @@ describe("composeGenerationRouting — error propagation", () => {
       provenance: buildProvenance(),
       now: FIXED_NOW,
     };
-    await expect(composeGenerationRouting(input, stores)).rejects.toThrow("campaign-take db failure");
-    expect(stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast).not.toHaveBeenCalled();
-    expect(stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting).not.toHaveBeenCalled();
+    await expect(composeGenerationRouting(input, stores)).rejects.toThrow(
+      "campaign-take db failure",
+    );
+    expect(
+      stores.pcdSp10IdentitySnapshotStore.createForShotWithCostForecast,
+    ).not.toHaveBeenCalled();
+    expect(
+      stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting,
+    ).not.toHaveBeenCalled();
   });
 });

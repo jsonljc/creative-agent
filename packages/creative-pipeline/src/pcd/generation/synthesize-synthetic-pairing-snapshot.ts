@@ -10,10 +10,7 @@
 //
 // Private to the SP22 composer; not surfaced via the generation/ barrel.
 
-import type {
-  PcdRoutingDecisionReason,
-  SyntheticPcdRoutingDecision,
-} from "@creativeagent/schemas";
+import type { PcdRoutingDecisionReason, SyntheticPcdRoutingDecision } from "@creativeagent/schemas";
 import type { PcdProviderCapability } from "../provider-capability-matrix.js";
 import type { WritePcdIdentitySnapshotInput } from "../pcd-identity-snapshot-writer.js";
 import {

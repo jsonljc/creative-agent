@@ -42,7 +42,11 @@ import type {
 } from "@creativeagent/schemas";
 import { InvariantViolationError } from "../invariant-violation-error.js";
 import { routePcdShot } from "../provider-router.js";
-import type { ApprovedCampaignContext, ProviderRouterStores, PcdRoutingDecision } from "../provider-router.js";
+import type {
+  ApprovedCampaignContext,
+  ProviderRouterStores,
+  PcdRoutingDecision,
+} from "../provider-router.js";
 import type { ResolvedPcdContext } from "../registry-resolver.js";
 import type { StampPcdProvenanceInput } from "../provenance/stamp-pcd-provenance.js";
 import { writePcdIdentitySnapshotWithCostForecast } from "../cost/write-pcd-identity-snapshot-with-cost-forecast.js";
@@ -213,10 +217,7 @@ export async function composeGenerationRouting(
   // B (SP16 delegation with allowed sp4Decision) → any denial fallthrough.
 
   // Case A: SP4 allowed (generic route).
-  if (
-    !("kind" in routingDecision) &&
-    routingDecision.allowed === true
-  ) {
+  if (!("kind" in routingDecision) && routingDecision.allowed === true) {
     const snapshot = await writeGenericRoute(routingDecision, input, stores);
     return {
       outcome: "routed_and_written",
@@ -232,11 +233,7 @@ export async function composeGenerationRouting(
     routingDecision.kind === "synthetic_pairing" &&
     routingDecision.allowed === true
   ) {
-    const snapshotInput = await buildSyntheticPairingSnapshotInput(
-      routingDecision,
-      input,
-      stores,
-    );
+    const snapshotInput = await buildSyntheticPairingSnapshotInput(routingDecision, input, stores);
     const snapshot = await writePcdIdentitySnapshotWithSyntheticRouting(
       {
         snapshot: snapshotInput,
@@ -289,5 +286,3 @@ export async function composeGenerationRouting(
   // denied sp4Decision.
   return { outcome: "denied", decision: routingDecision };
 }
-
-

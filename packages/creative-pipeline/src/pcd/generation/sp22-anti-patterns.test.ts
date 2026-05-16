@@ -148,10 +148,10 @@ describe("SP22 anti-patterns", () => {
     // Note: SP10A is invoked via `return Name(` (no `await`) inside the
     // writeGenericRoute helper; SP18 is invoked via `await Name(` in Case C.
     // The structural `\bName\s*\(` pattern covers both call shapes.
-    const sp10aCallSites =
-      (body.match(/\bwritePcdIdentitySnapshotWithCostForecast\s*\(/g) ?? []).length;
-    const sp18CallSites =
-      (body.match(/\bwritePcdIdentitySnapshotWithSyntheticRouting\s*\(/g) ?? []).length;
+    const sp10aCallSites = (body.match(/\bwritePcdIdentitySnapshotWithCostForecast\s*\(/g) ?? [])
+      .length;
+    const sp18CallSites = (body.match(/\bwritePcdIdentitySnapshotWithSyntheticRouting\s*\(/g) ?? [])
+      .length;
     expect(
       sp10aCallSites,
       `writePcdIdentitySnapshotWithCostForecast called ${sp10aCallSites} times`,
@@ -193,8 +193,8 @@ describe("SP22 anti-patterns", () => {
     }
 
     const routeGenericCallSites = (body.match(/await\s+routePcdShot\s*\(/g) ?? []).length;
-    const routeSyntheticCallSites =
-      (body.match(/await\s+routeSyntheticPcdShot\s*\(/g) ?? []).length;
+    const routeSyntheticCallSites = (body.match(/await\s+routeSyntheticPcdShot\s*\(/g) ?? [])
+      .length;
     expect(routeGenericCallSites, `routePcdShot called ${routeGenericCallSites} times`).toBe(1);
     expect(
       routeSyntheticCallSites,

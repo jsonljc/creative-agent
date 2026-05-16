@@ -65,7 +65,7 @@ const payload = {
   providerCapabilityVersion: PCD_PROVIDER_CAPABILITY_VERSION,
   routerVersion: PCD_PROVIDER_ROUTER_VERSION,
   shotSpecVersion: parsed.shotSpecVersion,
-  routingDecisionReason: parsed.routingDecisionReason,   // ← tier3RulesApplied lives here
+  routingDecisionReason: parsed.routingDecisionReason, // ← tier3RulesApplied lives here
   // SP9 lineage
   briefId: provenance.briefId,
   trendId: provenance.trendId,
@@ -92,7 +92,7 @@ assertTier3RoutingDecisionCompliant({
   effectiveTier: input.snapshot.effectiveTier,
   shotType: input.snapshot.shotType,
   outputIntent: input.snapshot.outputIntent,
-  selectedCapability: input.snapshot.selectedCapability,   // ← consumed here only
+  selectedCapability: input.snapshot.selectedCapability, // ← consumed here only
   tier3RulesApplied: input.snapshot.routingDecisionReason.tier3RulesApplied,
   editOverRegenerateRequired: input.snapshot.editOverRegenerateRequired,
 });
@@ -111,12 +111,13 @@ export function assertTier3RoutingDecisionCompliant(input: {
   tier3RulesApplied: ReadonlyArray<Tier3Rule>;
   editOverRegenerateRequired: boolean;
 }): void {
-  if (input.effectiveTier !== 3) return;   // line 106: short-circuit on non-Tier-3
+  if (input.effectiveTier !== 3) return; // line 106: short-circuit on non-Tier-3
 
   // Step A — recompute required-rule set
   const required: Tier3Rule[] = [];
   if (
-    requiresFirstLastFrameAnchor({           // line 113
+    requiresFirstLastFrameAnchor({
+      // line 113
       effectiveTier: input.effectiveTier,
       shotType: input.shotType,
       outputIntent: input.outputIntent,
@@ -125,14 +126,16 @@ export function assertTier3RoutingDecisionCompliant(input: {
     required.push("first_last_frame_anchor");
   }
   if (
-    requiresPerformanceTransfer({            // line 121
+    requiresPerformanceTransfer({
+      // line 121
       effectiveTier: input.effectiveTier,
       shotType: input.shotType,
     })
   ) {
     required.push("performance_transfer");
   }
-  if (input.editOverRegenerateRequired) {   // line 129: boolean flag (pre-computed by caller)
+  if (input.editOverRegenerateRequired) {
+    // line 129: boolean flag (pre-computed by caller)
     required.push("edit_over_regenerate");
   }
 
@@ -162,11 +165,11 @@ export function assertTier3RoutingDecisionCompliant(input: {
 
 ## 3. Confirmation table
 
-| Property | Expected (§11.3) | Observed | Match? |
-|---|---|---|---|
-| `selectedCapability` persisted? | NO | NO — absent from `PcdSp4IdentitySnapshotInputSchema` (schema-level) AND from the `payload` object; consumed only by the pre-persist invariant call at lines 77–84 | ✅ |
-| `tier3RulesApplied` persisted via `routingDecisionReason`? | YES | YES — `payload.routingDecisionReason = parsed.routingDecisionReason`; `PcdRoutingDecisionReasonSchema` (pcd-identity.ts:185–196) includes `tier3RulesApplied` as a required field; SP22's recomputed value supplied inside `routingDecisionReason` will be persisted verbatim | ✅ |
-| Invariant predicates match SP22's recompute plan? | `requiresFirstLastFrameAnchor`, `requiresPerformanceTransfer`, `editOverRegenerateRequired` boolean | Same three paths in `assertTier3RoutingDecisionCompliant` lines 112–131 — two pure-function calls + one explicit boolean flag | ✅ |
+| Property                                                   | Expected (§11.3)                                                                                    | Observed                                                                                                                                                                                                                                                                      | Match? |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| `selectedCapability` persisted?                            | NO                                                                                                  | NO — absent from `PcdSp4IdentitySnapshotInputSchema` (schema-level) AND from the `payload` object; consumed only by the pre-persist invariant call at lines 77–84                                                                                                             | ✅     |
+| `tier3RulesApplied` persisted via `routingDecisionReason`? | YES                                                                                                 | YES — `payload.routingDecisionReason = parsed.routingDecisionReason`; `PcdRoutingDecisionReasonSchema` (pcd-identity.ts:185–196) includes `tier3RulesApplied` as a required field; SP22's recomputed value supplied inside `routingDecisionReason` will be persisted verbatim | ✅     |
+| Invariant predicates match SP22's recompute plan?          | `requiresFirstLastFrameAnchor`, `requiresPerformanceTransfer`, `editOverRegenerateRequired` boolean | Same three paths in `assertTier3RoutingDecisionCompliant` lines 112–131 — two pure-function calls + one explicit boolean flag                                                                                                                                                 | ✅     |
 
 ---
 
