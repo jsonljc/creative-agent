@@ -33,6 +33,19 @@ const SP20_ALLOWLISTED_EDITS: ReadonlyArray<string> = [
   "docs/plans/2026-05-16-pcd-performance-overlay-rerank-sp20-design.md",
   "docs/plans/2026-05-16-pcd-performance-overlay-rerank-sp20-plan.md",
   "docs/plans/2026-05-16-pcd-performance-overlay-rerank-sp20-task1-findings.md",
+  // SP21 net-new files (composer, ports, seed adapter, db widen, plan docs).
+  "docs/plans/2026-05-16-pcd-sp21-synthetic-selector-composer-design.md",
+  "docs/plans/2026-05-16-pcd-sp21-synthetic-selector-composer-plan.md",
+  "docs/plans/2026-05-16-pcd-sp21-task1-schema-verification.md",
+  "packages/creative-pipeline/src/pcd/selector/compose-synthetic-creator-selection.test.ts",
+  "packages/creative-pipeline/src/pcd/selector/compose-synthetic-creator-selection.ts",
+  "packages/creative-pipeline/src/pcd/selector/index.ts",
+  "packages/creative-pipeline/src/pcd/synthetic-creator/index.ts",
+  "packages/creative-pipeline/src/pcd/synthetic-creator/sp11-seed-synthetic-creator-roster-reader.test.ts",
+  "packages/creative-pipeline/src/pcd/synthetic-creator/sp11-seed-synthetic-creator-roster-reader.ts",
+  "packages/creative-pipeline/src/pcd/synthetic-creator/synthetic-creator-selection-ports.ts",
+  "packages/db/src/stores/__tests__/prisma-creator-identity-license-reader.test.ts",
+  "packages/db/src/stores/prisma-creator-identity-license-reader.ts",
 ];
 
 function listAllSourceFiles(dir: string): string[] {

@@ -46,6 +46,32 @@ export class PrismaCreatorIdentityLicenseReader {
   }
 
   /**
+   * Returns all active leases for a clinic-wide scope: status='active'
+   * AND effectiveFrom <= now AND (effectiveTo is null OR effectiveTo > now).
+   * Used by the SP21 composer to seed the SP13 selector's `leases` input
+   * across every candidate in the roster — DB-side scope filter so the
+   * composer never fetches "all clinic leases" and trims in memory.
+   */
+  async findActiveByClinicAndScope(
+    clinicId: string,
+    market: Market,
+    treatmentClass: TreatmentClass,
+    now: Date,
+  ): Promise<CreatorIdentityLicensePayload[]> {
+    const rows = await this.prisma.creatorIdentityLicense.findMany({
+      where: {
+        clinicId,
+        market,
+        treatmentClass,
+        status: "active",
+        effectiveFrom: { lte: now },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
+      },
+    });
+    return rows.map((r) => this.parse(r));
+  }
+
+  /**
    * Returns ALL leases on (creatorIdentityId, market, treatmentClass) regardless
    * of status or window. Used for diagnostics, admin audit, and lifecycle
    * operations (e.g. expiring stale rows). Not consumed by the gate.
