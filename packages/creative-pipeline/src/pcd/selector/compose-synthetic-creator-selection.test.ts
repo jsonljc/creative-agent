@@ -143,3 +143,35 @@ describe("composeSyntheticCreatorSelection — happy path", () => {
     }
   });
 });
+
+describe("composeSyntheticCreatorSelection — empty roster short-circuit", () => {
+  it("does not call lease or metrics readers when roster is empty; selector returns no_compatible_candidates", async () => {
+    const now = new Date("2026-05-16T12:00:00.000Z");
+    const brief = buildBrief({ briefId: "brief_sp21_empty_roster" });
+
+    const rosterReader: SyntheticCreatorRosterReader = {
+      listActiveCompatibleRoster: vi.fn().mockResolvedValue([]),
+    };
+    const leaseReader: SyntheticCreatorLeaseReader = {
+      findActiveLeasesForBriefScope: vi.fn(),
+    };
+    const metricsReader: SyntheticCreatorMetricsReader = {
+      findMetricsForCreators: vi.fn(),
+    };
+
+    const decision = await composeSyntheticCreatorSelection(
+      { brief, now },
+      { rosterReader, leaseReader, metricsReader },
+    );
+
+    expect(rosterReader.listActiveCompatibleRoster).toHaveBeenCalledOnce();
+    expect(leaseReader.findActiveLeasesForBriefScope).not.toHaveBeenCalled();
+    expect(metricsReader.findMetricsForCreators).not.toHaveBeenCalled();
+
+    expect(decision.allowed).toBe(false);
+    if (decision.allowed === false) {
+      expect(decision.reason).toBe("no_compatible_candidates");
+      expect(decision.briefId).toBe("brief_sp21_empty_roster");
+    }
+  });
+});
