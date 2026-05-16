@@ -6,6 +6,7 @@ import type {
 import { InvariantViolationError } from "../invariant-violation-error.js";
 import type { ResolvedPcdContext } from "../registry-resolver.js";
 import { composeGenerationRouting } from "./compose-generation-routing.js";
+import type { ComposeGenerationRoutingInput } from "./compose-generation-routing.js";
 
 const FIXED_NOW = new Date("2026-05-16T12:00:00.000Z");
 
@@ -32,10 +33,10 @@ function buildSyntheticIdentity(
     status: "active",
     market: "SG",
     treatmentClass: "med_spa",
-    vibe: "warm",
-    ethnicityFamily: "east_asian",
-    ageBand: "25_34",
-    pricePositioning: "mid",
+    vibe: "omg_look",
+    ethnicityFamily: "sg_chinese",
+    ageBand: "mid_20s",
+    pricePositioning: "entry",
     physicalDescriptors: {
       faceShape: "oval",
       skinTone: "medium",
@@ -64,23 +65,7 @@ function buildSyntheticIdentity(
   };
 }
 
-function buildSnapshotPersistence(): {
-  assetRecordId: string;
-  productIdentityId: string;
-  productTierAtGeneration: 1 | 2 | 3;
-  productImageAssetIds: string[];
-  productCanonicalTextHash: string;
-  productLogoAssetId: string | null;
-  creatorIdentityId: string;
-  avatarTierAtGeneration: 1 | 2 | 3;
-  avatarReferenceAssetIds: string[];
-  voiceAssetId: string | null;
-  consentRecordId: string | null;
-  providerModelSnapshot: string;
-  seedOrNoSeed: string;
-  rewrittenPromptText: string | null;
-  shotSpecVersion: string | null;
-} {
+function buildSnapshotPersistence(): ComposeGenerationRoutingInput["snapshotPersistence"] {
   return {
     assetRecordId: "asset_1",
     productIdentityId: "product_resolved_1",
