@@ -331,7 +331,7 @@ describe("composeGenerationRouting — synthetic-route seedance happy path (Case
 });
 
 describe("composeGenerationRouting — Tier-3 synthetic invariant interaction (§11.3)", () => {
-  it("tier 3 + talking_head + final_export + synthetic kling: writer called once with recomputed tier3RulesApplied=[performance_transfer]", async () => {
+  it("tier 3 + talking_head + final_export + synthetic kling: tier3RulesApplied=[first_last_frame_anchor, performance_transfer]", async () => {
     const stores = buildStores();
     stores.pcdSp18IdentitySnapshotStore.createForShotWithSyntheticRouting.mockResolvedValue(
       buildSnapshotReturn(),
