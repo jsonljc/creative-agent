@@ -255,3 +255,92 @@ describe("composeSyntheticCreatorSelection — empty metrics (cold start)", () =
     }
   });
 });
+
+describe("composeSyntheticCreatorSelection — reader-throw propagation", () => {
+  it("rethrows when rosterReader fails; lease + metrics readers not called", async () => {
+    const now = new Date("2026-05-16T12:00:00.000Z");
+    const brief = buildBrief();
+    const bang = new Error("roster boom");
+
+    const rosterReader: SyntheticCreatorRosterReader = {
+      listActiveCompatibleRoster: vi.fn().mockRejectedValue(bang),
+    };
+    const leaseReader: SyntheticCreatorLeaseReader = {
+      findActiveLeasesForBriefScope: vi.fn(),
+    };
+    const metricsReader: SyntheticCreatorMetricsReader = {
+      findMetricsForCreators: vi.fn(),
+    };
+
+    await expect(
+      composeSyntheticCreatorSelection(
+        { brief, now },
+        { rosterReader, leaseReader, metricsReader },
+      ),
+    ).rejects.toBe(bang);
+    expect(leaseReader.findActiveLeasesForBriefScope).not.toHaveBeenCalled();
+    expect(metricsReader.findMetricsForCreators).not.toHaveBeenCalled();
+  });
+
+  it("rethrows when leaseReader fails; metrics reader not called", async () => {
+    const now = new Date("2026-05-16T12:00:00.000Z");
+    const brief = buildBrief();
+    const bang = new Error("lease boom");
+
+    const compatibleRoster = SP11_SYNTHETIC_CREATOR_ROSTER.filter(
+      (e) =>
+        e.synthetic.status === "active" &&
+        e.synthetic.market === brief.market &&
+        e.synthetic.treatmentClass === brief.treatmentClass,
+    );
+
+    const rosterReader: SyntheticCreatorRosterReader = {
+      listActiveCompatibleRoster: vi.fn().mockResolvedValue(compatibleRoster),
+    };
+    const leaseReader: SyntheticCreatorLeaseReader = {
+      findActiveLeasesForBriefScope: vi.fn().mockRejectedValue(bang),
+    };
+    const metricsReader: SyntheticCreatorMetricsReader = {
+      findMetricsForCreators: vi.fn(),
+    };
+
+    await expect(
+      composeSyntheticCreatorSelection(
+        { brief, now },
+        { rosterReader, leaseReader, metricsReader },
+      ),
+    ).rejects.toBe(bang);
+    expect(metricsReader.findMetricsForCreators).not.toHaveBeenCalled();
+  });
+
+  it("rethrows when metricsReader fails", async () => {
+    const now = new Date("2026-05-16T12:00:00.000Z");
+    const brief = buildBrief();
+    const bang = new Error("metrics boom");
+
+    const compatibleRoster = SP11_SYNTHETIC_CREATOR_ROSTER.filter(
+      (e) =>
+        e.synthetic.status === "active" &&
+        e.synthetic.market === brief.market &&
+        e.synthetic.treatmentClass === brief.treatmentClass,
+    );
+    const leases = compatibleRoster.map((e) => buildLease(e.creatorIdentity.id));
+
+    const rosterReader: SyntheticCreatorRosterReader = {
+      listActiveCompatibleRoster: vi.fn().mockResolvedValue(compatibleRoster),
+    };
+    const leaseReader: SyntheticCreatorLeaseReader = {
+      findActiveLeasesForBriefScope: vi.fn().mockResolvedValue(leases),
+    };
+    const metricsReader: SyntheticCreatorMetricsReader = {
+      findMetricsForCreators: vi.fn().mockRejectedValue(bang),
+    };
+
+    await expect(
+      composeSyntheticCreatorSelection(
+        { brief, now },
+        { rosterReader, leaseReader, metricsReader },
+      ),
+    ).rejects.toBe(bang);
+  });
+});
