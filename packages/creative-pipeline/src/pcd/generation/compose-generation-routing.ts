@@ -3,8 +3,8 @@
 //
 // Routes per shot: synthetic-selection present → SP16; otherwise → SP4.
 // Maps the routing decision to the matching writer:
-//   SP4 allowed                                      → writePcdIdentitySnapshotWithCostForecast
-//   SP16 delegated_to_generic_router + sp4 allowed   → writePcdIdentitySnapshotWithCostForecast
+//   SP4 allowed                                      → writeGenericRoute (SP10A writer, once)
+//   SP16 delegated_to_generic_router + sp4 allowed   → writeGenericRoute (SP10A writer, once)
 //   SP16 synthetic_pairing allowed                   → writePcdIdentitySnapshotWithSyntheticRouting
 //   any denial                                       → no write
 //
@@ -117,6 +117,51 @@ export type ComposeGenerationRoutingResult =
       decision: PcdRoutingDecision | SyntheticPcdRoutingDecision;
     };
 
+/**
+ * Generic-route persistence path shared between Case A (pure SP4 success)
+ * and Case B (SP16 delegation with allowed sp4Decision). Builds the
+ * SP4-shaped WritePcdIdentitySnapshotInput + post-routing cost-forecast
+ * input, then invokes the SP10A writer exactly once.
+ *
+ * Centralized so design §7 #5 (writer import + call each appear once) holds.
+ */
+async function writeGenericRoute(
+  sp4Decision: PcdRoutingDecision & { allowed: true },
+  input: ComposeGenerationRoutingInput,
+  stores: ComposeGenerationRoutingStores,
+): Promise<PcdIdentitySnapshot> {
+  const snapshotInput: WritePcdIdentitySnapshotInput = {
+    ...input.snapshotPersistence,
+    effectiveTier: input.routing.resolvedContext.effectiveTier,
+    shotType: input.routing.shotType,
+    outputIntent: input.routing.outputIntent,
+    selectedCapability: sp4Decision.selectedCapability,
+    selectedProvider: sp4Decision.selectedProvider,
+    routerVersion: sp4Decision.routerVersion,
+    routingDecisionReason: sp4Decision.decisionReason,
+    editOverRegenerateRequired:
+      sp4Decision.decisionReason.tier3RulesApplied.includes("edit_over_regenerate"),
+  };
+  const costForecast = {
+    provider: sp4Decision.selectedProvider,
+    model: input.snapshotPersistence.providerModelSnapshot,
+    shotType: input.routing.shotType,
+    outputIntent: input.routing.outputIntent,
+    durationSec: input.costHints?.durationSec,
+    tokenCount: input.costHints?.tokenCount,
+  };
+  return writePcdIdentitySnapshotWithCostForecast(
+    { snapshot: snapshotInput, provenance: input.provenance, costForecast },
+    {
+      pcdSp10IdentitySnapshotStore: stores.pcdSp10IdentitySnapshotStore,
+      costEstimator: stores.costEstimator,
+      creatorIdentityReader: stores.creatorIdentityReader,
+      consentRecordReader: stores.consentRecordReader,
+      clock: stores.clock,
+    },
+  );
+}
+
 export async function composeGenerationRouting(
   input: ComposeGenerationRoutingInput,
   stores: ComposeGenerationRoutingStores,
@@ -163,44 +208,16 @@ export async function composeGenerationRouting(
     );
   }
 
-  // Step 3 — Map decision shape to write path.
-  // Case A: SP4 allowed.
+  // Step 3 — Map routing decision shape to write path. Case ordering:
+  // A (generic SP4 allowed) → C (SP16 synthetic-pairing allowed) →
+  // B (SP16 delegation with allowed sp4Decision) → any denial fallthrough.
+
+  // Case A: SP4 allowed (generic route).
   if (
     !("kind" in routingDecision) &&
     routingDecision.allowed === true
   ) {
-    // Step 4 — Generic write path.
-    const sp4Decision = routingDecision;
-    const snapshotInput: WritePcdIdentitySnapshotInput = {
-      ...input.snapshotPersistence,
-      effectiveTier: input.routing.resolvedContext.effectiveTier,
-      shotType: input.routing.shotType,
-      outputIntent: input.routing.outputIntent,
-      selectedCapability: sp4Decision.selectedCapability,
-      selectedProvider: sp4Decision.selectedProvider,
-      routerVersion: sp4Decision.routerVersion,
-      routingDecisionReason: sp4Decision.decisionReason,
-      editOverRegenerateRequired:
-        sp4Decision.decisionReason.tier3RulesApplied.includes("edit_over_regenerate"),
-    };
-    const costForecast = {
-      provider: sp4Decision.selectedProvider,
-      model: input.snapshotPersistence.providerModelSnapshot,
-      shotType: input.routing.shotType,
-      outputIntent: input.routing.outputIntent,
-      durationSec: input.costHints?.durationSec,
-      tokenCount: input.costHints?.tokenCount,
-    };
-    const snapshot = await writePcdIdentitySnapshotWithCostForecast(
-      { snapshot: snapshotInput, provenance: input.provenance, costForecast },
-      {
-        pcdSp10IdentitySnapshotStore: stores.pcdSp10IdentitySnapshotStore,
-        costEstimator: stores.costEstimator,
-        creatorIdentityReader: stores.creatorIdentityReader,
-        consentRecordReader: stores.consentRecordReader,
-        clock: stores.clock,
-      },
-    );
+    const snapshot = await writeGenericRoute(routingDecision, input, stores);
     return {
       outcome: "routed_and_written",
       writerKind: "writePcdIdentitySnapshotWithCostForecast",
@@ -243,52 +260,21 @@ export async function composeGenerationRouting(
 
   // Case B: SP16 delegated_to_generic_router with allowed sp4Decision.
   // INVARIANT: delegation is NEVER a synthetic-provenance write — the
-  // wrapped sp4Decision IS a generic-route decision, and the matching
-  // writer is writePcdIdentitySnapshotWithCostForecast.
+  // wrapped sp4Decision IS a generic-route decision, routed via the shared
+  // writeGenericRoute helper (SP10A writer, same as Case A).
   if (
     "kind" in routingDecision &&
     routingDecision.kind === "delegated_to_generic_router" &&
     routingDecision.sp4Decision.allowed === true
   ) {
-    const sp4Decision = routingDecision.sp4Decision;
-    const snapshotInput: WritePcdIdentitySnapshotInput = {
-      ...input.snapshotPersistence,
-      effectiveTier: input.routing.resolvedContext.effectiveTier,
-      shotType: input.routing.shotType,
-      outputIntent: input.routing.outputIntent,
-      selectedCapability: sp4Decision.selectedCapability,
-      selectedProvider: sp4Decision.selectedProvider,
-      routerVersion: sp4Decision.routerVersion,
-      routingDecisionReason: sp4Decision.decisionReason,
-      editOverRegenerateRequired:
-        sp4Decision.decisionReason.tier3RulesApplied.includes("edit_over_regenerate"),
-    };
-    const costForecast = {
-      provider: sp4Decision.selectedProvider,
-      model: input.snapshotPersistence.providerModelSnapshot,
-      shotType: input.routing.shotType,
-      outputIntent: input.routing.outputIntent,
-      durationSec: input.costHints?.durationSec,
-      tokenCount: input.costHints?.tokenCount,
-    };
-    const snapshot = await writePcdIdentitySnapshotWithCostForecast(
-      { snapshot: snapshotInput, provenance: input.provenance, costForecast },
-      {
-        pcdSp10IdentitySnapshotStore: stores.pcdSp10IdentitySnapshotStore,
-        costEstimator: stores.costEstimator,
-        creatorIdentityReader: stores.creatorIdentityReader,
-        consentRecordReader: stores.consentRecordReader,
-        clock: stores.clock,
-      },
-    );
-    // TypeScript cannot propagate the sp4Decision.allowed narrowing back onto
-    // the outer routingDecision variable (the inner union narrowing does not
-    // escape the property-access chain). The if-guard above guarantees this
-    // cast is sound.
+    // TS cannot propagate sp4Decision.allowed === true back to the outer
+    // routingDecision union; narrow via const-and-cast so the return type
+    // satisfies ComposeGenerationRoutingResult.
     const narrowedDecision = routingDecision as SyntheticPcdRoutingDecision & {
       kind: "delegated_to_generic_router";
       sp4Decision: PcdRoutingDecision & { allowed: true };
     };
+    const snapshot = await writeGenericRoute(narrowedDecision.sp4Decision, input, stores);
     return {
       outcome: "routed_and_written",
       writerKind: "writePcdIdentitySnapshotWithCostForecast",
