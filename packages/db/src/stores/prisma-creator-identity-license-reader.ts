@@ -48,7 +48,7 @@ export class PrismaCreatorIdentityLicenseReader {
   /**
    * Returns all active leases for a clinic-wide scope: status='active'
    * AND effectiveFrom <= now AND (effectiveTo is null OR effectiveTo > now).
-   * Used by the SP21 composer to seed the SP13 picker's `leases` input
+   * Used by the SP21 composer to seed the SP13 selector's `leases` input
    * across every candidate in the roster — DB-side scope filter so the
    * composer never fetches "all clinic leases" and trims in memory.
    */

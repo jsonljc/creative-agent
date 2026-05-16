@@ -56,11 +56,21 @@ describe("SP12 anti-patterns", () => {
     ];
     for (const rel of sp12Files) {
       const src = readFileSync(path.join(REPO_ROOT, rel), "utf8");
-      expect(src, `${rel} must not reference selector`).not.toMatch(/selector/i);
-      expect(src, `${rel} must not reference disclosure`).not.toMatch(/disclosure/i);
-      expect(src, `${rel} must not reference script-template`).not.toMatch(/script-template/i);
-      expect(src, `${rel} must not reference performance-snapshot`).not.toMatch(
-        /performance-snapshot/i,
+      // SP12 invariant: no SP13+ module IMPORTS from these files. The grep is
+      // import-scoped so SP21+ JSDoc references to the selector/disclosure/etc
+      // components (valid documentation patterns naming the downstream consumers)
+      // do not trigger this guard.
+      expect(src, `${rel} must not import from selector module`).not.toMatch(
+        /from\s+["'][^"']*selector[^"']*["']/i,
+      );
+      expect(src, `${rel} must not import from disclosure module`).not.toMatch(
+        /from\s+["'][^"']*disclosure[^"']*["']/i,
+      );
+      expect(src, `${rel} must not import from script-template module`).not.toMatch(
+        /from\s+["'][^"']*script-template[^"']*["']/i,
+      );
+      expect(src, `${rel} must not import from performance-snapshot module`).not.toMatch(
+        /from\s+["'][^"']*performance-snapshot[^"']*["']/i,
       );
       expect(src, `${rel} must not reference SyntheticCreatorSelectionDecision`).not.toMatch(
         /SyntheticCreatorSelectionDecision/,
