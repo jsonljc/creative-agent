@@ -37,12 +37,10 @@ import type {
   IdentityTier,
   OutputIntent,
   PcdIdentitySnapshot,
-  PcdRoutingDecisionReason,
   PcdShotType,
   SyntheticPcdRoutingDecision,
 } from "@creativeagent/schemas";
 import type { ApprovedCampaignContext, ProviderRouterStores, PcdRoutingDecision } from "../provider-router.js";
-import type { PcdProviderCapability } from "../provider-capability-matrix.js";
 import type { ResolvedPcdContext } from "../registry-resolver.js";
 import type { StampPcdProvenanceInput } from "../provenance/stamp-pcd-provenance.js";
 import type { WritePcdIdentitySnapshotWithCostForecastStores } from "../cost/write-pcd-identity-snapshot-with-cost-forecast.js";
@@ -120,7 +118,3 @@ export type ComposeGenerationRouting = (
   stores: ComposeGenerationRoutingStores,
 ) => Promise<ComposeGenerationRoutingResult>;
 
-// Avoid "declared but never used" lint by re-exporting the helper-shape types
-// downstream consumers may want; PcdProviderCapability + PcdRoutingDecisionReason
-// are used in the Step 5b synthesis (added at Task 8).
-export type { PcdProviderCapability, PcdRoutingDecisionReason };
